@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>pk3DS Mac</title>
+    <link rel="stylesheet" href="app.css">
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">LOCAL · MACOS · LUMA LAYEREDFS</p>
+      <h1>pk3DS Mac</h1>
+      <p class="intro">Un frente web local para el núcleo abierto de pk3DS. No sube tu ROM a internet y no modifica tu RomFS original.</p>
+
+      <section>
+        <h2>1. RomFS extraído</h2>
+        <label for="workspace">Carpeta RomFS (o la carpeta que la contiene)</label>
+        <div class="row">
+          <input id="workspace" type="text" placeholder="/Users/tu_usuario/.../RomFS" spellcheck="false">
+          <button id="inspect" type="button">Comprobar</button>
+        </div>
+        <p id="inspection" class="status">La herramienta acepta un RomFS desencriptado y completo. No usa directamente un .cxi.</p>
+      </section>
+
+      <section>
+        <h2>2. Pokémon, movimientos y evoluciones</h2>
+        <label class="check"><input id="abilities" type="checkbox" checked> Habilidades aleatorias</label>
+        <label class="check"><input id="held-items" type="checkbox"> Objetos que llevan los Pokémon salvajes</label>
+        <details>
+          <summary>Opciones avanzadas de datos personales</summary>
+          <div class="two-columns">
+            <label class="check"><input id="catch-rate" type="checkbox"> Ratio de captura</label>
+            <label class="check"><input id="types" type="checkbox"> Tipos</label>
+            <label class="check"><input id="egg-groups" type="checkbox"> Grupos huevo</label>
+            <label class="check"><input id="stats" type="checkbox"> Estadísticas base</label>
+            <label class="check"><input id="shuffle-stats" type="checkbox"> Redistribuir estadísticas</label>
+            <label class="check"><input id="tm" type="checkbox"> Compatibilidad MT</label>
+            <label class="check"><input id="hm" type="checkbox"> Compatibilidad MO</label>
+            <label class="check"><input id="type-tutors" type="checkbox"> Tutores por tipo</label>
+            <label class="check"><input id="move-tutors" type="checkbox"> Tutores de movimientos (ORAS)</label>
+            <label class="check"><input id="wonder-guard" type="checkbox" checked> Permitir Superguarda</label>
+          </div>
+          <div class="two-columns">
+            <label>Desviación de estadísticas (%)<input id="stat-deviation" type="number" min="1" max="95" value="25"></label>
+            <label>Probabilidad de doble tipo (%)<input id="same-type" type="number" min="0" max="100" value="50"></label>
+            <label>Probabilidad de mismo grupo huevo (%)<input id="same-egg" type="number" min="0" max="100" value="50"></label>
+          </div>
+        </details>
+        <details open>
+          <summary>Learnsets</summary>
+          <label class="check"><input id="learnsets" type="checkbox" checked> Randomizar movimientos por nivel</label>
+          <div class="two-columns">
+            <label>Movimientos por especie<input id="move-count" type="number" min="1" max="75" value="25"></label>
+            <label>Nivel máximo de la progresión<input id="max-level" type="number" min="1" max="100" value="75"></label>
+            <label>Porcentaje STAB<input id="stab-percent" type="number" min="0" max="100" step="0.1" value="52.3"></label>
+          </div>
+          <div class="two-columns">
+            <label class="check"><input id="expand" type="checkbox" checked> Expandir lista</label>
+            <label class="check"><input id="spread" type="checkbox" checked> Repartir por niveles</label>
+            <label class="check"><input id="stab" type="checkbox" checked> Favorecer STAB</label>
+            <label class="check"><input id="stab-first" type="checkbox" checked> Primer movimiento STAB</label>
+            <label class="check"><input id="power-order" type="checkbox" checked> Ordenar por potencia</label>
+            <label class="check"><input id="four-level-one" type="checkbox"> Cuatro movimientos al nivel 1</label>
+            <label class="check"><input id="no-fixed" type="checkbox"> Excluir daño fijo</label>
+          </div>
+        </details>
+        <details>
+          <summary>Evoluciones</summary>
+          <label for="evolution-mode">Modo</label>
+          <select id="evolution-mode">
+            <option value="None" selected>Conservar evoluciones</option>
+            <option value="Replacements">Randomizar especies resultantes</option>
+            <option value="RemoveTrades">Eliminar evoluciones por intercambio</option>
+            <option value="EveryLevel">Evolucionar a algo aleatorio en cada nivel</option>
+          </select>
+          <div class="two-columns">
+            <label class="check"><input id="evo-bst" type="checkbox" checked> Mantener BST similar</label>
+            <label class="check"><input id="evo-exp" type="checkbox"> Mantener curva EXP</label>
+            <label class="check"><input id="evo-type" type="checkbox"> Mantener tipo en común</label>
+            <label class="check"><input id="evo-legendary" type="checkbox"> Incluir legendarios</label>
+            <label class="check"><input id="evo-mythical" type="checkbox"> Incluir singulares</label>
+          </div>
+        </details>
+        <p class="hint">El siguiente bloque en portarse será el de encuentros y entrenadores. Las opciones todavía no implementadas no se muestran como activas ni se aplican por accidente.</p>
+      </section>
+
+      <section>
+        <h2>3. Salida para Luma</h2>
+        <label for="title-id">Title ID</label>
+        <input id="title-id" type="text" value="000400000011C400" maxlength="16" spellcheck="false">
+        <label for="language">Idioma del dump</label>
+        <select id="language">
+          <option value="1" selected>Inglés</option>
+          <option value="5">Español</option>
+          <option value="0">Japonés</option>
+          <option value="2">Francés</option>
+          <option value="3">Alemán</option>
+          <option value="4">Italiano</option>
+        </select>
+        <label for="output">Carpeta de salida (opcional)</label>
+        <input id="output" type="text" placeholder="Por defecto: pk3ds-mac-output junto a RomFS" spellcheck="false">
+        <button id="randomize" class="primary" type="button">Crear LayeredFS</button>
+        <p id="result" class="status"></p>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
