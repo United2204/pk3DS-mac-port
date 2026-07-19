@@ -18,11 +18,11 @@ La web solo cubre una parte del randomizador de datos personales, movimientos po
 | Wild Encounters | Gen 6/7 | `encdata`, `zonedata`, `worlddata` | Portado: editor individual Gen. VI/VII y exportación LayeredFS de `encdata` |
 | Mega Evolutions | Gen 6/7 | `megaevo` | Portado: editor individual y exportación LayeredFS |
 | Egg Moves | Gen 6/7 | `eggmove` | Portado: randomizador y editor individual |
-| Trainers | Gen 6/7 | `trclass`, `trdata`, `trpoke` | Pendiente |
+| Trainers | Gen 6/7 | `trclass`, `trdata`, `trpoke` | Parcial: editor individual Gen. VII de datos y equipo, con exportación LayeredFS de `trdata` y `trpoke`; falta Gen. VI y edición de nombres/clases |
 | Battle Maison / Royal / Tree | Gen 6/7 | `maisontr*`, `maisonpk*` | Pendiente |
 | Item Stats | Gen 6/7 | `item` | Pendiente |
 | Move Stats | Gen 6/7 | `move` | Parcial: acciones globales; falta editor individual |
-| Static Encounters | Gen 7 | `encounterstatic` | Parcial: regalos, encuentros fijos e intercambios; edición de especie, forma, nivel y objeto |
+| Static Encounters | Gen 7 | `encounterstatic` | Parcial: regalos, encuentros fijos e intercambios; edición de especie, forma, nivel, objeto y campos avanzados disponibles en el formato |
 | Pickup | Gen 7 | `pickup` | Pendiente |
 | Title Screen | Gen 6 | `titlescreen` | Pendiente |
 | OWSE / scripts | Gen 6/7 | mapas, scripts y texto | Pendiente; módulo de desarrollo |
@@ -42,7 +42,7 @@ Estos módulos necesitan un workspace extraído completo (RomFS + ExeFS y, cuand
 | Starter Pokémon | Gen 6 | Pendiente; requiere CRO |
 | Type Chart | Gen 6/7 | Pendiente; Gen 6 requiere CRO |
 | Gift Pokémon | Gen 6 | Pendiente; requiere CRO |
-| Static Encounters | Gen 6 | Pendiente; requiere CRO |
+| Static Encounters | Gen 6 | Parcial: edición individual en `DllField.cro`; requiere parche RO de Luma para usar CRO modificado |
 | CRO / CRR patching | Gen 6/7 según módulo | Pendiente |
 
 ## Herramientas de proyecto

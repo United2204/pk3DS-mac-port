@@ -525,12 +525,13 @@ public sealed class WorkspaceService
             throw new WorkspaceException("El archivo de encuentros estáticos no tiene el formato esperado.");
         var species = c.GetText(TextName.SpeciesNames).Select((name, id) => new NamedEntry(id, string.IsNullOrWhiteSpace(name) ? $"Especie {id}" : name)).ToArray();
         var items = c.GetText(TextName.ItemNames).Select((name, id) => new NamedEntry(id, string.IsNullOrWhiteSpace(name) ? $"Objeto {id}" : name)).ToArray();
+        var moves = c.GetText(TextName.MoveNames).Select((name, id) => new NamedEntry(id, string.IsNullOrWhiteSpace(name) ? $"Movimiento {id}" : name)).ToArray();
         return new StaticCatalogResponse(
             [
                 new StaticGroupSummary("gift", "Regalos", garc.Files[0].Length / EncounterGift7.SIZE),
                 new StaticGroupSummary("static", "Encuentros fijos", garc.Files[1].Length / EncounterStatic7.SIZE),
                 new StaticGroupSummary("trade", "Intercambios", garc.Files[4].Length / EncounterTrade7.SIZE),
-            ], species, items);
+            ], species, items, moves);
     }
 
     public StaticEntryResponse GetStaticEntry(StaticEntryRequest request)
@@ -562,7 +563,7 @@ public sealed class WorkspaceService
             c.Initialize(temp, root, language);
             EnsureGen7(c);
             var garc = c.GetGARCData("encounterstatic");
-            ValidateStaticEntry(request.Entry, c.GetText(TextName.SpeciesNames).Length, c.GetText(TextName.ItemNames).Length);
+            ValidateStaticEntry(request.Entry, request.Group, c.GetText(TextName.SpeciesNames).Length, c.GetText(TextName.ItemNames).Length, c.GetText(TextName.MoveNames).Length);
             ApplyStaticEntry(garc, request.Group, request.EntryIndex, request.Entry);
             garc.Save();
             return CreateLayeredFsArchive(request.OutputDirectory, w.RomFsPath, temp, titleId, [c.GetGARCFileName("encounterstatic")], "static");
@@ -578,14 +579,16 @@ public sealed class WorkspaceService
         var data = garc.Files[fileIndex].Skip(entryIndex * size).Take(size).ToArray();
         return group switch
         {
-            "gift" => CreateStaticEntryResponse(group, entryIndex, new EncounterGift7(data).Species, new EncounterGift7(data).Form, new EncounterGift7(data).Level, new EncounterGift7(data).HeldItem),
-            "static" => CreateStaticEntryResponse(group, entryIndex, new EncounterStatic7(data).Species, new EncounterStatic7(data).Form, new EncounterStatic7(data).Level, new EncounterStatic7(data).HeldItem),
-            "trade" => CreateStaticEntryResponse(group, entryIndex, new EncounterTrade7(data).Species, new EncounterTrade7(data).Form, new EncounterTrade7(data).Level, new EncounterTrade7(data).HeldItem),
+            "gift" => ToStaticEntryResponse(group, entryIndex, new EncounterGift7(data)),
+            "static" => ToStaticEntryResponse(group, entryIndex, new EncounterStatic7(data)),
+            "trade" => ToStaticEntryResponse(group, entryIndex, new EncounterTrade7(data)),
             _ => throw new WorkspaceException("El grupo de encuentros estáticos no es válido."),
         };
     }
 
-    private static StaticEntryResponse CreateStaticEntryResponse(string group, int index, int species, int form, int level, int heldItem) => new(group, index, species, form, level, heldItem);
+    private static StaticEntryResponse ToStaticEntryResponse(string group, int index, EncounterGift7 entry) => new(group, index, new StaticEntry(entry.Species, entry.Form, entry.Level, entry.HeldItem, Ability: entry.Ability, Nature: entry.Nature, ShinyLock: entry.ShinyLock, IsEgg: entry.IsEgg, SpecialMove: entry.SpecialMove));
+    private static StaticEntryResponse ToStaticEntryResponse(string group, int index, EncounterStatic7 entry) => new(group, index, new StaticEntry(entry.Species, entry.Form, entry.Level, entry.HeldItem, Gender: entry.Gender, Ability: entry.Ability, Nature: entry.Nature, ShinyLock: entry.ShinyLock, RelearnMoves: entry.RelearnMoves, IVs: entry.IVs, EVs: entry.EVs, Aura: entry.Aura, Ally1: entry.Ally1, Ally2: entry.Ally2));
+    private static StaticEntryResponse ToStaticEntryResponse(string group, int index, EncounterTrade7 entry) => new(group, index, new StaticEntry(entry.Species, entry.Form, entry.Level, entry.HeldItem, Gender: entry.Gender, Ability: entry.Ability, Nature: entry.Nature, IVs: entry.IVs, TradeRequestSpecies: entry.TradeRequestSpecies, TID: entry.TID));
 
     private static void ApplyStaticEntry(GARCFile garc, string group, int entryIndex, StaticEntry entry)
     {
@@ -597,14 +600,35 @@ public sealed class WorkspaceService
         {
             case "gift":
                 var gift = new EncounterGift7(data) { Species = entry.Species, Form = entry.Form, Level = entry.Level, HeldItem = entry.HeldItem };
+                if (entry.Ability is not null) gift.Ability = (sbyte)entry.Ability.Value;
+                if (entry.Nature is not null) gift.Nature = (sbyte)entry.Nature.Value;
+                if (entry.ShinyLock is not null) gift.ShinyLock = entry.ShinyLock.Value;
+                if (entry.IsEgg is not null) gift.IsEgg = entry.IsEgg.Value;
+                if (entry.SpecialMove is not null) gift.SpecialMove = entry.SpecialMove.Value;
                 data = gift.Data;
                 break;
             case "static":
                 var encounter = new EncounterStatic7(data) { Species = entry.Species, Form = entry.Form, Level = entry.Level, HeldItem = entry.HeldItem };
+                if (entry.Gender is not null) encounter.Gender = entry.Gender.Value;
+                if (entry.Ability is not null) encounter.Ability = entry.Ability.Value;
+                if (entry.Nature is not null) encounter.Nature = entry.Nature.Value;
+                if (entry.ShinyLock is not null) encounter.ShinyLock = entry.ShinyLock.Value;
+                if (entry.RelearnMoves is { Length: 4 }) encounter.RelearnMoves = entry.RelearnMoves;
+                if (entry.IVs is { Length: 6 }) encounter.IVs = entry.IVs;
+                if (entry.EVs is { Length: 6 }) encounter.EVs = entry.EVs;
+                if (entry.Aura is not null) encounter.Aura = entry.Aura.Value;
+                if (entry.Ally1 is not null) encounter.Ally1 = entry.Ally1.Value;
+                if (entry.Ally2 is not null) encounter.Ally2 = entry.Ally2.Value;
                 data = encounter.Data;
                 break;
             case "trade":
                 var trade = new EncounterTrade7(data) { Species = entry.Species, Form = entry.Form, Level = entry.Level, HeldItem = entry.HeldItem };
+                if (entry.Gender is not null) trade.Gender = entry.Gender.Value;
+                if (entry.Ability is not null) trade.Ability = entry.Ability.Value;
+                if (entry.Nature is not null) trade.Nature = entry.Nature.Value;
+                if (entry.IVs is { Length: 6 }) trade.IVs = entry.IVs;
+                if (entry.TradeRequestSpecies is not null) trade.TradeRequestSpecies = entry.TradeRequestSpecies.Value;
+                if (entry.TID is not null) trade.TID = entry.TID.Value;
                 data = trade.Data;
                 break;
             default:
@@ -621,10 +645,191 @@ public sealed class WorkspaceService
         _ => throw new WorkspaceException("El grupo de encuentros estáticos no es válido."),
     };
 
-    private static void ValidateStaticEntry(StaticEntry? entry, int speciesCount, int itemCount)
+    private static void ValidateStaticEntry(StaticEntry? entry, string group, int speciesCount, int itemCount, int moveCount)
     {
-        if (entry is null || entry.Species is < 0 || entry.Species >= speciesCount || entry.Form is < 0 or > 31 || entry.Level is < 1 or > 100 || entry.HeldItem is < 0 || entry.HeldItem >= itemCount)
+        if (entry is null || entry.Species is < 0 || entry.Species >= speciesCount || entry.Form is < 0 or > byte.MaxValue || entry.Level is < 1 or > 100 || entry.HeldItem is < 0 || entry.HeldItem >= itemCount || entry.Gender is < -1 or > 3 || entry.Ability is < -1 or > 7 || entry.Nature is < -1 or > 25 || entry.Aura is < 0 or > 18 || entry.Ally1 is < 0 or > byte.MaxValue || entry.Ally2 is < 0 or > byte.MaxValue || entry.SpecialMove is < 0 || entry.SpecialMove >= moveCount || entry.TradeRequestSpecies is < 0 || entry.TradeRequestSpecies >= speciesCount || entry.TID is < 0 or > ushort.MaxValue || entry.RelearnMoves is { Length: not 4 } || entry.RelearnMoves?.Any(move => move < 0 || move >= moveCount) == true || entry.IVs is { Length: not 6 } || entry.IVs?.Any(iv => iv is < -3 or > 31) == true || entry.EVs is { Length: not 6 } || entry.EVs?.Any(ev => ev is < 0 or > byte.MaxValue) == true)
             throw new WorkspaceException("La especie, forma, nivel u objeto no son válidos.");
+    }
+
+    public StaticGen6CatalogResponse GetStaticGen6Catalog(StaticGen6CatalogRequest request)
+    {
+        var w = GameWorkspace.Open(request.WorkspacePath);
+        EnsureGen6StaticFile(w);
+        var c = InitializeReadOnlyConfig(w, GetLanguage(request.Language));
+        EnsureGen6(c);
+        return new StaticGen6CatalogResponse(c.ORAS ? "ORAS" : "XY", GetStaticGen6Count(c.ORAS),
+            c.GetText(TextName.SpeciesNames).Select((name, id) => new NamedEntry(id, string.IsNullOrWhiteSpace(name) ? $"Especie {id}" : name)).ToArray(),
+            c.GetText(TextName.ItemNames).Select((name, id) => new NamedEntry(id, string.IsNullOrWhiteSpace(name) ? $"Objeto {id}" : name)).ToArray(),
+            "Este cambio usa DllField.cro. En consola requiere el parche RO de Luma para evitar fallos.");
+    }
+
+    public StaticGen6EntryResponse GetStaticGen6Entry(StaticGen6EntryRequest request)
+    {
+        var w = GameWorkspace.Open(request.WorkspacePath);
+        EnsureGen6StaticFile(w);
+        var c = InitializeReadOnlyConfig(w, GetLanguage(request.Language));
+        EnsureGen6(c);
+        var data = File.ReadAllBytes(Path.Combine(w.RomFsPath, "DllField.cro"));
+        return new StaticGen6EntryResponse(request.EntryIndex, ToStaticGen6Entry(data, c.ORAS, request.EntryIndex));
+    }
+
+    public RandomizeResponse ExportStaticGen6Entry(StaticGen6ExportRequest request)
+    {
+        var w = GameWorkspace.Open(request.WorkspacePath);
+        EnsureGen6StaticFile(w);
+        var titleId = request.TitleId ?? w.TitleId;
+        if (string.IsNullOrWhiteSpace(titleId) || titleId.Length != 16 || titleId.Any(c => !Uri.IsHexDigit(c)))
+            throw new WorkspaceException("No pude detectar un Title ID válido.");
+        var language = GetLanguage(request.Language);
+        var root = Path.Combine(Path.GetTempPath(), $"pk3ds-mac-static6-{Guid.NewGuid():N}");
+        var temp = Path.Combine(root, "romfs");
+        try
+        {
+            Directory.CreateDirectory(temp);
+            CopyRelativeFile(w.RomFsPath, temp, "DllField.cro");
+            var c = InitializeReadOnlyConfig(w, language);
+            EnsureGen6(c);
+            var data = File.ReadAllBytes(Path.Combine(temp, "DllField.cro"));
+            ValidateStaticGen6Entry(request.Entry, c.GetText(TextName.SpeciesNames).Length, c.GetText(TextName.ItemNames).Length);
+            var offset = GetStaticGen6Offset(c.ORAS, request.EntryIndex);
+            if (offset + 0xC > data.Length) throw new WorkspaceException("La entrada de encuentro estático no existe.");
+            var entry = new EncounterStatic6(data.Skip(offset).Take(0xC).ToArray())
+            {
+                Species = (ushort)request.Entry!.Species,
+                Form = (byte)request.Entry.Form,
+                Level = (byte)request.Entry.Level,
+                HeldItem = request.Entry.HeldItem,
+                Gender = request.Entry.Gender,
+                Ability = request.Entry.Ability,
+                ShinyLock = request.Entry.ShinyLock,
+                IV3 = request.Entry.IV3,
+            };
+            Array.Copy(entry.Write(), 0, data, offset, 0xC);
+            File.WriteAllBytes(Path.Combine(temp, "DllField.cro"), data);
+            return CreateLayeredFsArchive(request.OutputDirectory, w.RomFsPath, temp, titleId, ["DllField.cro"], "static6");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    private static void EnsureGen6StaticFile(GameWorkspace workspace)
+    {
+        if (!File.Exists(Path.Combine(workspace.RomFsPath, "DllField.cro")))
+            throw new WorkspaceException("Falta DllField.cro en el RomFS. Es necesario para editar estáticos de Gen. VI.");
+    }
+
+    private static int GetStaticGen6Count(bool oras) => oras ? 0x3B : 0xD;
+    private static int GetStaticGen6Offset(bool oras, int entryIndex)
+    {
+        var count = GetStaticGen6Count(oras);
+        if (entryIndex < 0 || entryIndex >= count) throw new WorkspaceException("La entrada de encuentro estático no existe.");
+        return (oras ? 0xF1B20 : 0xEE46C) + (entryIndex * 0xC);
+    }
+
+    private static StaticGen6Entry ToStaticGen6Entry(byte[] data, bool oras, int entryIndex)
+    {
+        var offset = GetStaticGen6Offset(oras, entryIndex);
+        if (offset + 0xC > data.Length) throw new WorkspaceException("DllField.cro no tiene el tamaño esperado.");
+        var entry = new EncounterStatic6(data.Skip(offset).Take(0xC).ToArray());
+        return new StaticGen6Entry(entry.Species, entry.Form, entry.Level, entry.HeldItem, entry.Gender, entry.Ability, entry.ShinyLock, entry.IV3);
+    }
+
+    private static void ValidateStaticGen6Entry(StaticGen6Entry? entry, int speciesCount, int itemCount)
+    {
+        if (entry is null || entry.Species is < 0 || entry.Species >= speciesCount || entry.Form is < 0 or > byte.MaxValue || entry.Level is < 1 or > 100 || entry.HeldItem is < 0 || entry.HeldItem >= itemCount || entry.Gender is < 0 or > 3 || entry.Ability is < 0 or > 7)
+            throw new WorkspaceException("La especie, forma, nivel, objeto o flags no son válidos.");
+    }
+
+    public TrainerCatalogResponse GetTrainerCatalog(TrainerCatalogRequest request)
+    {
+        var w = GameWorkspace.Open(request.WorkspacePath);
+        var c = InitializeReadOnlyConfig(w, GetLanguage(request.Language));
+        EnsureTrainerGen7(c);
+        var trainers = c.GetGARCData("trdata");
+        var names = c.GetText(TextName.TrainerNames);
+        var classes = c.GetText(TextName.TrainerClasses);
+        return new TrainerCatalogResponse(
+            trainers.Files.Select((_, index) => new TrainerSummary(index, index < names.Length && !string.IsNullOrWhiteSpace(names[index]) ? names[index] : $"Entrenador {index}")).Skip(1).ToArray(),
+            classes.Select((name, index) => new NamedEntry(index, string.IsNullOrWhiteSpace(name) ? $"Clase {index}" : name)).ToArray(),
+            c.GetText(TextName.SpeciesNames).Select((name, index) => new NamedEntry(index, string.IsNullOrWhiteSpace(name) ? $"Especie {index}" : name)).ToArray(),
+            c.GetText(TextName.ItemNames).Select((name, index) => new NamedEntry(index, string.IsNullOrWhiteSpace(name) ? $"Objeto {index}" : name)).ToArray(),
+            c.GetText(TextName.MoveNames).Select((name, index) => new NamedEntry(index, string.IsNullOrWhiteSpace(name) ? $"Movimiento {index}" : name)).ToArray());
+    }
+
+    public TrainerEntryResponse GetTrainerEntry(TrainerEntryRequest request)
+    {
+        var w = GameWorkspace.Open(request.WorkspacePath);
+        var c = InitializeReadOnlyConfig(w, GetLanguage(request.Language));
+        EnsureTrainerGen7(c);
+        var trdata = c.GetGARCData("trdata");
+        var trpoke = c.GetGARCData("trpoke");
+        if (request.TrainerIndex < 0 || request.TrainerIndex >= trdata.Files.Length || request.TrainerIndex >= trpoke.Files.Length)
+            throw new WorkspaceException("El entrenador indicado no existe.");
+        var trainer = new TrainerData7(trdata.Files[request.TrainerIndex], trpoke.Files[request.TrainerIndex]);
+        return new TrainerEntryResponse(request.TrainerIndex, ToTrainerEntry(trainer));
+    }
+
+    public RandomizeResponse ExportTrainerEntry(TrainerExportRequest request)
+    {
+        var w = GameWorkspace.Open(request.WorkspacePath);
+        var titleId = request.TitleId ?? w.TitleId;
+        if (string.IsNullOrWhiteSpace(titleId) || titleId.Length != 16 || titleId.Any(c => !Uri.IsHexDigit(c)))
+            throw new WorkspaceException("No pude detectar un Title ID válido.");
+        var language = GetLanguage(request.Language);
+        var root = Path.Combine(Path.GetTempPath(), $"pk3ds-mac-trainer-{Guid.NewGuid():N}");
+        var temp = Path.Combine(root, "romfs");
+        try
+        {
+            Directory.CreateDirectory(temp);
+            var probe = new GameConfig(w.Version);
+            probe.Initialize(w.RomFsPath, root, language);
+            foreach (var name in RequiredGarcs) CopyRelativeFile(w.RomFsPath, temp, probe.GetGARCFileName(name));
+            foreach (var name in new[] { "trdata", "trpoke" }) CopyRelativeFile(w.RomFsPath, temp, probe.GetGARCFileName(name));
+            var c = new GameConfig(w.Version);
+            c.Initialize(temp, root, language);
+            EnsureTrainerGen7(c);
+            var trdata = c.GetGARCData("trdata");
+            var trpoke = c.GetGARCData("trpoke");
+            if (request.TrainerIndex < 0 || request.TrainerIndex >= trdata.Files.Length || request.TrainerIndex >= trpoke.Files.Length)
+                throw new WorkspaceException("El entrenador indicado no existe.");
+            ValidateTrainerEntry(request.Entry, c.GetText(TextName.TrainerClasses).Length, c.GetText(TextName.SpeciesNames).Length, c.GetText(TextName.ItemNames).Length, c.GetText(TextName.MoveNames).Length);
+            var trainer = new TrainerData7(trdata.Files[request.TrainerIndex], trpoke.Files[request.TrainerIndex]);
+            ApplyTrainerEntry(trainer, request.Entry!);
+            trainer.Write(out var data, out var team);
+            trdata.Files[request.TrainerIndex] = data;
+            trpoke.Files[request.TrainerIndex] = team;
+            trdata.Save(); trpoke.Save();
+            return CreateLayeredFsArchive(request.OutputDirectory, w.RomFsPath, temp, titleId, [c.GetGARCFileName("trdata"), c.GetGARCFileName("trpoke")], "trainer");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    private static void EnsureTrainerGen7(GameConfig config)
+    {
+        if (config.Generation != 7)
+            throw new WorkspaceException("El editor inicial de entrenadores está disponible primero para Gen. VII.");
+    }
+
+    private static TrainerEntry ToTrainerEntry(TrainerData7 trainer) => new(trainer.TrainerClass, (int)trainer.Mode, [trainer.Item1, trainer.Item2, trainer.Item3, trainer.Item4], trainer.AI, trainer.Flag, trainer.Money,
+        trainer.Pokemon.Select(pokemon => new TrainerPokemonEntry(pokemon.Species, pokemon.Form, pokemon.Level, pokemon.Item, pokemon.Moves, pokemon.Ability, pokemon.Gender, pokemon.Nature, pokemon.Shiny, pokemon.IVs, pokemon.EVs)).ToArray());
+
+    private static void ApplyTrainerEntry(TrainerData7 trainer, TrainerEntry entry)
+    {
+        trainer.TrainerClass = entry.TrainerClass;
+        trainer.Mode = (BattleMode)entry.Mode;
+        trainer.Item1 = entry.Items[0]; trainer.Item2 = entry.Items[1]; trainer.Item3 = entry.Items[2]; trainer.Item4 = entry.Items[3];
+        trainer.AI = entry.AI; trainer.Flag = entry.Flag; trainer.Money = entry.Money;
+        for (var index = 0; index < trainer.Pokemon.Count; index++)
+        {
+            var source = entry.Team[index]; var target = trainer.Pokemon[index];
+            target.Species = source.Species; target.Form = source.Form; target.Level = source.Level; target.Item = source.Item; target.Moves = source.Moves;
+            target.Ability = source.Ability; target.Gender = source.Gender; target.Nature = source.Nature; target.Shiny = source.Shiny; target.IVs = source.IVs; target.EVs = source.EVs;
+        }
+    }
+
+    private static void ValidateTrainerEntry(TrainerEntry? entry, int classCount, int speciesCount, int itemCount, int moveCount)
+    {
+        if (entry is null || entry.TrainerClass is < 0 || entry.TrainerClass >= classCount || entry.Mode is < 0 or > 2 || entry.Items is not { Length: 4 } || entry.Items.Any(item => item < 0 || item >= itemCount) || entry.AI is < 0 or > byte.MaxValue || entry.Money is < 0 or > byte.MaxValue || entry.Team is null || entry.Team.Length is < 1 or > 6 || entry.Team.Any(pokemon => pokemon.Species is < 0 || pokemon.Species >= speciesCount || pokemon.Form is < 0 or > byte.MaxValue || pokemon.Level is < 1 or > 100 || pokemon.Item is < 0 || pokemon.Item >= itemCount || pokemon.Moves is not { Length: 4 } || pokemon.Moves.Any(move => move < 0 || move >= moveCount) || pokemon.Ability is < 0 or > 3 || pokemon.Gender is < 0 or > 3 || pokemon.Nature is < 0 or > 25 || pokemon.IVs is not { Length: 6 } || pokemon.IVs.Any(iv => iv is < 0 or > 31) || pokemon.EVs is not { Length: 6 } || pokemon.EVs.Any(ev => ev is < 0 or > byte.MaxValue)))
+            throw new WorkspaceException("Los datos del entrenador no son válidos.");
     }
 
     public RandomizeResponse Randomize(RandomizeRequest request)
@@ -1068,11 +1273,25 @@ public sealed record WildGen6TableResponse(int FileIndex, string AreaName, WildG
 public sealed record WildGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int FileIndex, WildGen6Group[] Groups, int? Language = null);
 public sealed record StaticCatalogRequest(string WorkspacePath, int? Language = null);
 public sealed record StaticGroupSummary(string Id, string Name, int Count);
-public sealed record StaticCatalogResponse(StaticGroupSummary[] Groups, NamedEntry[] Species, NamedEntry[] Items);
+public sealed record StaticCatalogResponse(StaticGroupSummary[] Groups, NamedEntry[] Species, NamedEntry[] Items, NamedEntry[] Moves);
 public sealed record StaticEntryRequest(string WorkspacePath, string Group, int EntryIndex, int? Language = null);
-public sealed record StaticEntry(int Species, int Form, int Level, int HeldItem);
-public sealed record StaticEntryResponse(string Group, int EntryIndex, int Species, int Form, int Level, int HeldItem);
+public sealed record StaticEntry(int Species, int Form, int Level, int HeldItem, int? Gender = null, int? Ability = null, int? Nature = null, bool? ShinyLock = null, bool? IsEgg = null, int? SpecialMove = null, int[]? RelearnMoves = null, int[]? IVs = null, int[]? EVs = null, int? Aura = null, int? Ally1 = null, int? Ally2 = null, int? TradeRequestSpecies = null, int? TID = null);
+public sealed record StaticEntryResponse(string Group, int EntryIndex, StaticEntry Entry);
 public sealed record StaticExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, string Group, int EntryIndex, StaticEntry? Entry, int? Language = null);
+public sealed record StaticGen6CatalogRequest(string WorkspacePath, int? Language = null);
+public sealed record StaticGen6CatalogResponse(string Game, int Count, NamedEntry[] Species, NamedEntry[] Items, string Warning);
+public sealed record StaticGen6EntryRequest(string WorkspacePath, int EntryIndex, int? Language = null);
+public sealed record StaticGen6Entry(int Species, int Form, int Level, int HeldItem, int Gender, int Ability, bool ShinyLock, bool IV3);
+public sealed record StaticGen6EntryResponse(int EntryIndex, StaticGen6Entry Entry);
+public sealed record StaticGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int EntryIndex, StaticGen6Entry? Entry, int? Language = null);
+public sealed record TrainerCatalogRequest(string WorkspacePath, int? Language = null);
+public sealed record TrainerSummary(int Id, string Name);
+public sealed record TrainerCatalogResponse(TrainerSummary[] Trainers, NamedEntry[] Classes, NamedEntry[] Species, NamedEntry[] Items, NamedEntry[] Moves);
+public sealed record TrainerEntryRequest(string WorkspacePath, int TrainerIndex, int? Language = null);
+public sealed record TrainerPokemonEntry(int Species, int Form, int Level, int Item, int[] Moves, int Ability, int Gender, int Nature, bool Shiny, int[] IVs, int[] EVs);
+public sealed record TrainerEntry(int TrainerClass, int Mode, int[] Items, int AI, bool Flag, int Money, TrainerPokemonEntry[] Team);
+public sealed record TrainerEntryResponse(int TrainerIndex, TrainerEntry Entry);
+public sealed record TrainerExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int TrainerIndex, TrainerEntry? Entry, int? Language = null);
 public sealed record RandomizeResponse(string OutputFolder, string ZipPath, string[] ChangedFiles);
 public sealed class WorkspaceException(string message) : Exception(message);
 

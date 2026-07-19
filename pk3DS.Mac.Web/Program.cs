@@ -207,6 +207,30 @@ app.MapPost("/api/editors/static/export", (StaticExportRequest request, Workspac
 {
     try { return Results.Ok(service.ExportStaticEntry(request)); } catch (WorkspaceException ex) { return Results.BadRequest(new { error = ex.Message }); } catch (Exception ex) { app.Logger.LogError(ex,"Static export failed"); return Results.Problem("No pude exportar el encuentro estático."); }
 });
+app.MapPost("/api/editors/static/gen6/catalog", (StaticGen6CatalogRequest request, WorkspaceService service) =>
+{
+    try { return Results.Ok(service.GetStaticGen6Catalog(request)); } catch (WorkspaceException ex) { return Results.BadRequest(new { error = ex.Message }); } catch (Exception ex) { app.Logger.LogError(ex,"Gen6 static catalog failed"); return Results.Problem("No pude leer los encuentros estáticos."); }
+});
+app.MapPost("/api/editors/static/gen6/entry", (StaticGen6EntryRequest request, WorkspaceService service) =>
+{
+    try { return Results.Ok(service.GetStaticGen6Entry(request)); } catch (WorkspaceException ex) { return Results.BadRequest(new { error = ex.Message }); } catch (Exception ex) { app.Logger.LogError(ex,"Gen6 static entry failed"); return Results.Problem("No pude leer ese encuentro estático."); }
+});
+app.MapPost("/api/editors/static/gen6/export", (StaticGen6ExportRequest request, WorkspaceService service) =>
+{
+    try { return Results.Ok(service.ExportStaticGen6Entry(request)); } catch (WorkspaceException ex) { return Results.BadRequest(new { error = ex.Message }); } catch (Exception ex) { app.Logger.LogError(ex,"Gen6 static export failed"); return Results.Problem("No pude exportar el encuentro estático."); }
+});
+app.MapPost("/api/editors/trainers/catalog", (TrainerCatalogRequest request, WorkspaceService service) =>
+{
+    try { return Results.Ok(service.GetTrainerCatalog(request)); } catch (WorkspaceException ex) { return Results.BadRequest(new { error = ex.Message }); } catch (Exception ex) { app.Logger.LogError(ex,"Trainer catalog failed"); return Results.Problem("No pude leer los entrenadores."); }
+});
+app.MapPost("/api/editors/trainers/entry", (TrainerEntryRequest request, WorkspaceService service) =>
+{
+    try { return Results.Ok(service.GetTrainerEntry(request)); } catch (WorkspaceException ex) { return Results.BadRequest(new { error = ex.Message }); } catch (Exception ex) { app.Logger.LogError(ex,"Trainer entry failed"); return Results.Problem("No pude leer ese entrenador."); }
+});
+app.MapPost("/api/editors/trainers/export", (TrainerExportRequest request, WorkspaceService service) =>
+{
+    try { return Results.Ok(service.ExportTrainerEntry(request)); } catch (WorkspaceException ex) { return Results.BadRequest(new { error = ex.Message }); } catch (Exception ex) { app.Logger.LogError(ex,"Trainer export failed"); return Results.Problem("No pude exportar el entrenador."); }
+});
 
 app.MapPost("/api/jobs/randomize", (RandomizeRequest request, WorkspaceService service) =>
 {
