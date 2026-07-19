@@ -7,102 +7,155 @@
     <link rel="stylesheet" href="app.css">
   </head>
   <body>
-    <main>
-      <p class="eyebrow">LOCAL · MACOS · LUMA LAYEREDFS</p>
-      <h1>pk3DS Mac</h1>
-      <p class="intro">Un frente web local para el núcleo abierto de pk3DS. No sube tu ROM a internet y no modifica tu RomFS original.</p>
+    <header class="site-header">
+      <a class="brand" href="#inicio" aria-label="pk3DS Mac, ir al inicio"><span class="brand-mark" aria-hidden="true">pk</span>pk3DS <b>Mac</b></a>
+      <div class="header-actions"><a class="header-link" href="personal.html">Datos de Pokémon</a><a class="header-link" href="moves.html">Datos de movimientos</a><a class="header-link" href="items.html">Datos de objetos</a><a class="header-link" href="text.html">Editor de texto</a><a class="header-link" href="levelup.html">Movimientos por nivel</a><a class="header-link" href="eggmoves.html">Movimientos huevo</a><a class="header-link" href="evolutions.html">Evoluciones</a><a class="header-link" href="mega.html">Mega Evolutions</a><a class="header-link" href="wild.html">Encuentros</a><a class="header-link" href="static.html">Estáticos</a><p class="local-badge"><span aria-hidden="true"></span> Todo ocurre en tu Mac</p></div>
+    </header>
+    <main id="inicio">
+      <div class="intro"><p class="eyebrow">RANDOMIZADOR PARA POKÉMON 3DS</p><h1>Personaliza tu juego</h1><p>Selecciona el juego, marca los cambios que quieras y exporta un LayeredFS listo para Luma.</p></div>
+      <div class="workspace">
+        <aside class="steps" aria-label="Pasos del proceso">
+          <p class="steps-title">PASOS</p>
+          <a href="#game" class="step is-current"><span>1</span><b>Seleccionar juego</b><small id="step-game">Pendiente</small></a>
+          <a href="#changes" class="step"><span>2</span><b>Marcar cambios</b><small id="step-options">2 grupos activos</small></a>
+          <a href="#export" class="step"><span>3</span><b>Exportar</b><small>LayeredFS</small></a>
+          <p class="steps-help">Elige la carpeta extraída del juego. Para detectar todo automáticamente, debe contener <code>RomFS</code> y <code>exheader.bin</code>.</p>
+        </aside>
+        <div class="content">
+          <section id="game" class="panel" aria-labelledby="game-heading">
+            <div class="section-heading"><span class="section-number">1</span><div><p class="kicker">JUEGO</p><h2 id="game-heading">Selecciona tu juego</h2></div></div>
+            <p class="section-copy">Puedes elegir la carpeta que contiene <code>RomFS</code> o la propia carpeta <code>RomFS</code>. Con la carpeta completa, pk3DS detecta también el Title ID.</p>
+            <label class="sr-only" for="workspace">Carpeta del juego</label>
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="workspace" type="text" placeholder="Carpeta del juego o RomFS" spellcheck="false" autocomplete="off"><button id="browse" class="secondary" type="button">Examinar…</button><button id="inspect" type="button">Cargar</button></div>
+            <p id="inspection" class="status neutral" role="status">El juego se abrirá solo para lectura.</p>
+          </section>
 
-      <section>
-        <h2>1. RomFS extraído</h2>
-        <label for="workspace">Carpeta RomFS (o la carpeta que la contiene)</label>
-        <div class="row">
-          <input id="workspace" type="text" placeholder="/Users/tu_usuario/.../RomFS" spellcheck="false">
-          <button id="inspect" type="button">Comprobar</button>
+          <section id="changes" class="panel" aria-labelledby="changes-heading">
+            <div class="section-heading with-action"><span class="section-number">2</span><div><p class="kicker">CAMBIOS</p><h2 id="changes-heading">Marca lo que quieras randomizar</h2></div><button id="reset-options" class="text-button" type="button">Restablecer</button></div>
+            <p class="section-copy">Pasa el mouse sobre el nombre de una opción para ver qué hace. Todas las modificaciones son opcionales.</p>
+
+            <article class="option-group" data-group="personal">
+              <div class="option-group-head"><div><h3>Datos de los Pokémon</h3><p>Las opciones del editor <em>Personal Stats</em> de pk3DS para Windows.</p></div><span class="group-state" id="personal-state">1 opción</span></div>
+              <div class="check-grid three-columns">
+                <label class="check-card tooltip" data-tooltip="Asigna habilidades distintas a cada especie. Superguarda se conserva si esta opción está marcada."><input id="abilities" type="checkbox" checked><span>Habilidades</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia los objetos que puede llevar un Pokémon salvaje al aparecer."><input id="held-items" type="checkbox"><span>Objetos equipados</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia el valor de captura de cada especie. Un valor alto hace que sea más fácil atraparla."><input id="catch-rate" type="checkbox"><span>Ratio de captura</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia los tipos de cada especie. El número de abajo indica la probabilidad de que conserve uno de sus tipos actuales."><input id="types" type="checkbox"><span>Tipos</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia los grupos huevo, que determinan con qué especies puede criar."><input id="egg-groups" type="checkbox"><span>Grupos huevo</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia las estadísticas base: PS, Ataque, Defensa, Ataque Especial, Defensa Especial y Velocidad."><input id="stats" type="checkbox"><span>Estadísticas base</span></label>
+                <label class="check-card tooltip dependent" data-requires="stats" data-tooltip="Reparte de otra forma las estadísticas de cada especie, manteniendo el mismo total de puntos base."><input id="shuffle-stats" type="checkbox"><span>Redistribuir estadísticas</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender cada MT."><input id="tm" type="checkbox"><span>Compatibilidad MT</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender cada MO."><input id="hm" type="checkbox"><span>Compatibilidad MO</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender movimientos de los tutores asociados a tipos."><input id="type-tutors" type="checkbox"><span>Tutores por tipo</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender movimientos de los tutores de OR/AS. No se aplica a otros juegos."><input id="move-tutors" type="checkbox"><span>Tutores de OR/AS</span></label>
+                <label class="check-card tooltip" data-tooltip="Permite que Superguarda pueda salir al randomizar habilidades. Desmárcalo para excluirla."><input id="wonder-guard" type="checkbox" checked><span>Permitir Superguarda</span></label>
+              </div>
+              <div class="stat-choices dependent" data-requires="stats">
+                <p class="subsection-label">Estadísticas que se modificarán</p>
+                <div class="check-grid three-columns">
+                  <label class="check-card tooltip" data-stat-choice data-tooltip="Puntos de salud base."><input id="stat-hp" type="checkbox" checked><span>PS</span></label>
+                  <label class="check-card tooltip" data-stat-choice data-tooltip="Ataque físico base."><input id="stat-atk" type="checkbox" checked><span>Ataque</span></label>
+                  <label class="check-card tooltip" data-stat-choice data-tooltip="Defensa física base."><input id="stat-def" type="checkbox" checked><span>Defensa</span></label>
+                  <label class="check-card tooltip" data-stat-choice data-tooltip="Ataque especial base."><input id="stat-spa" type="checkbox" checked><span>Ataque especial</span></label>
+                  <label class="check-card tooltip" data-stat-choice data-tooltip="Defensa especial base."><input id="stat-spd" type="checkbox" checked><span>Defensa especial</span></label>
+                  <label class="check-card tooltip" data-stat-choice data-tooltip="Velocidad base."><input id="stat-spe" type="checkbox" checked><span>Velocidad</span></label>
+                </div>
+              </div>
+              <div class="number-settings">
+                <label class="field tooltip dependent" data-requires="stats" data-tooltip="Cuánto puede cambiar cada estadística con respecto a su valor original. 25% es una variación moderada.">Variación de estadísticas <div class="suffix-input"><input id="stat-deviation" type="number" min="1" max="95" value="25"><span>%</span></div></label>
+                <label class="field tooltip dependent" data-requires="types" data-tooltip="Probabilidad de conservar uno de los tipos originales al randomizar los tipos.">Conservar un tipo <div class="suffix-input"><input id="same-type" type="number" min="0" max="100" value="50"><span>%</span></div></label>
+                <label class="field tooltip dependent" data-requires="egg-groups" data-tooltip="Probabilidad de conservar uno de los grupos huevo originales.">Conservar grupo huevo <div class="suffix-input"><input id="same-egg" type="number" min="0" max="100" value="50"><span>%</span></div></label>
+              </div>
+              <div class="bulk-edits">
+                <p class="subsection-label">Cambios masivos para todas las especies</p>
+                <div class="check-grid three-columns">
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Elimina los EV que otorga cada especie al ser derrotada."><input id="no-evs" type="checkbox"><span>Eliminar EV obtenidos</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Asigna a todas las especies la curva de crecimiento rápida."><input id="fast-growth" type="checkbox"><span>Crecimiento rápido</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace que todos los huevos eclosionen tras un solo ciclo de pasos."><input id="quick-hatch" type="checkbox"><span>Eclosión rápida</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Quita MT y tutores, pero conserva las MO para no bloquear el progreso de la historia."><input id="remove-tutors" type="checkbox"><span>Quitar compatibilidad de tutores</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles con todas las MT a todas las especies."><input id="full-tm" type="checkbox"><span>Compatibilidad total de MT</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles con todas las MO a todas las especies. En Gen. VII no hay MO."><input id="full-hm" type="checkbox"><span>Compatibilidad total de MO</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles con todos los tutores por tipo a todas las especies."><input id="full-tutor" type="checkbox"><span>Compatibilidad total de tutores</span></label>
+                </div>
+                <div class="number-settings">
+                  <label class="field tooltip" data-tooltip="Al activarlo, multiplica la experiencia base de todas las especies por este porcentaje. 100% no modifica los valores."><span class="check-field"><input id="base-exp" type="checkbox"> Experiencia base</span><div class="suffix-input"><input id="base-exp-percent" type="number" min="0" max="500" value="100" disabled><span>%</span></div></label>
+                  <label class="field tooltip" data-tooltip="Al activarlo, fija este ratio de captura para todas las especies. 255 es el valor más fácil de atrapar."><span class="check-field"><input id="fixed-catch-rate" type="checkbox"> Ratio de captura fijo</span><input id="fixed-catch-rate-value" type="number" min="0" max="255" value="45" disabled></label>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-group" data-group="learnsets">
+              <div class="option-group-head"><div><h3>Movimientos por nivel</h3><p>Equivale a <em>Level Up Moves</em> en la versión de Windows.</p></div><label class="toggle compact tooltip" data-tooltip="Activa o desactiva todos los cambios de movimientos que se aprenden al subir de nivel."><input id="learnsets" type="checkbox" checked><span aria-hidden="true"></span><b class="sr-only">Randomizar movimientos por nivel</b></label></div>
+              <div class="group-content" data-requires="learnsets">
+                <div class="check-grid three-columns">
+                  <label class="check-card tooltip" data-tooltip="Añade movimientos hasta completar la cantidad indicada abajo."><input id="expand" type="checkbox" checked><span>Completar lista de movimientos</span></label>
+                  <label class="check-card tooltip" data-tooltip="Distribuye los movimientos a lo largo de los niveles en lugar de concentrarlos al principio."><input id="spread" type="checkbox" checked><span>Repartir por niveles</span></label>
+                  <label class="check-card tooltip" data-tooltip="Da prioridad a movimientos del mismo tipo que el Pokémon. El porcentaje se configura abajo."><input id="stab" type="checkbox" checked><span>Favorecer movimientos STAB</span></label>
+                  <label class="check-card tooltip" data-tooltip="Ordena la lista para que los movimientos menos potentes aparezcan antes."><input id="power-order" type="checkbox" checked><span>Ordenar por potencia</span></label>
+                  <label class="check-card tooltip" data-tooltip="Da cuatro movimientos desde el nivel 1, como si el Pokémon acabara de ser recibido."><input id="four-level-one" type="checkbox"><span>Cuatro movimientos al nivel 1</span></label>
+                  <label class="check-card tooltip" data-tooltip="Excluye movimientos cuyo daño no depende de estadísticas, como SonicBoom o Furia Dragón."><input id="no-fixed" type="checkbox"><span>Excluir daño fijo</span></label>
+                </div>
+                <div class="number-settings">
+                  <label class="field tooltip" data-tooltip="Cantidad máxima de movimientos por especie después de randomizar.">Movimientos por especie<input id="move-count" type="number" min="1" max="75" value="25"></label>
+                  <label class="field tooltip" data-tooltip="Nivel máximo hasta el que se repartirán los movimientos.">Nivel máximo<input id="max-level" type="number" min="1" max="100" value="75"></label>
+                  <label class="field tooltip" data-tooltip="Porcentaje aproximado de movimientos del mismo tipo que recibirá cada especie.">Movimientos con STAB<div class="suffix-input"><input id="stab-percent" type="number" min="0" max="100" step="0.1" value="52.3"><span>%</span></div></label>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-group" data-group="eggmoves">
+              <div class="option-group-head"><div><h3>Movimientos huevo</h3><p>Equivale a <em>Egg Moves</em> en la versión de Windows.</p></div><label class="toggle compact tooltip" data-tooltip="Activa o desactiva el randomizador de movimientos que se heredan mediante crianza."><input id="egg-moves" type="checkbox"><span aria-hidden="true"></span><b class="sr-only">Randomizar movimientos huevo</b></label></div>
+              <div class="group-content" data-requires="egg-moves">
+                <div class="check-grid three-columns">
+                  <label class="check-card tooltip" data-tooltip="Completa la lista de movimientos huevo de cada especie hasta la cantidad indicada abajo."><input id="egg-expand" type="checkbox" checked><span>Completar lista de movimientos</span></label>
+                  <label class="check-card tooltip" data-tooltip="Da prioridad a movimientos del mismo tipo que el Pokémon al crear la lista de crianza."><input id="egg-stab" type="checkbox" checked><span>Favorecer movimientos STAB</span></label>
+                </div>
+                <div class="number-settings">
+                  <label class="field tooltip" data-tooltip="Cantidad máxima de movimientos huevo que recibirá cada especie.">Movimientos por especie<input id="egg-move-count" type="number" min="1" max="18" value="18"></label>
+                  <label class="field tooltip" data-tooltip="Porcentaje aproximado de movimientos del mismo tipo que recibirá cada especie.">Movimientos con STAB<div class="suffix-input"><input id="egg-stab-percent" type="number" min="0" max="100" step="0.1" value="32.1"><span>%</span></div></label>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-group" data-group="moves">
+              <div class="option-group-head"><div><h3>Datos de movimientos</h3><p>Acciones globales de <em>Move Stats</em> en la versión de Windows.</p></div><span class="group-state" id="moves-state">Sin cambios</span></div>
+              <div class="check-grid three-columns">
+                <label class="check-card tooltip" data-tooltip="Asigna un tipo aleatorio a cada movimiento, excepto Struggle y Curse, que se conservan como en pk3DS Windows."><input id="move-types" type="checkbox"><span>Randomizar tipos</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia entre físico y especial los movimientos que ya hacen daño. Los movimientos de estado se conservan."><input id="move-categories" type="checkbox"><span>Randomizar categorías</span></label>
+                <label class="check-card tooltip" data-tooltip="Deja los PP de todos los movimientos en 0, salvo Metronome (40) y Mimic (1). Es una modificación extrema."><input id="metronome-mode" type="checkbox"><span>Modo Metronome</span></label>
+              </div>
+            </article>
+
+            <article class="option-group" data-group="evolutions">
+              <div class="option-group-head"><div><h3>Evoluciones</h3><p>Las tres acciones del editor de evoluciones de Windows.</p></div><span class="group-state" id="evolution-state">Sin cambios</span></div>
+              <div class="check-grid three-columns evolution-actions">
+                <label class="check-card tooltip" data-evolution="Replacements" data-tooltip="Cambia el Pokémon resultante de cada evolución. El método original (nivel, piedra, amistad, etc.) se mantiene."><input id="evo-randomize" type="checkbox"><span>Randomizar resultados</span></label>
+                <label class="check-card tooltip" data-evolution="RemoveTrades" data-tooltip="Reemplaza todas las evoluciones por intercambio por evoluciones que se pueden completar jugando en solitario."><input id="evo-no-trades" type="checkbox"><span>Eliminar intercambios</span></label>
+                <label class="check-card tooltip" data-evolution="EveryLevel" data-tooltip="Hace que un Pokémon evolucione a una especie aleatoria cada vez que sube de nivel. Es un cambio extremo."><input id="evo-every-level" type="checkbox"><span>Evolucionar en cada nivel</span></label>
+              </div>
+              <div class="group-content" data-requires="evolution-filters">
+                <p class="subsection-label">Al randomizar resultados, intenta conservar:</p>
+                <div class="check-grid three-columns">
+                  <label class="check-card tooltip" data-tooltip="Busca una evolución con una suma de estadísticas base parecida."><input id="evo-bst" type="checkbox" checked><span>Potencia total (BST)</span></label>
+                  <label class="check-card tooltip" data-tooltip="Busca una especie con una curva de experiencia parecida."><input id="evo-exp" type="checkbox"><span>Curva de experiencia</span></label>
+                  <label class="check-card tooltip" data-tooltip="Busca una especie que comparta al menos uno de sus tipos."><input id="evo-type" type="checkbox"><span>Un tipo en común</span></label>
+                  <label class="check-card tooltip" data-tooltip="Permite que las evoluciones resulten en especies legendarias."><input id="evo-legendary" type="checkbox"><span>Incluir legendarios</span></label>
+                  <label class="check-card tooltip" data-tooltip="Permite que las evoluciones resulten en especies singulares o míticas."><input id="evo-mythical" type="checkbox"><span>Incluir singulares</span></label>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section id="export" class="panel output-panel" aria-labelledby="export-heading">
+            <div class="section-heading"><span class="section-number">3</span><div><p class="kicker">SALIDA</p><h2 id="export-heading">Exportar</h2></div></div>
+            <p class="section-copy">Al pulsar Exportar eliges una carpeta y pk3DS crea allí el ZIP con el LayeredFS. El juego original nunca se modifica.</p>
+            <div class="ready-row"><div><b id="selection-summary">2 grupos con cambios</b><small id="selection-detail">Habilidades y movimientos por nivel.</small></div><button id="randomize" class="primary" type="button" disabled>Exportar <span aria-hidden="true">→</span></button></div>
+            <p id="result" class="status" role="status" aria-live="polite">Carga un juego para continuar.</p>
+          </section>
         </div>
-        <p id="inspection" class="status">La herramienta acepta un RomFS desencriptado y completo. No usa directamente un .cxi.</p>
-      </section>
-
-      <section>
-        <h2>2. Pokémon, movimientos y evoluciones</h2>
-        <label class="check"><input id="abilities" type="checkbox" checked> Habilidades aleatorias</label>
-        <label class="check"><input id="held-items" type="checkbox"> Objetos que llevan los Pokémon salvajes</label>
-        <details>
-          <summary>Opciones avanzadas de datos personales</summary>
-          <div class="two-columns">
-            <label class="check"><input id="catch-rate" type="checkbox"> Ratio de captura</label>
-            <label class="check"><input id="types" type="checkbox"> Tipos</label>
-            <label class="check"><input id="egg-groups" type="checkbox"> Grupos huevo</label>
-            <label class="check"><input id="stats" type="checkbox"> Estadísticas base</label>
-            <label class="check"><input id="shuffle-stats" type="checkbox"> Redistribuir estadísticas</label>
-            <label class="check"><input id="tm" type="checkbox"> Compatibilidad MT</label>
-            <label class="check"><input id="hm" type="checkbox"> Compatibilidad MO</label>
-            <label class="check"><input id="type-tutors" type="checkbox"> Tutores por tipo</label>
-            <label class="check"><input id="move-tutors" type="checkbox"> Tutores de movimientos (ORAS)</label>
-            <label class="check"><input id="wonder-guard" type="checkbox" checked> Permitir Superguarda</label>
-          </div>
-          <div class="two-columns">
-            <label>Desviación de estadísticas (%)<input id="stat-deviation" type="number" min="1" max="95" value="25"></label>
-            <label>Probabilidad de doble tipo (%)<input id="same-type" type="number" min="0" max="100" value="50"></label>
-            <label>Probabilidad de mismo grupo huevo (%)<input id="same-egg" type="number" min="0" max="100" value="50"></label>
-          </div>
-        </details>
-        <details open>
-          <summary>Learnsets</summary>
-          <label class="check"><input id="learnsets" type="checkbox" checked> Randomizar movimientos por nivel</label>
-          <div class="two-columns">
-            <label>Movimientos por especie<input id="move-count" type="number" min="1" max="75" value="25"></label>
-            <label>Nivel máximo de la progresión<input id="max-level" type="number" min="1" max="100" value="75"></label>
-            <label>Porcentaje STAB<input id="stab-percent" type="number" min="0" max="100" step="0.1" value="52.3"></label>
-          </div>
-          <div class="two-columns">
-            <label class="check"><input id="expand" type="checkbox" checked> Expandir lista</label>
-            <label class="check"><input id="spread" type="checkbox" checked> Repartir por niveles</label>
-            <label class="check"><input id="stab" type="checkbox" checked> Favorecer STAB</label>
-            <label class="check"><input id="stab-first" type="checkbox" checked> Primer movimiento STAB</label>
-            <label class="check"><input id="power-order" type="checkbox" checked> Ordenar por potencia</label>
-            <label class="check"><input id="four-level-one" type="checkbox"> Cuatro movimientos al nivel 1</label>
-            <label class="check"><input id="no-fixed" type="checkbox"> Excluir daño fijo</label>
-          </div>
-        </details>
-        <details>
-          <summary>Evoluciones</summary>
-          <label for="evolution-mode">Modo</label>
-          <select id="evolution-mode">
-            <option value="None" selected>Conservar evoluciones</option>
-            <option value="Replacements">Randomizar especies resultantes</option>
-            <option value="RemoveTrades">Eliminar evoluciones por intercambio</option>
-            <option value="EveryLevel">Evolucionar a algo aleatorio en cada nivel</option>
-          </select>
-          <div class="two-columns">
-            <label class="check"><input id="evo-bst" type="checkbox" checked> Mantener BST similar</label>
-            <label class="check"><input id="evo-exp" type="checkbox"> Mantener curva EXP</label>
-            <label class="check"><input id="evo-type" type="checkbox"> Mantener tipo en común</label>
-            <label class="check"><input id="evo-legendary" type="checkbox"> Incluir legendarios</label>
-            <label class="check"><input id="evo-mythical" type="checkbox"> Incluir singulares</label>
-          </div>
-        </details>
-        <p class="hint">El siguiente bloque en portarse será el de encuentros y entrenadores. Las opciones todavía no implementadas no se muestran como activas ni se aplican por accidente.</p>
-      </section>
-
-      <section>
-        <h2>3. Salida para Luma</h2>
-        <label for="title-id">Title ID</label>
-        <input id="title-id" type="text" value="000400000011C400" maxlength="16" spellcheck="false">
-        <label for="language">Idioma del dump</label>
-        <select id="language">
-          <option value="1" selected>Inglés</option>
-          <option value="5">Español</option>
-          <option value="0">Japonés</option>
-          <option value="2">Francés</option>
-          <option value="3">Alemán</option>
-          <option value="4">Italiano</option>
-        </select>
-        <label for="output">Carpeta de salida (opcional)</label>
-        <input id="output" type="text" placeholder="Por defecto: pk3ds-mac-output junto a RomFS" spellcheck="false">
-        <button id="randomize" class="primary" type="button">Crear LayeredFS</button>
-        <p id="result" class="status"></p>
-      </section>
+      </div>
     </main>
+    <footer>pk3DS Mac trabaja de forma local. Ningún archivo se sube a internet.</footer>
     <script src="app.js"></script>
   </body>
 </html>

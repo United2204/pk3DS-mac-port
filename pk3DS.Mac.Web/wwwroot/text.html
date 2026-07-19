@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Editor de texto · pk3DS Mac</title>
+    <link rel="stylesheet" href="app.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="Volver a pk3DS Mac"><span class="brand-mark" aria-hidden="true">pk</span>pk3DS <b>Mac</b></a>
+      <a class="header-link" href="index.html">Randomizador</a>
+    </header>
+    <main class="editor-main">
+      <div class="intro editor-intro"><p class="eyebrow">EDITOR ROMFS</p><h1>Texto del juego</h1><p>Edita las tablas de diálogo, nombres y descripciones de tu dump. Las variables entre corchetes se conservan tal como en pk3DS para Windows.</p></div>
+      <section class="panel" aria-labelledby="text-workspace-heading">
+        <div class="section-heading"><span class="section-number">1</span><div><p class="kicker">JUEGO</p><h2 id="text-workspace-heading">Abrir tablas de texto</h2></div></div>
+        <div class="path-input"><span aria-hidden="true">⌁</span><input id="workspace" type="text" placeholder="Carpeta completa del juego o RomFS" spellcheck="false"><button id="browse" class="secondary" type="button">Examinar…</button><button id="load" type="button">Cargar</button></div>
+        <p id="workspace-status" class="status neutral" role="status">Elige la misma carpeta extraída que usarías en el randomizador.</p>
+      </section>
+      <section id="text-editor" class="panel text-editor is-disabled" aria-labelledby="text-editor-heading">
+        <div class="section-heading"><span class="section-number">2</span><div><p class="kicker">TABLA</p><h2 id="text-editor-heading">Editar contenido</h2></div><span id="changes-state" class="group-state">Sin cambios</span></div>
+        <div class="text-toolbar">
+          <fieldset class="archive-switch"><legend class="sr-only">Archivo de texto</legend><label><input type="radio" name="kind" value="Game" checked><span>Texto del juego</span></label><label><input type="radio" name="kind" value="Story"><span>Texto de historia</span></label></fieldset>
+          <label class="field">Tabla<select id="table" disabled></select></label>
+          <button id="open-table" class="secondary-button" type="button" disabled>Abrir tabla</button>
+        </div>
+        <div class="text-workbench">
+          <aside class="line-browser"><label class="sr-only" for="line-filter">Buscar líneas</label><input id="line-filter" type="search" placeholder="Buscar en las líneas" disabled><p id="line-count" class="muted">Carga una tabla para ver sus líneas.</p><div id="line-list" class="line-list" aria-label="Líneas de texto"></div></aside>
+          <div class="line-editor"><div class="line-editor-head"><b id="line-label">Sin línea seleccionada</b><label class="line-jump">Ir a <input id="line-jump" type="number" min="0" value="0" disabled></label></div><label class="sr-only" for="line-value">Texto de la línea</label><textarea id="line-value" rows="12" disabled placeholder="Selecciona una línea para editarla."></textarea><p class="muted">Se conserva la sintaxis de control, por ejemplo <code>[VAR …]</code> y <code>\n</code>. Los cambios se aplican a la tabla al exportar.</p></div>
+        </div>
+      </section>
+      <section class="panel output-panel text-export" aria-labelledby="text-export-heading">
+        <div class="section-heading"><span class="section-number">3</span><div><p class="kicker">SALIDA</p><h2 id="text-export-heading">Exportar</h2></div></div>
+        <p class="section-copy">Se genera un ZIP LayeredFS con solo el archivo de texto modificado.</p>
+        <div class="ready-row"><div><b id="export-summary">Sin cambios para exportar</b><small>El archivo original no se modifica.</small></div><button id="export" class="primary" type="button" disabled>Exportar <span aria-hidden="true">→</span></button></div>
+        <p id="export-status" class="status neutral" role="status" aria-live="polite">Carga una tabla y modifica al menos una línea.</p>
+      </section>
+    </main>
+    <footer>pk3DS Mac trabaja de forma local. Ningún archivo se sube a internet.</footer>
+    <script src="text.js"></script>
+  </body>
+</html>
