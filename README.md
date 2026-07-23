@@ -1,54 +1,52 @@
-</p>
+# pk3DS Mac Port
 
-<h1 align="center">pk3DS </h1>
+Port a macOS del editor/randomizador de ROMs pk3DS para juegos Pokémon de 3DS.
 
-<br />
+Este repositorio es un **port nativo a macOS** de [pk3DS](https://github.com/kwsch/pk3DS), el editor de ROMs para juegos Pokémon de 3DS creado originalmente por kwsch y su comunidad. La versión original está pensada para Windows Forms; este proyecto adapta el núcleo (`pk3DS.Core`) a una interfaz web local que corre en Mac, sin depender de Windows ni de Wine.
 
-pk3DS is a ROM editor for all 3DS Pokémon games that utilizes a variety of tools developed by a large group of contributors. pk3DS was created 
-using C# and primarily focuses on its randomizer to provide users with a fresh and new experience in the beloved Pokémon games. 
+## Tabla de contenidos
 
-## Table of contents
+- [Qué es esto](#qué-es-esto)
+- [Uso](#uso)
+- [Opciones activas hoy](#opciones-activas-hoy)
+- [Estado del port](#estado-del-port)
+- [Créditos](#créditos)
 
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Support](#support)
+## Qué es esto
 
-## Features
+Interfaz local para macOS basada en `pk3DS.Core`. Arranca en `http://127.0.0.1:38473` y abre el navegador predeterminado. El servidor sólo escucha en tu Mac: ningún archivo se sube a internet.
 
-Our editor features a vast variety of randomizers to make every run as unique as possible. The Randomizers currently available are:
+## Uso
 
-- Trainer Battles (Pokemon / Items / Moves / Abilities / Difficulty / Classes)
-- Wild Encounters (Species, Level, Gen/Legend Specific, ORAS DexNav won't crash!)
-- Personal Data (Pokemon Types / Stats / Abilities / TM Learnset)
-- Move Randomizer (Type / Damage Category)
-- Move Learnset (Level Up / Egg Move)
-- Evolutions
-- TM Moves
-- Special Mart Inventory
+1. Extraé una copia propia y desencriptada del juego hasta tener una carpeta `RomFS` completa (debe contener `a`) y conservá el archivo `exheader.bin` junto a esa carpeta.
+2. Abrí `run-mac.command` con doble clic. Si macOS bloquea el archivo, usá clic derecho → **Abrir** la primera vez.
+3. Pulsá **Examinar…** y elegí la carpeta extraída del juego. pk3DS detectará el juego y el Title ID desde `exheader.bin`.
+4. Marcá las opciones que quieras aplicar; al pasar el mouse sobre una de ellas se muestra una explicación breve.
+5. Pulsá **Exportar** y elegí la carpeta donde guardar el ZIP.
+6. Descomprimí el ZIP resultante en la raíz de la SD de la consola. Activa *Enable game patching* en Luma y usá la actualización del juego que corresponda a tu dump.
 
-## Installation
+La salida inicial genera el árbol `luma/titles/<title-id>/romfs`. No reconstruye `.cia` ni `.cxi`, ni altera el RomFS de origen.
 
-To download pk3DS, all you need to do is go into our [forum page](https://projectpokemon.org/home/forums/topic/34377-pk3ds-pok%C3%A9mon-3ds-rom-editor-and-randomizer/) and following the instructions there.
+El Title ID se obtiene automáticamente desde `exheader.bin`, por lo que la carpeta que elijas debe incluirlo. Si solo disponés de `RomFS`, la herramienta puede revisarlo, pero no podrá crear un LayeredFS con el Title ID correcto.
 
-## Usage
+## Opciones activas hoy
 
-To begin using pk3DS you must first download the pk3DS editor zip file. Once you've downloaded the zip file for the editor, dump your ROM from the 3DS Pokémon game of your choosing.
+- habilidades, objetos llevados, ratio de captura, tipos, grupos huevo y estadísticas base;
+- compatibilidad de MT/MO y tutores;
+- learnsets configurables: cantidad, distribución por nivel, STAB, potencia, cuatro movimientos iniciales y exclusión de daño fijo;
+- movimientos huevo configurables;
+- acciones globales de Move Stats: tipos, categorías físico/especial y modo Metronome;
+- evoluciones: conservar, randomizar resultados con filtros de BST/EXP/tipo, eliminar intercambios o modo de evolución por nivel.
+- editor de texto de juego e historia: selección de tabla y línea, búsqueda y exportación LayeredFS.
 
-Place the files in the same folder then simply run the pk3DS.exe file.
-Once you open up the executable you can begin having fun with our editor and randomizing all the attributes and characteristics of the game to your liking.
-Below are some images of how the editor should look when you run it.
-![RomFS Editing Tools](https://i.imgur.com/IDVCMfx.png)
-![ExeFS Editing Tools](https://i.imgur.com/Ied0sVV.png)
-![CRO Editing Tools](https://i.imgur.com/lUSGbw5.png)
+## Estado del port
+
+Los adaptadores de encuentros, entrenadores, iniciales, estáticos, tiendas y movesets de entrenadores todavía están en desarrollo. El inventario de paridad y su estado real están en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
 
 ## Building
 
-pk3DS is a Windows Forms application which requires [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0).
+Requiere [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) y un compilador compatible con C# 14.
 
-The executable can be built with any compiler that supports C# 14.
+## Créditos
 
-## Support
-
-If any bugs or errors are caught or experienced come to our [forum page](https://projectpokemon.org/home/forums/topic/34377-pk3ds-pok%C3%A9mon-3ds-rom-editor-and-randomizer/) and communicate with us on what the issue is.
-Many community members as well as contributors are active and can be found there. 
+Todo el trabajo de ingeniería inversa de los formatos de datos, la lógica de los editores y los randomizadores pertenece al proyecto original [pk3DS](https://github.com/kwsch/pk3DS) de kwsch y su comunidad de colaboradores. Este repositorio es un fork enfocado exclusivamente en llevar esa herramienta a macOS mediante una interfaz web local.
