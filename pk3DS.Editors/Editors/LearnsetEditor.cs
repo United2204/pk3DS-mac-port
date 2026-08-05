@@ -40,7 +40,7 @@ public static class LearnsetEditor
                 var set = config.Learnsets[index];
                 set.Levels = entries.Select(entry => Math.Clamp(entry.Level, 1, 100)).ToArray();
                 set.Moves = entries.Select(entry => entry.MoveId).ToArray();
-                config.GARCLearnsets.Files[index] = set.Write();
+                config.GARCLearnsets.SetFile(index, set.Write());
                 config.GARCLearnsets.Save();
                 return [config.GetGARCFileName("levelup")];
             });

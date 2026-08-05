@@ -20,6 +20,14 @@ public static class EditorSession
     /// </summary>
     internal static readonly string[] RequiredGarcs = ["personal", "levelup", "gametext", "move", "evolution", "eggmove"];
 
+    /// <summary>
+    /// Gen VII picks between the Sun and Moon GARC tables by checking whether <c>encdata</c> is
+    /// empty, which means <see cref="GameConfig.Initialize"/> stats that file before reading
+    /// anything. A scratch RomFS without it fails with <see cref="FileNotFoundException"/>, so it
+    /// has to be copied even when the editor never touches encounters.
+    /// </summary>
+    private static readonly string[] Gen7RequiredGarcs = ["encdata"];
+
     /// <summary>Opens the workspace and builds a config that reads straight from the source dump.</summary>
     public static (GameWorkspace Workspace, GameConfig Config) OpenReadOnly(string workspacePath, int? language)
     {
@@ -74,9 +82,16 @@ public static class EditorSession
 
         return InScratchRomFs(label, scratchRomFs =>
         {
+            // The probe reads the untouched source dump; it exists to resolve GARC paths for the
+            // copy below, which is what makes the scratch config initialisable in the first place.
             var probe = new GameConfig(workspace.Version);
             probe.Initialize(workspace.RomFsPath, Directory.GetParent(scratchRomFs)!.FullName, languageId);
-            foreach (var name in RequiredGarcs.Concat(extraGarcs).Distinct(StringComparer.Ordinal))
+
+            var needed = RequiredGarcs
+                .Concat(probe.Generation == 7 ? Gen7RequiredGarcs : [])
+                .Concat(extraGarcs)
+                .Distinct(StringComparer.Ordinal);
+            foreach (var name in needed)
                 CopyRelativeFile(workspace.RomFsPath, scratchRomFs, probe.GetGARCFileName(name));
 
             var config = new GameConfig(workspace.Version);

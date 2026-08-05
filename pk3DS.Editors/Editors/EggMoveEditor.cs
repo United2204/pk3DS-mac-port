@@ -29,7 +29,7 @@ public static class EggMoveEditor
                 set.Moves = moves.Distinct().ToArray();
                 if (config.Generation == 7 && request.FormTableIndex is not null)
                     set.FormTableIndex = Math.Clamp(request.FormTableIndex.Value, 0, ushort.MaxValue);
-                garc.Files[index] = set.Write();
+                garc.SetFile(index, set.Write());
                 garc.Save();
                 return [config.GetGARCFileName("eggmove")];
             });

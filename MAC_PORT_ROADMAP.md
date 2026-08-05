@@ -67,7 +67,10 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 6.1. Pruebas de regresión: comparar archivos generados en macOS contra Windows con el mismo dump y semilla — Pendiente
   - 6.2. Suite de tests unitarios (`pk3DS.Editors.Tests`) — Hecho: empaquetado de bytes, offsets, guardas de validación y resolución de rutas
   - 6.3. CI en GitHub Actions (macOS y Linux) — Hecho
-  - 6.4. Fixtures de GARC para probar lectura/escritura sin un dump completo — Pendiente; es lo que bloquea cubrir los editores de punta a punta
+  - 6.4. Fixtures de GARC para probar lectura/escritura sin un dump completo — Hecho: `SyntheticXyWorkspace` arma un workspace X/Y con GARCs reales, y los editores se prueban de punta a punta hasta inspeccionar el ZIP LayeredFS
+  - 6.5. Fixture de Gen. VII (`SyntheticSunMoonWorkspace`) — Hecho: cubre entrenadores, encuentros estáticos, encuentros salvajes, movimientos en mini-archivo y el randomizador sobre Sol/Luna
+  - 6.6. Fixture de encuentros salvajes Gen. VII (`Area7`) — Hecho: tablas día/noche en mini-archivo `EA`, con zonedata y worlddata sintéticos
+  - 6.7. Los tests comparan la salida contra el dump de origen, no sólo la presencia del archivo en el ZIP — Hecho: es lo que destapó que los ocho editores individuales descartaban su edición
 
 ## Módulos RomFS
 

@@ -9,6 +9,34 @@ namespace pk3DS.Editors;
 /// </summary>
 internal static class GarcWriter
 {
+    /// <summary>
+    /// Replaces one file inside a GARC.
+    /// <para>
+    /// Always go through this instead of <c>garc.Files[i] = data</c>. <see cref="GARCFile.Files"/>
+    /// forwards to <c>MemGARC.Files</c>, whose getter <em>rebuilds the whole array and copies every
+    /// entry out</em> on each read. Indexing that result assigns into a throwaway array, so the
+    /// edit is silently discarded and the export ships an unmodified file. The array has to be
+    /// taken once, mutated, and assigned back through the setter, which is what repacks the GARC.
+    /// </para>
+    /// </summary>
+    public static void SetFile(this GARCFile garc, int index, byte[] data)
+    {
+        var files = garc.Files;
+        files[index] = data;
+        garc.Files = files;
+    }
+
+    /// <summary>
+    /// Overwrites a slice of one file in place, for records packed several to a file.
+    /// Same aliasing hazard as <see cref="SetFile"/>.
+    /// </summary>
+    public static void PatchFile(this GARCFile garc, int index, byte[] data, int offset)
+    {
+        var files = garc.Files;
+        Array.Copy(data, 0, files[index], offset, data.Length);
+        garc.Files = files;
+    }
+
     public static void SavePersonal(GameConfig config)
     {
         var files = config.GARCPersonal.Files;

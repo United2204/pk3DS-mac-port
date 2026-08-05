@@ -131,7 +131,8 @@ public static class StaticEditor
             default:
                 throw new WorkspaceException("El grupo de encuentros estáticos no es válido.");
         }
-        Array.Copy(data, 0, garc.Files[fileIndex], entryIndex * size, size);
+        // Several records share one file, so only this entry's slice is overwritten.
+        garc.PatchFile(fileIndex, data, entryIndex * size);
     }
 
     /// <summary>Returns the validated entry so callers get a non-null value to apply.</summary>

@@ -38,7 +38,7 @@ public static class TextEditor
                 var garc = GetGarc(config, request.Kind);
                 var index = RequireTable(garc, request.TableIndex);
                 var text = new TextFile(config, garc.Files[index], remapChars: true) { Lines = request.Lines };
-                garc.Files[index] = text.Data;
+                garc.SetFile(index, text.Data);
                 garc.Save();
                 return [config.GetGARCFileName(archive)];
             });

@@ -59,7 +59,7 @@ public static class WildGen6Editor
                 var slotCount = GetSlotCount(config.ORAS);
                 var slots = FlattenGroups(request.Groups, slotCount, Catalogs.SpeciesCount(config));
                 WriteSlots(file, offset, slots);
-                garc.Files[fileIndex] = file;
+                garc.SetFile(fileIndex, file);
 
                 // OR/AS keeps a second, packed copy of every area's slots in file 1; both must agree
                 // or the game reads back the original encounters.
@@ -71,7 +71,7 @@ public static class WildGen6Editor
                     if (packedOffset < 0 || packedOffset + (slotCount * SlotSize) > packed.Length)
                         throw new WorkspaceException("La tabla interna de encuentros de OR/AS no es válida.");
                     WriteSlots(packed, packedOffset, slots);
-                    garc.Files[1] = packed;
+                    garc.SetFile(1, packed);
                 }
 
                 garc.Save();

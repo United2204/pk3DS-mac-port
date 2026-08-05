@@ -31,7 +31,7 @@ public static class MegaEditor
                 mega.Method = entries.Select(entry => (ushort)entry.Method).ToArray();
                 mega.Argument = entries.Select(entry => (ushort)entry.Argument).ToArray();
                 mega.u6 = entries.Select(entry => (ushort)entry.Auxiliary).ToArray();
-                garc.Files[index] = mega.Write();
+                garc.SetFile(index, mega.Write());
                 garc.Save();
                 return [config.GetGARCFileName("megaevo")];
             });

@@ -48,8 +48,8 @@ public static class TrainerEditor
                 var trainer = new TrainerData7(trdata.Files[index], trpoke.Files[index]);
                 Apply(trainer, entry);
                 trainer.Write(out var data, out var team);
-                trdata.Files[index] = data;
-                trpoke.Files[index] = team;
+                trdata.SetFile(index, data);
+                trpoke.SetFile(index, team);
                 trdata.Save();
                 trpoke.Save();
                 return [config.GetGARCFileName("trdata"), config.GetGARCFileName("trpoke")];

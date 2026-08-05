@@ -32,7 +32,7 @@ public static class ItemEditor
                     EffectBattle = (byte)Math.Clamp(request.EffectBattle, 0, byte.MaxValue),
                     HealValue = Math.Clamp(request.HealValue, 0, byte.MaxValue),
                 };
-                garc.Files[index] = item.Write();
+                garc.SetFile(index, item.Write());
                 garc.Save();
                 return [config.GetGARCFileName("item")];
             });

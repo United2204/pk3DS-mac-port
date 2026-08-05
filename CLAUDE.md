@@ -57,9 +57,18 @@ Lo específico de plataforma va detrás de una interfaz: hoy solo `IFolderPicker
    - **El argumento `extraGarcs` importa**: si el editor lee un GARC que no está en
      `EditorSession.RequiredGarcs`, hay que declararlo o el archivo no existirá en el RomFS
      temporal. Item Stats y Mega Evolutions estaban rotos exactamente por esto.
+   - En Gen. VII, `encdata` se copia siempre aunque el editor no lo toque: `GameConfig.GetGameData`
+     le hace `stat` para elegir entre la tabla GARC de Sun y la de Moon, así que sin él
+     `Initialize` falla sobre el RomFS temporal. Esto rompía **todas** las exportaciones de Gen. VII.
    - Para archivos sueltos que no son GARC (como `DllField.cro`) está `ExportLooseFiles`.
-4. Una línea en `pk3DS.Mac.Web/Endpoints.cs`.
-5. Página y script en `wwwroot/`.
+4. **Para escribir en un GARC usá `garc.SetFile(index, data)` o `garc.PatchFile(...)`, nunca
+   `garc.Files[i] = data`.** El getter de `MemGARC.Files` reconstruye el array entero y copia cada
+   entrada en cada lectura, así que indexar ese resultado escribe en un array temporal: la edición
+   se descarta en silencio y el ZIP sale con el archivo original. Esto tenía rotos a los ocho
+   editores individuales; el randomizador se salvaba sólo porque `GarcWriter` ya tomaba el array
+   una vez y lo reasignaba.
+5. Una línea en `pk3DS.Mac.Web/Endpoints.cs`.
+6. Página y script en `wwwroot/`.
 
 ## Errores
 
@@ -79,10 +88,23 @@ bug: se registra con stack trace y el usuario recibe un mensaje genérico. Los e
 
 ## Tests
 
-Sin un dump real no se pueden probar los caminos que abren GARCs. Lo que sí está cubierto y hay
-que mantener cubierto: empaquetado de bytes (los slots de encuentros de Gen VI), offsets
-hard-codeados, guardas de validación y resolución de rutas. Son los lugares donde un error
-corrompe un archivo en silencio en vez de fallar.
+`SyntheticXyWorkspace` y `SyntheticSunMoonWorkspace` arman en `TempPath` un workspace con GARCs
+reales (empaquetados con `GARC.PackGARC`) y registros sintéticos. Eso permite probar los editores
+de punta a punta —abrir, leer, exportar e inspeccionar el ZIP LayeredFS— sin un dump de varios GB.
+
+Hay dos porque los formatos difieren de verdad: Gen. VII usa registros personales más grandes,
+evoluciones de 8 bytes, movimientos empaquetados en un mini-archivo `WD` y egg moves con índice de
+forma. El único editor sin cobertura de punta a punta es el de encuentros salvajes de Gen. VII,
+porque exige fabricar tablas `Area7` válidas (punto 6.6 del roadmap).
+
+Al agregar un editor, sumale un caso a `EditorEndToEndTests.Exports` (o al equivalente de Gen. VII).
+Ese test verifica que el ZIP contenga realmente el archivo que el editor dice haber cambiado, y es
+lo que habría atrapado los bugs de Item Stats y Mega Evolutions. Comprobado: revertir cualquiera de
+los dos fixes hace fallar exactamente los casos correspondientes.
+
+El resto de la suite cubre empaquetado de bytes (slots de encuentros de Gen VI), round-trips de
+cada estructura que escribe en la ROM, offsets hard-codeados, guardas de validación y resolución
+de rutas. Son los lugares donde un error corrompe un archivo en silencio en vez de fallar.
 
 ## Estado del port
 
