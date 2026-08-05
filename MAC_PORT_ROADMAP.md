@@ -4,7 +4,9 @@ Este documento usa `pk3DS.WinForms` como especificación de comportamiento. Un m
 
 ## Estado actual de la web
 
-La web solo cubre una parte del randomizador de datos personales, movimientos por nivel y evoluciones. No equivale todavía a pk3DS para Windows.
+La web cubre el randomizador de RomFS completo y trece editores individuales. No equivale todavía a pk3DS para Windows: falta todo ExeFS/CRO y las herramientas de proyecto.
+
+> Mantené este documento sincronizado con el código **en el mismo commit** que agrega o completa un módulo. Ya se desincronizó una vez: cuatro editores figuraban como pendientes estando implementados.
 
 ## Work Breakdown Structure (WBS)
 
@@ -15,6 +17,8 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 1.2. Detección automática de juego y Title ID desde `exheader.bin` — Hecho
   - 1.3. Interfaz multi-página (randomizador + editores dedicados por módulo) — Hecho
   - 1.4. Exportación a ZIP con árbol LayeredFS (`luma/titles/<title-id>/romfs`) — Hecho
+  - 1.5. Separación en librería agnóstica de plataforma (`pk3DS.Editors`) + host — Hecho
+  - 1.6. Andamiaje común de exportación (`EditorSession`) reusado por todos los editores — Hecho
 
 - **2. Randomizador de datos RomFS** — Parcial
   - 2.1. Personal Stats (habilidades, objetos, catch rate, tipos, egg groups, stats base, MT/MO, tutores) — Hecho
@@ -29,10 +33,10 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 3.3. Wild Encounters Gen VI/VII (`encdata`) — Hecho
   - 3.4. Trainers Gen VII: datos y equipo (`trdata`, `trpoke`) — Parcial (falta Gen VI y edición de nombres/clases)
   - 3.5. Static Encounters Gen VII (regalos, fijos, intercambios) — Parcial (faltan campos avanzados del formato)
-  - 3.6. Personal Stats — editor individual por especie — Pendiente
-  - 3.7. Evolutions — editor individual por especie — Pendiente
-  - 3.8. Move Stats — editor individual por movimiento — Pendiente
-  - 3.9. Item Stats — Pendiente
+  - 3.6. Personal Stats — editor individual por especie — Hecho
+  - 3.7. Evolutions — editor individual por especie — Hecho
+  - 3.8. Move Stats — editor individual por movimiento — Hecho
+  - 3.9. Item Stats — editor individual por objeto — Hecho
   - 3.10. Battle Maison / Royal / Tree — Pendiente
   - 3.11. Pickup Gen VII — Pendiente
   - 3.12. Title Screen Gen VI — Pendiente
@@ -59,8 +63,11 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 5.5. Edición de imágenes — Pendiente
   - 5.6. Herramientas GARC/DARC — Pendiente
 
-- **6. Verificación y QA** — Pendiente
+- **6. Verificación y QA** — Parcial
   - 6.1. Pruebas de regresión: comparar archivos generados en macOS contra Windows con el mismo dump y semilla — Pendiente
+  - 6.2. Suite de tests unitarios (`pk3DS.Editors.Tests`) — Hecho: empaquetado de bytes, offsets, guardas de validación y resolución de rutas
+  - 6.3. CI en GitHub Actions (macOS y Linux) — Hecho
+  - 6.4. Fixtures de GARC para probar lectura/escritura sin un dump completo — Pendiente; es lo que bloquea cubrir los editores de punta a punta
 
 ## Módulos RomFS
 
@@ -68,16 +75,16 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 | --- | --- | --- | --- |
 | Game Text | Gen 6/7 | `gametext` | Portado: editor de tablas y exportación LayeredFS |
 | Story Text | Gen 6/7 | `storytext` | Portado: editor de tablas y exportación LayeredFS |
-| Personal Stats | Gen 6/7 | `personal` | Parcial: randomizador y cambios masivos; falta editor individual |
-| Evolutions | Gen 6/7 | `evolution` | Parcial: randomizador; falta editor individual |
+| Personal Stats | Gen 6/7 | `personal` | Portado: randomizador, cambios masivos y editor individual |
+| Evolutions | Gen 6/7 | `evolution` | Portado: randomizador y editor individual |
 | Level Up Moves | Gen 6/7 | `levelup` | Portado: randomizador y editor individual |
 | Wild Encounters | Gen 6/7 | `encdata`, `zonedata`, `worlddata` | Portado: editor individual Gen. VI/VII y exportación LayeredFS de `encdata` |
 | Mega Evolutions | Gen 6/7 | `megaevo` | Portado: editor individual y exportación LayeredFS |
 | Egg Moves | Gen 6/7 | `eggmove` | Portado: randomizador y editor individual |
 | Trainers | Gen 6/7 | `trclass`, `trdata`, `trpoke` | Parcial: editor individual Gen. VII de datos y equipo, con exportación LayeredFS de `trdata` y `trpoke`; falta Gen. VI y edición de nombres/clases |
 | Battle Maison / Royal / Tree | Gen 6/7 | `maisontr*`, `maisonpk*` | Pendiente |
-| Item Stats | Gen 6/7 | `item` | Pendiente |
-| Move Stats | Gen 6/7 | `move` | Parcial: acciones globales; falta editor individual |
+| Item Stats | Gen 6/7 | `item` | Portado: editor individual y exportación LayeredFS |
+| Move Stats | Gen 6/7 | `move` | Portado: acciones globales y editor individual |
 | Static Encounters | Gen 7 | `encounterstatic` | Parcial: regalos, encuentros fijos e intercambios; edición de especie, forma, nivel, objeto y campos avanzados disponibles en el formato |
 | Pickup | Gen 7 | `pickup` | Pendiente |
 | Title Screen | Gen 6 | `titlescreen` | Pendiente |

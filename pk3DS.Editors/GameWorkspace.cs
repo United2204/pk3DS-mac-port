@@ -1,7 +1,7 @@
 using pk3DS.Core;
 using pk3DS.Core.CTR;
 
-namespace pk3DS.Mac.Web;
+namespace pk3DS.Editors;
 
 /// <summary>
 /// Read-only description of an extracted 3DS game workspace.
@@ -38,7 +38,7 @@ public sealed record GameWorkspace(
         return new GameWorkspace(root, romfs, FindExeFs(root), FindExheader(root), version);
     }
 
-    private static string ResolveRomFs(string selected)
+    internal static string ResolveRomFs(string selected)
     {
         if (Directory.Exists(Path.Combine(selected, "a")))
             return selected;
@@ -80,5 +80,3 @@ public sealed record GameWorkspace(
                 && new FileInfo(path).Length == 0x800;
         });
 }
-
-public sealed record ModuleAvailability(string Id, string Name, string Area, bool SourceAvailable, string Requirement);

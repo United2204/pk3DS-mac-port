@@ -1,37 +1,30 @@
-# GNU Make makefile for building with Mono
+# Build tasks for the macOS port. Requires the .NET 10 SDK.
+#
+# pk3DS.Mac.slnx deliberately excludes pk3DS.WinForms: that project needs the net10.0-windows
+# target, which pk3DS.Core only produces when building on Windows.
 
-MONO    = mono
-MSBUILD = msbuild
+SOLUTION = pk3DS.Mac.slnx
+WEB      = pk3DS.Mac.Web/pk3DS.Mac.Web.csproj
+TESTS    = pk3DS.Editors.Tests/pk3DS.Editors.Tests.csproj
+CONFIG   = Debug
 
-#CONFIG = Debug
-CONFIG = Release
+.PHONY: build test run publish clean
 
-PK3DS_EXE = pk3DS/bin/$(CONFIG)/pk3DS.exe
+build:
+	dotnet build $(SOLUTION) -c $(CONFIG)
 
-# Note: The Mono compiler seems to dump some detritus by default in
-# /tmp, so we set TMPDIR to a more suitable location
+test:
+	dotnet test $(TESTS) -c $(CONFIG)
 
-$(PK3DS_EXE): pk3DS.sln
-	mkdir -p tmp
-	TMPDIR=$(shell pwd)/tmp $(MSBUILD) /p:Configuration=$(CONFIG) $<
+# Serves on http://127.0.0.1:38473 and opens the default browser.
+# Set PK3DS_NO_BROWSER=1 to skip opening it.
+run:
+	dotnet run --project $(WEB) -c $(CONFIG)
 
-install: $(PK3DS_EXE)
-	rm -rf pk3ds-install
-	mkdir pk3ds-install
-	cp -np */bin/$(CONFIG)/*.dll pk3ds-install
-	cp -np */bin/$(CONFIG)/*.exe pk3ds-install
-
-run: $(PK3DS_EXE)
-	$(MONO) $<
-
-run-install: pk3ds-install/SPICA.exe
-	$(MONO) $<
+publish:
+	dotnet publish $(WEB) -c Release -o publish
 
 clean:
-	rm -rf pk3DS*/bin pk3DS*/obj
-	rm -rf pk3ds-install
-	rm -rf tmp
-
-.PHONY: clean install run run-install
-
-# EOF
+	dotnet clean $(SOLUTION) -c $(CONFIG)
+	rm -rf publish
+	rm -rf pk3DS.*/bin pk3DS.*/obj

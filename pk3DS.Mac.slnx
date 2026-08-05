@@ -1,5 +1,9 @@
 <Solution>
-  <!-- Every project, including the Windows-only WinForms app. Builds on Windows only. -->
+  <!--
+    The macOS port. Builds on any OS because it excludes pk3DS.WinForms, which needs the
+    net10.0-windows target that pk3DS.Core only produces when building on Windows.
+    Use pk3DS.slnx instead if you are on Windows and want the original WinForms app too.
+  -->
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
   </Folder>
@@ -7,5 +11,4 @@
   <Project Path="pk3DS.Editors/pk3DS.Editors.csproj" />
   <Project Path="pk3DS.Editors.Tests/pk3DS.Editors.Tests.csproj" />
   <Project Path="pk3DS.Mac.Web/pk3DS.Mac.Web.csproj" />
-  <Project Path="pk3DS.WinForms/pk3DS.WinForms.csproj" />
 </Solution>

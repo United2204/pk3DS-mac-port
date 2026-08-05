@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    # Linux is not a target platform, but building there proves pk3DS.Editors stayed free of
+    # macOS-specific code — the property that keeps a future Android/iOS host viable.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore pk3DS.Mac.slnx
+
+      - name: Build
+        run: dotnet build pk3DS.Mac.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test pk3DS.Editors.Tests/pk3DS.Editors.Tests.csproj --configuration Release --no-build --verbosity normal

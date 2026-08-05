@@ -37,15 +37,24 @@ El Title ID se obtiene automáticamente desde `exheader.bin`, por lo que la carp
 - movimientos huevo configurables;
 - acciones globales de Move Stats: tipos, categorías físico/especial y modo Metronome;
 - evoluciones: conservar, randomizar resultados con filtros de BST/EXP/tipo, eliminar intercambios o modo de evolución por nivel.
-- editor de texto de juego e historia: selección de tabla y línea, búsqueda y exportación LayeredFS.
+
+Además hay editores individuales para texto de juego e historia, movimientos por nivel, movimientos huevo, evoluciones, datos personales, movimientos, objetos, megaevoluciones, encuentros salvajes (Gen. VI y VII), encuentros estáticos (Gen. VI y VII) y entrenadores (Gen. VII).
 
 ## Estado del port
 
-Los adaptadores de encuentros, entrenadores, iniciales, estáticos, tiendas y movesets de entrenadores todavía están en desarrollo. El inventario de paridad y su estado real están en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
+Falta todo lo que vive en ExeFS/CRO (MT/MO, tutores, tiendas, iniciales, tabla de tipos) y las herramientas de proyecto (extracción, empaquetado, reconstrucción de ROM). El inventario de paridad y su estado real están en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
 
 ## Building
 
 Requiere [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) y un compilador compatible con C# 14.
+
+```sh
+make build   # compila pk3DS.Mac.slnx
+make test    # corre la suite de tests
+make run     # levanta el servidor en http://127.0.0.1:38473
+```
+
+En macOS hay que usar `pk3DS.Mac.slnx`, no `pk3DS.slnx`: esta última incluye la app original de WinForms, que solo compila en Windows. El detalle está en [CLAUDE.md](CLAUDE.md).
 
 ## Créditos
 
