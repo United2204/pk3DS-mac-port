@@ -1,0 +1,14 @@
+const $ = id => document.getElementById(id);
+let game, table, original;
+async function post(url, body = {}) { const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw Error(data.error || data.detail || 'Operación fallida'); return data; }
+function changed() { return !!table && JSON.stringify(table) !== JSON.stringify(original); }
+function ui() { $('summary').textContent = changed() ? 'Tablas modificadas' : 'Sin cambios para exportar'; $('export').disabled = !game?.titleId || !changed(); }
+function moveSelect(side, index, value) { const select = document.createElement('select'); select.dataset.side = side; select.dataset.index = index; for (const move of table.moves) { const option = new Option(`${move.id} · ${move.name}`, move.id); option.selected = move.id === value; select.add(option); } return select; }
+function renderList(id, side, values) { const box = $(id); box.replaceChildren(); values.forEach((value, index) => { const row = document.createElement('label'); row.className = 'tm-row'; row.append(`${side === 'tms' ? 'TM' : 'HM'}${String(index + 1).padStart(2, '0')}`, moveSelect(side, index, value)); box.append(row); }); }
+function render() { renderList('tms', 'tms', table.tMs ?? table.tms); renderList('hms', 'hms', table.hMs ?? table.hms); $('warning').textContent = table.warning; ui(); }
+async function load() { try { game = await post('/api/workspace/inspect', { workspacePath: $('workspace').value }); $('open').disabled = false; $('editor').classList.remove('is-disabled'); $('status').textContent = `${game.gameVersion} cargado.`; } catch (error) { $('status').textContent = error.message; } ui(); }
+async function open() { try { table = await post('/api/editors/tmhm/table', { workspacePath: $('workspace').value, language: 1 }); original = structuredClone(table); render(); } catch (error) { $('result').textContent = error.message; } }
+$('browse').onclick = async () => { try { $('workspace').value = (await post('/api/workspace/pick')).path; await load(); } catch (error) { $('status').textContent = error.message; } }; $('load').onclick = load; $('open').onclick = open;
+$('editor').onchange = event => { const side = event.target.dataset.side; if (!side) return; table[side][+event.target.dataset.index] = +event.target.value; ui(); };
+$('export').onclick = async () => { try { const output = await post('/api/workspace/pick-output'); const result = await post('/api/editors/tmhm/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, tMs: table.tMs ?? table.tms, hMs: table.hMs ?? table.hms, language: 1 }); original = structuredClone(table); $('result').textContent = `Listo. ZIP: ${result.zipPath}`; ui(); } catch (error) { $('result').textContent = error.message; } };
+ui();

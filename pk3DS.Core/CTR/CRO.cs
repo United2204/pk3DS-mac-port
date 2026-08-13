@@ -7,6 +7,8 @@ using System.Windows.Forms;
 
 namespace pk3DS.Core.CTR;
 
+public sealed record CrrRebuildResult(byte[] Crr, byte[][] Cros, bool Changed);
+
 public class CRO(byte[] data)
 {
     // Utility
@@ -72,8 +74,8 @@ public class CRO(byte[] data)
         var cros = new List<string>();
         for (int i = 0; i < CROFiles.Length; i++)
         {
-            if (Path.GetExtension(cros[i]) == ".cro")
-                cros.Add(cros[i]);
+            if (Path.GetExtension(CROFiles[i]) == ".cro")
+                cros.Add(CROFiles[i]);
         }
 
         CROFiles = [.. cros];
@@ -108,7 +110,7 @@ public class CRO(byte[] data)
             byte[] crrEntryHash = new byte[0x20];
             Array.Copy(CRR, (i * 0x20) + hashTableOffset, crrEntryHash, 0, 0x20);
             results[i] = "Hash @ {0} is " + (crrEntryHash.SequenceEqual(hashData[i]) ? "valid." : "invalid.");
-            Array.Copy(hashData, 0, CRR, hashTableOffset + (0x20 * i), 0x20);
+            Array.Copy(hashData[i], 0, CRR, hashTableOffset + (0x20 * i), 0x20);
         }
         return results;
     }
@@ -225,6 +227,77 @@ public class CRO(byte[] data)
 
         // Return the fixed overall hash
         return SHA256.HashData(CRO.AsSpan(0, 0x80));
+    }
+
+    /// <summary>Returns a copy of a CRO with its embedded SHA-256 fields recalculated.</summary>
+    public static byte[] Rehash(byte[] cro)
+    {
+        var copy = (byte[])(cro ?? throw new ArgumentNullException(nameof(cro))).Clone();
+        ValidateLayout(copy);
+        HashCRO(ref copy);
+        return copy;
+    }
+
+    /// <summary>Computes the CRR entry hash without modifying the caller's CRO bytes.</summary>
+    public static byte[] ComputeHash(byte[] cro)
+    {
+        var copy = (byte[])(cro ?? throw new ArgumentNullException(nameof(cro))).Clone();
+        ValidateLayout(copy);
+        return HashCRO(ref copy);
+    }
+
+    /// <summary>
+    /// Rebuilds a copy of a static CRR from the supplied CROs. CROs are returned with their own
+    /// embedded hashes fixed, while neither input array is changed.
+    /// </summary>
+    public static CrrRebuildResult RebuildCRR(byte[] crr, IReadOnlyList<byte[]> cros)
+    {
+        if (crr is null)
+            throw new ArgumentNullException(nameof(crr));
+        if (cros is null)
+            throw new ArgumentNullException(nameof(cros));
+        if (crr.Length < 0x358)
+            throw new ArgumentException("El CRR no contiene su tabla de hashes.", nameof(crr));
+
+        var tableOffset = BitConverter.ToInt32(crr, 0x350);
+        var count = BitConverter.ToInt32(crr, 0x354);
+        if (tableOffset < 0 || count < 0 || tableOffset > crr.Length || count > (crr.Length - tableOffset) / 0x20)
+            throw new ArgumentException("La tabla de hashes del CRR está fuera de rango.", nameof(crr));
+        if (count != cros.Count)
+            throw new ArgumentException($"El CRR espera {count} CROs, pero se recibieron {cros.Count}.", nameof(cros));
+
+        var prepared = new byte[cros.Count][];
+        var hashes = new byte[cros.Count][];
+        for (var index = 0; index < cros.Count; index++)
+        {
+            prepared[index] = Rehash(cros[index]);
+            hashes[index] = SHA256.HashData(prepared[index].AsSpan(0, 0x80));
+        }
+        var sorted = hashes.OrderBy(hash => Convert.ToHexString(hash), StringComparer.Ordinal).ToArray();
+        var output = (byte[])crr.Clone();
+        var changed = false;
+        for (var index = 0; index < sorted.Length; index++)
+        {
+            var at = tableOffset + (index * 0x20);
+            if (!output.AsSpan(at, 0x20).SequenceEqual(sorted[index]))
+                changed = true;
+            sorted[index].CopyTo(output, at);
+        }
+        return new CrrRebuildResult(output, prepared, changed);
+    }
+
+    private static void ValidateLayout(byte[] cro)
+    {
+        if (cro.Length < 0x180)
+            throw new ArgumentException("El CRO es demasiado pequeño para contener sus hashes.", nameof(cro));
+        var section0 = BitConverter.ToInt32(cro, 0xB0);
+        var section0Length = BitConverter.ToInt32(cro, 0xB4);
+        var section1 = BitConverter.ToInt32(cro, 0xC0);
+        var section2 = BitConverter.ToInt32(cro, 0xB8);
+        var section2Length = BitConverter.ToInt32(cro, 0xBC);
+        if (section0 < 0 || section0Length < 0 || section1 < 0 || section2 < section1 || section2Length < 0
+            || section0 > cro.Length - section0Length || section2 > cro.Length - section2Length || section2 < section1)
+            throw new ArgumentException("Las secciones declaradas del CRO están fuera de rango.", nameof(cro));
     }
 
     private readonly byte[] Data = (byte[])data.Clone();

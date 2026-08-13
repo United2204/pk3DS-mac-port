@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pickup · pk3DS Mac</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a>
+    <a class="header-link" href="index.html">Randomizador</a>
+  </header>
+  <main class="editor-main">
+    <div class="intro editor-intro">
+      <p class="eyebrow">EDITOR ROMFS · GEN. VII</p>
+      <h1>Objetos de Pickup</h1>
+      <p>Edita los objetos y las probabilidades por banda de nivel. Cada columna debe sumar 100%.</p>
+    </div>
+    <section class="panel">
+      <div class="path-input">
+        <span>⌁</span>
+        <input id="workspace" placeholder="Carpeta completa del juego o RomFS">
+        <button id="browse" class="secondary">Examinar…</button>
+        <button id="load">Cargar</button>
+      </div>
+      <p id="status" class="status neutral">Elige un juego de Sol/Luna o Ultrasol/Ultraluna.</p>
+    </section>
+    <section id="editor" class="panel is-disabled">
+      <div class="pickup-toolbar">
+        <div>
+          <b>Tabla de objetos</b>
+          <p class="muted">Las columnas representan los rangos 1–10, 11–20 y así sucesivamente hasta 91–100.</p>
+        </div>
+        <div class="pickup-actions">
+          <button id="add" class="secondary-button" disabled>Añadir fila</button>
+          <button id="remove" class="secondary-button" disabled>Eliminar última</button>
+        </div>
+      </div>
+      <div id="entries" class="pickup-table"></div>
+    </section>
+    <section class="panel output-panel text-export">
+      <div class="ready-row">
+        <div><b id="summary">Sin cambios para exportar</b><small>El juego original no se modifica.</small></div>
+        <button id="export" class="primary" disabled>Exportar →</button>
+      </div>
+      <p id="result" class="status neutral"></p>
+    </section>
+  </main>
+  <footer>pk3DS Mac trabaja de forma local.</footer>
+  <script src="pickup.js"></script>
+</body>
+</html>

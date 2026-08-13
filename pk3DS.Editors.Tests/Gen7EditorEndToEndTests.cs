@@ -30,6 +30,10 @@ public class Gen7EditorEndToEndTests : IDisposable
         var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.RomFs));
 
         Assert.Equal("SM", response.GameVersion);
+        Assert.True(response.Modules.Single(module => module.Id == "pickup").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "tutors").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "marts").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "typechart").SourceAvailable);
     }
 
     // Trainers -----------------------------------------------------------------
@@ -43,6 +47,98 @@ public class Gen7EditorEndToEndTests : IDisposable
         Assert.Equal(_workspace.TrainerCount - 1, response.Trainers.Length);
         Assert.Equal(_workspace.TrainerClassCount, response.Classes.Length);
         Assert.Equal(_workspace.SpeciesCount, response.Species.Length);
+    }
+
+    [Fact]
+    public void TmGen7ReadsAndExportsCodeBin()
+    {
+        var table = TmHmEditor.GetTable(new TmHmTableRequest(_workspace.RomFs));
+        Assert.Equal("SM", table.GameVersion);
+        Assert.Equal(100, table.TMs.Length);
+        Assert.Empty(table.HMs);
+
+        var result = TmHmEditor.Export(new TmHmExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId,
+            TMs: Enumerable.Repeat(4, 100).ToArray(), HMs: []));
+        ExportAssertions.AssertExeFsContentDiffersFromSource(result, _workspace);
+    }
+
+    [Fact]
+    public void TypeChartGen7ReadsAndExportsCodeBin()
+    {
+        var table = TypeChartEditor.GetTable(new TypeChartTableRequest(_workspace.RomFs));
+
+        Assert.Equal("SM", table.GameVersion);
+        Assert.Equal(324, table.Chart.Length);
+        Assert.Equal(2, table.Chart[0]);
+
+        var edited = table.Chart.ToArray();
+        edited[0] = 0;
+        var result = TypeChartEditor.Export(new TypeChartExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, edited));
+
+        Assert.Equal(["code.bin"], result.ChangedFiles);
+        ExportAssertions.AssertExeFsContentDiffersFromSource(result, _workspace);
+    }
+
+    [Fact]
+    public void TutorTablesReadAndExportShopCro()
+    {
+        var table = TutorEditor.GetTable(new TutorTableRequest(_workspace.RomFs));
+
+        Assert.Equal("SM", table.GameVersion);
+        Assert.Equal([4, 5, 6, 7], table.Groups.Select(group => group.Entries.Length).ToArray());
+        Assert.Equal(1, table.Groups[0].Entries[0].Move);
+        Assert.Equal(101, table.Groups[0].Entries[0].Price);
+
+        var edited = table.Groups.Select((group, groupIndex) => group with
+        {
+            Entries = group.Entries.Select((entry, entryIndex) => entry with
+            {
+                Move = 2,
+                Price = 500 + groupIndex + entryIndex,
+            }).ToArray(),
+        }).ToArray();
+        var result = TutorEditor.Export(new TutorExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, edited));
+
+        Assert.Equal(["Shop.cro"], result.ChangedFiles);
+        ExportAssertions.AssertContentDiffersFromSource(result, _workspace);
+    }
+
+    [Fact]
+    public void MartTablesReadAndExportShopCro()
+    {
+        var table = MartEditor.GetTable(new MartTableRequest(_workspace.RomFs));
+
+        Assert.Equal("SM", table.GameVersion);
+        Assert.Equal(23, table.Regular.Length);
+        Assert.Equal(6, table.BattlePoints.Length);
+        Assert.Equal(9, table.Regular[0].Entries.Length);
+        Assert.Null(table.Regular[0].Entries[0].Price);
+        Assert.Equal(1001, table.BattlePoints[0].Entries[0].Price);
+
+        var regular = table.Regular.ToArray();
+        regular[0] = regular[0] with
+        {
+            Entries = regular[0].Entries.Select((entry, index) => entry with { Item = (index % 3) + 1 }).ToArray(),
+        };
+        var battlePoints = table.BattlePoints.ToArray();
+        battlePoints[0] = battlePoints[0] with
+        {
+            Entries = battlePoints[0].Entries.Select((entry, index) => entry with { Item = 2, Price = 700 + index }).ToArray(),
+        };
+        var result = MartEditor.Export(new MartExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, regular, battlePoints));
+
+        Assert.Equal(["Shop.cro"], result.ChangedFiles);
+        ExportAssertions.AssertContentDiffersFromSource(result, _workspace);
+    }
+
+    [Fact]
+    public void PickupGen6RefusesGen7Workspace()
+    {
+        Assert.Throws<WorkspaceException>(() => PickupGen6Editor.GetTable(new PickupGen6TableRequest(_workspace.RomFs)));
     }
 
     [Fact]
@@ -268,9 +364,80 @@ public class Gen7EditorEndToEndTests : IDisposable
     }
 
     [Fact]
-    public void Gen6OnlyEditorsRefuseAGen7Workspace() =>
+    public void Gen6OnlyEditorsRefuseAGen7Workspace()
+    {
         Assert.Throws<WorkspaceException>(() =>
             WildGen6Editor.GetCatalog(new WildGen6CatalogRequest(_workspace.RomFs)));
+        Assert.Throws<WorkspaceException>(() =>
+            OPowerEditor.GetTable(new OPowerTableRequest(_workspace.RomFs)));
+    }
+
+    // Pickup -------------------------------------------------------------------
+
+    [Fact]
+    public void PickupTableExposesItemsAndLevelBands()
+    {
+        var response = PickupEditor.GetTable(new PickupTableRequest(_workspace.RomFs));
+
+        Assert.Equal(2, response.Entries.Length);
+        Assert.Equal(10, response.Entries[0].Rates.Length);
+        Assert.Equal(_workspace.ItemCount, response.Items.Length);
+    }
+
+    [Fact]
+    public void EditingPickupRepackagesItsGarc()
+    {
+        var response = PickupEditor.GetTable(new PickupTableRequest(_workspace.RomFs));
+        var edited = response.Entries.ToArray();
+        edited[0] = response.Entries[0] with { Item = 3, Rates = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100] };
+        edited[1] = response.Entries[1] with { Item = 4, Rates = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+
+        var result = PickupEditor.Export(new PickupExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, edited));
+
+        AssertArchiveDiffersFromSource(result);
+    }
+
+    [Fact]
+    public void PickupRatesMustSumToOneHundredPerBand()
+    {
+        var response = PickupEditor.GetTable(new PickupTableRequest(_workspace.RomFs));
+        var broken = response.Entries.ToArray();
+        broken[0] = response.Entries[0] with { Rates = [49, 50, 50, 50, 50, 50, 50, 50, 50, 50] };
+
+        Assert.Throws<WorkspaceException>(() => PickupEditor.Export(new PickupExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, broken)));
+    }
+
+    // Battle Tree / Royal ------------------------------------------------------
+
+    [Theory]
+    [InlineData("normal")]
+    [InlineData("special")]
+    public void MaisonCatalogSupportsBothGen7Variants(string variant)
+    {
+        var response = MaisonEditor.GetCatalog(new MaisonCatalogRequest(_workspace.RomFs, variant));
+
+        Assert.Equal("SM", response.GameVersion);
+        Assert.Equal(2, response.Trainers.Length);
+        Assert.Equal(2, response.Pokemon.Length);
+        Assert.Equal(25, response.Natures.Length);
+    }
+
+    [Fact]
+    public void MaisonGen7PokemonExportSurvives()
+    {
+        var original = MaisonEditor.GetPokemon(new MaisonPokemonRequest(_workspace.RomFs, "special", 0));
+        var result = MaisonEditor.ExportPokemon(new MaisonPokemonExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, "special", 0,
+            original.Entry with { Species = 4, Form = 2, Nature = 7, Item = 3 }));
+
+        AssertArchiveDiffersFromSource(result);
+    }
+
+    [Fact]
+    public void MaisonRejectsAnUnknownVariant() =>
+        Assert.Throws<WorkspaceException>(() => MaisonEditor.GetCatalog(new MaisonCatalogRequest(_workspace.RomFs, "unknown")));
 
     /// <summary>
     /// Regression for the bug that broke every Gen VII export: <c>GameConfig.GetGameData</c> stats

@@ -1,3 +1,5 @@
+using pk3DS.Core;
+
 namespace pk3DS.Editors;
 
 /// <summary>Reports what the selected folder is and which modules its contents can support.</summary>
@@ -27,9 +29,23 @@ public static class WorkspaceInspector
         new("trainers", "Trainers", "RomFS", true, "RomFS"),
         new("moves", "Move Stats", "RomFS", true, "RomFS"),
         new("items", "Item Stats", "RomFS", true, "RomFS"),
-        new("tm", "TMs / HMs", "ExeFS", workspace.HasExeFs, "ExeFS"),
-        new("marts", "Poké Mart", "ExeFS/CRO", workspace.HasExeFs, "ExeFS o CRO según el juego"),
-        new("starter", "Starter Pokémon", "CRO", workspace.HasExeFs, "Workspace completo y CRO"),
-        new("typechart", "Type Chart", "CRO", workspace.HasExeFs, "Workspace completo y CRO"),
+        new("pickup", "Pickup Gen. VI/VII", "RomFS + ExeFS", (workspace.Version is GameVersion.SM or GameVersion.USUM) || (workspace.HasExeFs && workspace.Version is (GameVersion.XY or GameVersion.ORAS)), "Gen. VI: ExeFS; Gen. VII: RomFS"),
+        new("maison", "Battle Maison / Tree / Royal", "RomFS", workspace.Version is GameVersion.XY or GameVersion.ORAS or GameVersion.SM or GameVersion.USUM, "RomFS Gen. VI/VII"),
+        new("tm", "TMs / HMs", "ExeFS", workspace.HasExeFs, "ExeFS code.bin descomprimido"),
+        new("shiny-rate", "Shiny Rate", "ExeFS", workspace.HasExeFs, "ExeFS code.bin descomprimido"),
+        new("tutors", "Move Tutors Gen. VII", "RomFS", workspace.Version is GameVersion.SM or GameVersion.USUM && File.Exists(Path.Combine(workspace.RomFsPath, "Shop.cro")), "Shop.cro"),
+        new("marts", "Poké Mart Gen. VII", "RomFS", workspace.Version is GameVersion.SM or GameVersion.USUM && File.Exists(Path.Combine(workspace.RomFsPath, "Shop.cro")), "Shop.cro"),
+        new("tutors6", "Move Tutors Gen. VI", "ExeFS", workspace.Version is GameVersion.XY or GameVersion.ORAS && workspace.HasExeFs, "ExeFS code.bin descomprimido"),
+        new("marts6", "Poké Mart Gen. VI", "ExeFS", workspace.Version is GameVersion.XY or GameVersion.ORAS && workspace.HasExeFs, "ExeFS code.bin descomprimido"),
+        new("opowers", "O-Powers Gen. VI", "ExeFS", workspace.Version is GameVersion.XY or GameVersion.ORAS && workspace.HasExeFs, "ExeFS code.bin descomprimido"),
+        new("starter", "Starter Pokémon Gen. VI", "RomFS", workspace.Version is GameVersion.XY or GameVersion.ORAS
+            && File.Exists(Path.Combine(workspace.RomFsPath, "DllPoke3Select.cro"))
+            && File.Exists(Path.Combine(workspace.RomFsPath, "DllField.cro")), "DllPoke3Select.cro + DllField.cro"),
+        new("gift6", "Gift Pokémon Gen. VI", "RomFS", workspace.Version is GameVersion.XY or GameVersion.ORAS
+            && File.Exists(Path.Combine(workspace.RomFsPath, "DllField.cro")), "DllField.cro"),
+        new("typechart", "Type Chart", "RomFS + ExeFS", workspace.Version is GameVersion.XY or GameVersion.ORAS
+            ? File.Exists(Path.Combine(workspace.RomFsPath, "DllBattle.cro"))
+            : workspace.Version is GameVersion.SM or GameVersion.USUM && workspace.HasExeFs,
+            "Gen. VI: DllBattle.cro; Gen. VII: ExeFS code.bin"),
     ];
 }

@@ -135,6 +135,39 @@ public class StaticGen6OffsetTests
         Assert.Throws<WorkspaceException>(() => StaticGen6Editor.Read(new byte[0x100], oras: false, entryIndex: 0));
 }
 
+public class GiftGen6OffsetTests
+{
+    [Theory]
+    [InlineData(false, 0x13)]
+    [InlineData(true, 0x25)]
+    public void EntryCountDependsOnGame(bool oras, int expected) =>
+        Assert.Equal(expected, GiftGen6Editor.GetCount(oras));
+
+    [Theory]
+    [InlineData(false, 0x18)]
+    [InlineData(true, 0x24)]
+    public void EntrySizeDependsOnGame(bool oras, int expected) =>
+        Assert.Equal(expected, GiftGen6Editor.GetSize(oras));
+
+    [Theory]
+    [InlineData(false, 0, 0xF805C)]
+    [InlineData(false, 1, 0xF805C + 0x18)]
+    [InlineData(true, 2, 0xF906C + 0x48)]
+    public void EntriesUseTheKnownGiftOffsets(bool oras, int index, int expected) =>
+        Assert.Equal(expected, GiftGen6Editor.GetOffset(oras, index));
+
+    [Theory]
+    [InlineData(false, -1)]
+    [InlineData(false, 0x13)]
+    [InlineData(true, 0x25)]
+    public void IndexesOutsideTheTableAreRejected(bool oras, int index) =>
+        Assert.Throws<WorkspaceException>(() => GiftGen6Editor.GetOffset(oras, index));
+
+    [Fact]
+    public void ReadingPastTheEndOfTheCroIsRejected() =>
+        Assert.Throws<WorkspaceException>(() => GiftGen6Editor.Read(new byte[0x100], oras: false, entryIndex: 0));
+}
+
 public class TrainerValidationTests
 {
     private const int Classes = 200, Species = 800, Items = 900, Moves = 750;

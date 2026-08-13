@@ -88,12 +88,91 @@ public sealed record StaticGen6Entry(int Species, int Form, int Level, int HeldI
 public sealed record StaticGen6EntryResponse(int EntryIndex, StaticGen6Entry Entry);
 public sealed record StaticGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int EntryIndex, StaticGen6Entry? Entry, int? Language = null);
 
+// Gift Pokémon, Gen VI CRO ----------------------------------------------------
+public sealed record GiftGen6CatalogRequest(string WorkspacePath, int? Language = null);
+public sealed record GiftGen6CatalogResponse(string Game, int Count, NamedEntry[] Species, NamedEntry[] Items, NamedEntry[] Natures, string Warning);
+public sealed record GiftGen6EntryRequest(string WorkspacePath, int EntryIndex, int? Language = null);
+public sealed record GiftGen6Entry(int Species, int Form, int Level, int HeldItem, int Gender, int Ability, int Nature, bool ShinyLock, int[] IVs);
+public sealed record GiftGen6EntryResponse(int EntryIndex, GiftGen6Entry Entry);
+public sealed record GiftGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int EntryIndex, GiftGen6Entry? Entry, int? Language = null);
+
+// Move Tutors, Gen VI ExeFS ---------------------------------------------------
+public sealed record TutorGen6Group(string Name, int[] Moves);
+public sealed record TutorGen6TableRequest(string WorkspacePath, int? Language = null);
+public sealed record TutorGen6TableResponse(string GameVersion, TutorGen6Group[] Groups, NamedEntry[] Moves, string Warning);
+public sealed record TutorGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, TutorGen6Group[] Groups, int? Language = null);
+
 // Trainers --------------------------------------------------------------------
 public sealed record TrainerCatalogRequest(string WorkspacePath, int? Language = null);
 public sealed record TrainerSummary(int Id, string Name);
 public sealed record TrainerCatalogResponse(TrainerSummary[] Trainers, NamedEntry[] Classes, NamedEntry[] Species, NamedEntry[] Items, NamedEntry[] Moves);
 public sealed record TrainerEntryRequest(string WorkspacePath, int TrainerIndex, int? Language = null);
 public sealed record TrainerPokemonEntry(int Species, int Form, int Level, int Item, int[] Moves, int Ability, int Gender, int Nature, bool Shiny, int[] IVs, int[] EVs);
-public sealed record TrainerEntry(int TrainerClass, int Mode, int[] Items, int AI, bool Flag, int Money, TrainerPokemonEntry[] Team);
+public sealed record TrainerEntry(int TrainerClass, int Mode, int[] Items, int AI, bool Flag, int Money, TrainerPokemonEntry[] Team,
+    bool? HasItems = null, bool? HasMoves = null, string? Name = null, string? ClassName = null);
 public sealed record TrainerEntryResponse(int TrainerIndex, TrainerEntry Entry);
 public sealed record TrainerExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int TrainerIndex, TrainerEntry? Entry, int? Language = null);
+
+// TMs / HMs, ExeFS ------------------------------------------------------------
+public sealed record TmHmTableRequest(string WorkspacePath, int? Language = null);
+public sealed record TmHmTableResponse(string GameVersion, int[] TMs, int[] HMs, NamedEntry[] Moves, string Warning);
+public sealed record TmHmExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int[] TMs, int[] HMs, int? Language = null);
+
+// Pickup, Gen VI ExeFS --------------------------------------------------------
+public sealed record PickupGen6TableRequest(string WorkspacePath, int? Language = null);
+public sealed record PickupGen6TableResponse(string GameVersion, int[] Common, int[] Rare, NamedEntry[] Items, string Warning);
+public sealed record PickupGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int[] Common, int[] Rare, int? Language = null);
+
+// Shiny rate, ExeFS ----------------------------------------------------------
+public sealed record ShinyRateTableRequest(string WorkspacePath, int? Language = null);
+public sealed record ShinyRateTableResponse(string GameVersion, int Rerolls, bool EverythingShiny, int[] SupportedRerolls, string Warning);
+public sealed record ShinyRateExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int Rerolls, bool EverythingShiny, int? Language = null);
+
+// Poké Marts, Gen VII CRO -----------------------------------------------------
+public sealed record MartEntry(int Item, int? Price = null);
+public sealed record MartGroup(string Name, MartEntry[] Entries);
+public sealed record MartTableRequest(string WorkspacePath, int? Language = null);
+public sealed record MartTableResponse(string GameVersion, MartGroup[] Regular, MartGroup[] BattlePoints, NamedEntry[] Items, string Warning);
+public sealed record MartExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, MartGroup[] Regular, MartGroup[] BattlePoints, int? Language = null);
+
+// O-Powers, Gen VI ExeFS ------------------------------------------------------
+public sealed record OPowerTableRequest(string WorkspacePath, int? Language = null);
+public sealed record OPowerEntry(int PlayerCost, int OtherCost, int Stage, int LevelUp, int Efficacy, int Duration, int Usability);
+public sealed record OPowerTableResponse(string GameVersion, OPowerEntry[] Entries, string Warning);
+public sealed record OPowerExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, OPowerEntry[] Entries, int? Language = null);
+
+// Type chart, Gen VI CRO / Gen VII ExeFS -------------------------------------
+public sealed record TypeChartTableRequest(string WorkspacePath, int? Language = null);
+public sealed record TypeChartTableResponse(string GameVersion, int TypeCount, int[] Chart, NamedEntry[] Types, string Warning);
+public sealed record TypeChartExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int[] Chart, int? Language = null);
+
+// Starters, Gen VI CRO -------------------------------------------------------
+public sealed record StarterGroup(string Name, int[] Species);
+public sealed record StarterTableRequest(string WorkspacePath, int? Language = null);
+public sealed record StarterTableResponse(string GameVersion, StarterGroup[] Groups, NamedEntry[] Species, string Warning);
+public sealed record StarterExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, StarterGroup[] Groups, int? Language = null);
+
+// Move Tutors, Gen VII CRO ----------------------------------------------------
+public sealed record TutorTableRequest(string WorkspacePath, int? Language = null);
+public sealed record TutorEntry(int Move, int Price);
+public sealed record TutorGroup(string Name, TutorEntry[] Entries);
+public sealed record TutorTableResponse(string GameVersion, TutorGroup[] Groups, NamedEntry[] Moves, string Warning);
+public sealed record TutorExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, TutorGroup[] Groups, int? Language = null);
+
+// Pickup, Gen VII -------------------------------------------------------------
+public sealed record PickupTableRequest(string WorkspacePath, int? Language = null);
+public sealed record PickupEntry(int Item, int[] Rates);
+public sealed record PickupTableResponse(PickupEntry[] Entries, NamedEntry[] Items);
+public sealed record PickupExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, PickupEntry[] Entries, int? Language = null);
+
+// Battle Maison / Battle Tree / Battle Royal ---------------------------------
+public sealed record MaisonCatalogRequest(string WorkspacePath, string Variant = "normal", int? Language = null);
+public sealed record MaisonCatalogResponse(string GameVersion, string Variant, NamedEntry[] Trainers, NamedEntry[] Pokemon, NamedEntry[] Classes, NamedEntry[] Species, NamedEntry[] Items, NamedEntry[] Moves, NamedEntry[] Natures);
+public sealed record MaisonTrainerRequest(string WorkspacePath, string Variant, int TrainerIndex, int? Language = null);
+public sealed record MaisonTrainerEntry(int TrainerClass, int[] Choices);
+public sealed record MaisonTrainerResponse(string Variant, int TrainerIndex, MaisonTrainerEntry Entry);
+public sealed record MaisonPokemonRequest(string WorkspacePath, string Variant, int PokemonIndex, int? Language = null);
+public sealed record MaisonPokemonEntry(int Species, int Form, int Nature, int Item, int[] Moves, bool[] EVs);
+public sealed record MaisonPokemonResponse(string Variant, int PokemonIndex, MaisonPokemonEntry Entry);
+public sealed record MaisonTrainerExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, string Variant, int TrainerIndex, MaisonTrainerEntry? Entry, int? Language = null);
+public sealed record MaisonPokemonExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, string Variant, int PokemonIndex, MaisonPokemonEntry? Entry, int? Language = null);

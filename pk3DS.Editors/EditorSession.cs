@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using pk3DS.Core;
+using pk3DS.Core.CTR;
 
 namespace pk3DS.Editors;
 
@@ -9,7 +10,7 @@ namespace pk3DS.Editors;
 /// Editing never touches the source dump. An export copies the GARCs it needs into a scratch
 /// RomFS, mutates that copy, and packs only the changed files into a LayeredFS ZIP. Each editor
 /// supplies just the mutation; this class owns the workspace, Title ID, scratch directory and
-/// archive so the eleven editors cannot drift apart on any of it.
+/// archive so the individual editors cannot drift apart on any of it.
 /// </para>
 /// </summary>
 public static class EditorSession
@@ -98,7 +99,7 @@ public static class EditorSession
             config.Initialize(scratchRomFs, Directory.GetParent(scratchRomFs)!.FullName, languageId);
 
             var changed = apply(config);
-            return CreateLayeredFsArchive(outputDirectory, workspace.RomFsPath, scratchRomFs, titleId, changed, label);
+            return CreateLayeredFsArchive(outputDirectory, workspace.RomFsPath, scratchRomFs, titleId, "romfs", changed, label);
         });
     }
 
@@ -126,8 +127,47 @@ public static class EditorSession
             foreach (var file in copied)
                 CopyRelativeFile(workspace.RomFsPath, scratchRomFs, file);
             apply(workspace, config, scratchRomFs);
-            return CreateLayeredFsArchive(outputDirectory, workspace.RomFsPath, scratchRomFs, titleId, copied, label);
+            var changed = copied.ToList();
+            RebuildCrrIfPresent(workspace.RomFsPath, scratchRomFs, copied, changed);
+            return CreateLayeredFsArchive(outputDirectory, workspace.RomFsPath, scratchRomFs, titleId, "romfs", changed, label);
         });
+    }
+
+    /// <summary>
+    /// Runs an ExeFS editor against a scratch copy of <c>code.bin</c> and emits an ExeFS
+    /// LayeredFS patch. The loaded ROM config is supplied so the editor can validate IDs against
+    /// the game's own text tables.
+    /// </summary>
+    public static ExportResult ExportExeFs(
+        string workspacePath,
+        string? outputDirectory,
+        string? requestedTitleId,
+        int? language,
+        string label,
+        Func<GameWorkspace, GameConfig, byte[], byte[]> apply)
+    {
+        var workspace = GameWorkspace.Open(workspacePath);
+        var titleId = ResolveTitleId(workspace, requestedTitleId);
+        var languageId = NormalizeLanguage(language);
+        var codePath = FindCodeBin(workspace);
+        var config = OpenReadOnly(workspace, languageId);
+        var scratch = Path.Combine(Path.GetTempPath(), $"pk3ds-{label}-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(scratch);
+            var edited = apply(workspace, config, File.ReadAllBytes(codePath));
+            if (edited is null || edited.Length == 0)
+                throw new WorkspaceException("El editor no produjo un code.bin válido.");
+            var codeName = Path.GetFileName(codePath);
+            File.WriteAllBytes(Path.Combine(scratch, codeName), edited);
+            return CreateLayeredFsArchive(outputDirectory, workspace.ExeFsPath!, scratch, titleId,
+                "exefs", [codeName], label);
+        }
+        finally
+        {
+            if (Directory.Exists(scratch))
+                Directory.Delete(scratch, recursive: true);
+        }
     }
 
     private static ExportResult InScratchRomFs(string label, Func<string, ExportResult> body)
@@ -146,14 +186,23 @@ public static class EditorSession
         }
     }
 
+    private static string FindCodeBin(GameWorkspace workspace)
+    {
+        if (workspace.ExeFsPath is null)
+            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar este módulo.");
+        return Directory.EnumerateFiles(workspace.ExeFsPath)
+            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase))
+            ?? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.");
+    }
+
     private static ExportResult CreateLayeredFsArchive(
         string? outputDirectory, string sourceRomFs, string scratchRomFs,
-        string titleId, IEnumerable<string> changedFiles, string labelPrefix)
+        string titleId, string layer, IEnumerable<string> changedFiles, string labelPrefix)
     {
         var outputBase = ResolveOutputBase(outputDirectory, sourceRomFs);
         var label = $"pk3ds-mac-{labelPrefix}-{DateTime.Now:yyyyMMdd-HHmmss}";
         var outputRoot = Path.Combine(outputBase, label);
-        var layeredRomFs = Path.Combine(outputRoot, "luma", "titles", titleId.ToUpperInvariant(), "romfs");
+        var layeredRomFs = Path.Combine(outputRoot, "luma", "titles", titleId.ToUpperInvariant(), layer);
         var changed = changedFiles.Distinct(StringComparer.Ordinal).ToArray();
         foreach (var relativePath in changed)
             CopyRelativeFile(scratchRomFs, layeredRomFs, relativePath);
@@ -180,6 +229,51 @@ public static class EditorSession
         var destination = GetChildPath(destinationRoot, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         File.Copy(source, destination, overwrite: true);
+    }
+
+    /// <summary>
+    /// CRO edits normally need the matching static CRR hash table. If the source dump contains
+    /// one, rebuild it in the scratch output together with the changed CROs; the source dump is
+    /// never touched. Dumps without a CRR continue to produce the ordinary CRO-only patch.
+    /// </summary>
+    private static void RebuildCrrIfPresent(string sourceRoot, string scratchRoot, string[] copiedFiles, ICollection<string> changed)
+    {
+        const string crrRelative = ".crr/static.crr";
+        var sourceCrr = GetChildPath(sourceRoot, crrRelative);
+        if (!File.Exists(sourceCrr))
+            return;
+
+        var croPaths = Directory.EnumerateFiles(sourceRoot, "*.cro", SearchOption.TopDirectoryOnly).ToArray();
+        if (croPaths.Length == 0)
+            return;
+
+        var copiedNames = copiedFiles
+            .Select(Path.GetFileName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var prepared = new List<byte[]>(croPaths.Length);
+        foreach (var sourceCro in croPaths)
+        {
+            var name = Path.GetFileName(sourceCro);
+            var input = copiedNames.Contains(name) ? GetChildPath(scratchRoot, name) : sourceCro;
+            var original = File.ReadAllBytes(input);
+            var fixedCro = CRO.Rehash(original);
+            prepared.Add(fixedCro);
+            if (copiedNames.Contains(name) || !fixedCro.SequenceEqual(original))
+            {
+                File.WriteAllBytes(GetChildPath(scratchRoot, name), fixedCro);
+                if (!changed.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    changed.Add(name);
+            }
+        }
+
+        var rebuilt = CRO.RebuildCRR(File.ReadAllBytes(sourceCrr), prepared);
+        if (!rebuilt.Changed)
+            return;
+        CopyRelativeFile(sourceRoot, scratchRoot, crrRelative);
+        File.WriteAllBytes(GetChildPath(scratchRoot, crrRelative), rebuilt.Crr);
+        if (!changed.Contains(crrRelative, StringComparer.OrdinalIgnoreCase))
+            changed.Add(crrRelative);
     }
 
     /// <summary>

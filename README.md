@@ -35,14 +35,16 @@ El Title ID se obtiene automáticamente desde `exheader.bin`, por lo que la carp
 - compatibilidad de MT/MO y tutores;
 - learnsets configurables: cantidad, distribución por nivel, STAB, potencia, cuatro movimientos iniciales y exclusión de daño fijo;
 - movimientos huevo configurables;
+- editor de objetos de Pickup de Gen. VII, incluyendo sus probabilidades por banda de nivel;
+- editor de Battle Maison / Battle Tree / Battle Royal para los registros de entrenadores y Pokémon;
 - acciones globales de Move Stats: tipos, categorías físico/especial y modo Metronome;
 - evoluciones: conservar, randomizar resultados con filtros de BST/EXP/tipo, eliminar intercambios o modo de evolución por nivel.
 
-Además hay editores individuales para texto de juego e historia, movimientos por nivel, movimientos huevo, evoluciones, datos personales, movimientos, objetos, megaevoluciones, encuentros salvajes (Gen. VI y VII), encuentros estáticos (Gen. VI y VII) y entrenadores (Gen. VII).
+Además hay editores individuales para texto de juego e historia, movimientos por nivel, movimientos huevo, evoluciones, datos personales, movimientos, objetos, TMs/HMs (Gen. VI y VII), Move Tutors (Gen. VI y VII), Poké Mart (Gen. VI y VII), O-Powers (Gen. VI), Shiny Rate (Gen. VI y VII), Type Chart (Gen. VI y VII), Starter Pokémon (Gen. VI), Gift Pokémon (Gen. VI), Pickup (Gen. VI y VII), Battle Maison / Tree / Royal, megaevoluciones, encuentros salvajes (Gen. VI y VII), encuentros estáticos (Gen. VI y VII) y entrenadores (Gen. VI y VII).
 
 ## Estado del port
 
-Falta todo lo que vive en ExeFS/CRO (MT/MO, tutores, tiendas, iniciales, tabla de tipos) y las herramientas de proyecto (extracción, empaquetado, reconstrucción de ROM). El inventario de paridad y su estado real están en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
+Faltan las herramientas de proyecto (extracción, empaquetado y reconstrucción de ROM) y el parche RO/RSA del sistema necesario para que algunos CRO modificados funcionen directamente en consola. Los exports ya recalculan el CRR cuando el dump lo incluye. El inventario de paridad y su estado real está en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
 
 ## Building
 

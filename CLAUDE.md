@@ -70,6 +70,10 @@ Lo específico de plataforma va detrás de una interfaz: hoy solo `IFolderPicker
 5. Una línea en `pk3DS.Mac.Web/Endpoints.cs`.
 6. Página y script en `wwwroot/`.
 
+Los GARCs de Gen. VII que pueden contener entradas LZSS (como `pickup`) deben abrirse con
+`GameConfig.GetlzGARCData`, asignar la entrada modificada y llamar a `Save()`. `GetGARCData` solo
+entiende el contenido GARC sin esa compresión interna.
+
 ## Errores
 
 Los editores lanzan `WorkspaceException` con un mensaje **en español, dirigido al usuario**;
@@ -81,7 +85,7 @@ bug: se registra con stack trace y el usuario recibe un mensaje genérico. Los e
 
 - **El dump de origen nunca se modifica.** Se copia a un RomFS temporal, se muta la copia y se
   empaqueta solo lo que cambió.
-- La salida es `luma/titles/<TITLE-ID>/romfs` dentro de un ZIP. No se reconstruyen `.cia` ni `.cxi`.
+- La salida es `luma/titles/<TITLE-ID>/romfs` o `exefs` según el editor dentro de un ZIP. No se reconstruyen `.cia` ni `.cxi`.
 - El Title ID sale de `exheader.bin`; sin ese archivo no se puede exportar.
 - Las rutas relativas que llegan en un request pasan por `EditorSession.GetChildPath`, que rechaza
   cualquier cosa que se escape del root. Es un límite de confianza: no lo puentees.
@@ -94,8 +98,11 @@ de punta a punta —abrir, leer, exportar e inspeccionar el ZIP LayeredFS— sin
 
 Hay dos porque los formatos difieren de verdad: Gen. VII usa registros personales más grandes,
 evoluciones de 8 bytes, movimientos empaquetados en un mini-archivo `WD` y egg moves con índice de
-forma. El único editor sin cobertura de punta a punta es el de encuentros salvajes de Gen. VII,
-porque exige fabricar tablas `Area7` válidas (punto 6.6 del roadmap).
+forma. La fixture también incluye un `code.bin` alineado con firmas sintéticas para probar TMs/HMs,
+Pickup, Shiny Rate, O-Powers, tutores, tiendas y Type Chart, además de `DllBattle.cro` para Type Chart,
+`DllField.cro` para Starter/Gift y un `Shop.cro` con tutores y tiendas Gen. VII. Los exports de CRO
+recalculan hashes internos y `.crr/static.crr` sobre copias; sus salidas
+`romfs`/`exefs` sin un dump de varios GB.
 
 Al agregar un editor, sumale un caso a `EditorEndToEndTests.Exports` (o al equivalente de Gen. VII).
 Ese test verifica que el ZIP contenga realmente el archivo que el editor dice haber cambiado, y es

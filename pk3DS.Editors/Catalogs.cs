@@ -12,6 +12,8 @@ internal static class Catalogs
     public static NamedEntry[] Species(GameConfig config) => Named(config.GetText(TextName.SpeciesNames), "Especie");
     public static NamedEntry[] Items(GameConfig config) => Named(config.GetText(TextName.ItemNames), "Objeto");
     public static NamedEntry[] Moves(GameConfig config) => Named(config.GetText(TextName.MoveNames), "Movimiento");
+    public static NamedEntry[] Types(GameConfig config) => Named(config.GetText(TextName.Types), "Tipo");
+    public static NamedEntry[] Natures(GameConfig config) => Named(config.GetText(TextName.Natures), "Naturaleza");
     public static NamedEntry[] TrainerClasses(GameConfig config) => Named(config.GetText(TextName.TrainerClasses), "Clase");
 
     public static int SpeciesCount(GameConfig config) => config.GetText(TextName.SpeciesNames).Length;

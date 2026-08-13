@@ -54,4 +54,21 @@ internal static class ExportAssertions
             Assert.NotEqual(File.ReadAllBytes(source), buffer.ToArray());
         }
     }
+
+    public static void AssertExeFsContentDiffersFromSource(ExportResult result, SyntheticWorkspace workspace)
+    {
+        Assert.True(File.Exists(result.ZipPath), "no se generó el ZIP ExeFS");
+        Assert.NotEmpty(result.ChangedFiles);
+        using var archive = ZipFile.OpenRead(result.ZipPath);
+        foreach (var changed in result.ChangedFiles)
+        {
+            var entry = archive.GetEntry($"luma/titles/{SyntheticWorkspace.TitleId}/exefs/{changed}")!;
+            using var stream = entry.Open();
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+            var source = Path.Combine(workspace.ExeFs, changed.Replace('/', Path.DirectorySeparatorChar));
+            Assert.True(File.Exists(source), $"{changed}: no existe en el ExeFS de origen");
+            Assert.NotEqual(File.ReadAllBytes(source), buffer.ToArray());
+        }
+    }
 }

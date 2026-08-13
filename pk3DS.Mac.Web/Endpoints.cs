@@ -66,8 +66,50 @@ public static class Endpoints
         editors.MapPost("/static/gen6/entry", (StaticGen6EntryRequest r) => Results.Ok(StaticGen6Editor.GetEntry(r)));
         editors.MapPost("/static/gen6/export", (StaticGen6ExportRequest r) => Results.Ok(StaticGen6Editor.Export(r)));
 
+        editors.MapPost("/gift/gen6/catalog", (GiftGen6CatalogRequest r) => Results.Ok(GiftGen6Editor.GetCatalog(r)));
+        editors.MapPost("/gift/gen6/entry", (GiftGen6EntryRequest r) => Results.Ok(GiftGen6Editor.GetEntry(r)));
+        editors.MapPost("/gift/gen6/export", (GiftGen6ExportRequest r) => Results.Ok(GiftGen6Editor.Export(r)));
+
+        editors.MapPost("/tutors/gen6/table", (TutorGen6TableRequest r) => Results.Ok(TutorGen6Editor.GetTable(r)));
+        editors.MapPost("/tutors/gen6/export", (TutorGen6ExportRequest r) => Results.Ok(TutorGen6Editor.Export(r)));
+        editors.MapPost("/marts/gen6/table", (MartTableRequest r) => Results.Ok(MartGen6Editor.GetTable(r)));
+        editors.MapPost("/marts/gen6/export", (MartExportRequest r) => Results.Ok(MartGen6Editor.Export(r)));
+
         editors.MapPost("/trainers/catalog", (TrainerCatalogRequest r) => Results.Ok(TrainerEditor.GetCatalog(r)));
         editors.MapPost("/trainers/entry", (TrainerEntryRequest r) => Results.Ok(TrainerEditor.GetEntry(r)));
         editors.MapPost("/trainers/export", (TrainerExportRequest r) => Results.Ok(TrainerEditor.Export(r)));
+
+        editors.MapPost("/tmhm/table", (TmHmTableRequest r) => Results.Ok(TmHmEditor.GetTable(r)));
+        editors.MapPost("/tmhm/export", (TmHmExportRequest r) => Results.Ok(TmHmEditor.Export(r)));
+
+        editors.MapPost("/pickup/gen6/table", (PickupGen6TableRequest r) => Results.Ok(PickupGen6Editor.GetTable(r)));
+        editors.MapPost("/pickup/gen6/export", (PickupGen6ExportRequest r) => Results.Ok(PickupGen6Editor.Export(r)));
+
+        editors.MapPost("/shiny-rate/table", (ShinyRateTableRequest r) => Results.Ok(ShinyRateEditor.GetTable(r)));
+        editors.MapPost("/shiny-rate/export", (ShinyRateExportRequest r) => Results.Ok(ShinyRateEditor.Export(r)));
+
+        editors.MapPost("/marts/table", (MartTableRequest r) => Results.Ok(MartEditor.GetTable(r)));
+        editors.MapPost("/marts/export", (MartExportRequest r) => Results.Ok(MartEditor.Export(r)));
+
+        editors.MapPost("/opowers/table", (OPowerTableRequest r) => Results.Ok(OPowerEditor.GetTable(r)));
+        editors.MapPost("/opowers/export", (OPowerExportRequest r) => Results.Ok(OPowerEditor.Export(r)));
+
+        editors.MapPost("/typechart/table", (TypeChartTableRequest r) => Results.Ok(TypeChartEditor.GetTable(r)));
+        editors.MapPost("/typechart/export", (TypeChartExportRequest r) => Results.Ok(TypeChartEditor.Export(r)));
+
+        editors.MapPost("/starters/table", (StarterTableRequest r) => Results.Ok(StarterEditor.GetTable(r)));
+        editors.MapPost("/starters/export", (StarterExportRequest r) => Results.Ok(StarterEditor.Export(r)));
+
+        editors.MapPost("/tutors/table", (TutorTableRequest r) => Results.Ok(TutorEditor.GetTable(r)));
+        editors.MapPost("/tutors/export", (TutorExportRequest r) => Results.Ok(TutorEditor.Export(r)));
+
+        editors.MapPost("/pickup/table", (PickupTableRequest r) => Results.Ok(PickupEditor.GetTable(r)));
+        editors.MapPost("/pickup/export", (PickupExportRequest r) => Results.Ok(PickupEditor.Export(r)));
+
+        editors.MapPost("/maison/catalog", (MaisonCatalogRequest r) => Results.Ok(MaisonEditor.GetCatalog(r)));
+        editors.MapPost("/maison/trainer", (MaisonTrainerRequest r) => Results.Ok(MaisonEditor.GetTrainer(r)));
+        editors.MapPost("/maison/pokemon", (MaisonPokemonRequest r) => Results.Ok(MaisonEditor.GetPokemon(r)));
+        editors.MapPost("/maison/trainer/export", (MaisonTrainerExportRequest r) => Results.Ok(MaisonEditor.ExportTrainer(r)));
+        editors.MapPost("/maison/pokemon/export", (MaisonPokemonExportRequest r) => Results.Ok(MaisonEditor.ExportPokemon(r)));
     }
 }

@@ -4,8 +4,8 @@ using pk3DS.Core.Structures;
 namespace pk3DS.Editors;
 
 /// <summary>
-/// Trainers for Gen VII. A trainer is split across two GARCs: <c>trdata</c> for the battle setup
-/// and <c>trpoke</c> for the team, and both must be written together.
+/// Trainers for Gen VI and Gen VII. A trainer is split across two GARCs: <c>trdata</c> for the
+/// battle setup and <c>trpoke</c> for the team, and both must be written together.
 /// </summary>
 public static class TrainerEditor
 {
@@ -14,7 +14,7 @@ public static class TrainerEditor
     public static TrainerCatalogResponse GetCatalog(TrainerCatalogRequest request)
     {
         var (_, config) = EditorSession.OpenReadOnly(request.WorkspacePath, request.Language);
-        Guard.Gen7(config, "entrenadores");
+        EnsureSupported(config);
         var trainers = config.GetGARCData("trdata");
         var names = config.GetText(TextName.TrainerNames);
         return new TrainerCatalogResponse(
@@ -27,32 +27,66 @@ public static class TrainerEditor
     public static TrainerEntryResponse GetEntry(TrainerEntryRequest request)
     {
         var (_, config) = EditorSession.OpenReadOnly(request.WorkspacePath, request.Language);
-        Guard.Gen7(config, "entrenadores");
+        EnsureSupported(config);
         var trdata = config.GetGARCData("trdata");
         var trpoke = config.GetGARCData("trpoke");
         var index = RequireTrainer(trdata.Files.Length, trpoke.Files.Length, request.TrainerIndex);
-        return new TrainerEntryResponse(index, Describe(new TrainerData7(trdata.Files[index], trpoke.Files[index])));
+        var entry = config.Generation == 6
+            ? Describe(ReadGen6(trdata.Files[index], trpoke.Files[index], config.ORAS))
+            : Describe(new TrainerData7(trdata.Files[index], trpoke.Files[index]));
+        entry = entry with
+        {
+            Name = TextValue(config, TextName.TrainerNames, index),
+            ClassName = TextValue(config, TextName.TrainerClasses, entry.TrainerClass),
+        };
+        return new TrainerEntryResponse(index, entry);
     }
 
     public static ExportResult Export(TrainerExportRequest request) =>
         EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId, request.Language,
             "trainer", TrainerGarcs, config =>
             {
-                Guard.Gen7(config, "entrenadores");
+                EnsureSupported(config);
                 var trdata = config.GetGARCData("trdata");
                 var trpoke = config.GetGARCData("trpoke");
                 var index = RequireTrainer(trdata.Files.Length, trpoke.Files.Length, request.TrainerIndex);
                 var entry = Validate(request.Entry, config.GetText(TextName.TrainerClasses).Length,
-                    Catalogs.SpeciesCount(config), Catalogs.ItemCount(config), Catalogs.MoveCount(config));
+                    Catalogs.SpeciesCount(config), Catalogs.ItemCount(config), Catalogs.MoveCount(config),
+                    config.Generation == 6, config.ORAS ? 4 : 3);
 
-                var trainer = new TrainerData7(trdata.Files[index], trpoke.Files[index]);
-                Apply(trainer, entry);
-                trainer.Write(out var data, out var team);
+                byte[] data;
+                byte[] team;
+                if (config.Generation == 6)
+                {
+                    var trainer = ReadGen6(trdata.Files[index], trpoke.Files[index], config.ORAS);
+                    Apply(trainer, entry);
+                    data = trainer.Write();
+                    team = trainer.WriteTeam();
+                }
+                else
+                {
+                    var trainer = new TrainerData7(trdata.Files[index], trpoke.Files[index]);
+                    Apply(trainer, entry);
+                    trainer.Write(out data, out team);
+                }
                 trdata.SetFile(index, data);
                 trpoke.SetFile(index, team);
                 trdata.Save();
                 trpoke.Save();
-                return [config.GetGARCFileName("trdata"), config.GetGARCFileName("trpoke")];
+
+                var changed = new List<string>
+                {
+                    config.GetGARCFileName("trdata"),
+                    config.GetGARCFileName("trpoke"),
+                };
+                if (entry.Name is not null || entry.ClassName is not null)
+                {
+                    WriteTrainerText(config, TextName.TrainerNames, index, entry.Name);
+                    WriteTrainerText(config, TextName.TrainerClasses, entry.TrainerClass, entry.ClassName);
+                    config.GARCGameText.Save();
+                    changed.Add(config.GetGARCFileName("gametext"));
+                }
+                return changed;
             });
 
     private static TrainerEntry Describe(TrainerData7 trainer) => new(
@@ -61,6 +95,15 @@ public static class TrainerEditor
         trainer.AI, trainer.Flag, trainer.Money,
         trainer.Pokemon.Select(pokemon => new TrainerPokemonEntry(pokemon.Species, pokemon.Form, pokemon.Level, pokemon.Item,
             pokemon.Moves, pokemon.Ability, pokemon.Gender, pokemon.Nature, pokemon.Shiny, pokemon.IVs, pokemon.EVs)).ToArray());
+
+    private static TrainerEntry Describe(TrainerData6 trainer) => new(
+        trainer.Class, trainer.BattleType, trainer.Items.Select(item => (int)item).ToArray(),
+        trainer.AI, trainer.Healer, trainer.Money,
+        trainer.Team.Select(pokemon => new TrainerPokemonEntry(
+            pokemon.Species, pokemon.Form, pokemon.Level, pokemon.Item,
+            pokemon.Moves.Select(move => (int)move).ToArray(), pokemon.Ability, pokemon.Gender,
+            Nature: 0, Shiny: false, IVs: [pokemon.IVs, 0, 0, 0, 0, 0], EVs: [0, 0, 0, 0, 0, 0])).ToArray(),
+        HasItems: trainer.Item, HasMoves: trainer.Moves);
 
     private static void Apply(TrainerData7 trainer, TrainerEntry entry)
     {
@@ -74,8 +117,13 @@ public static class TrainerEditor
         trainer.Flag = entry.Flag;
         trainer.Money = entry.Money;
 
-        // The team size is fixed by the existing record; only the slots already present are rewritten.
-        for (var index = 0; index < trainer.Pokemon.Count; index++)
+        trainer.NumPokemon = entry.Team.Length;
+        while (trainer.Pokemon.Count < entry.Team.Length)
+            trainer.Pokemon.Add(new TrainerPoke7());
+        if (trainer.Pokemon.Count > entry.Team.Length)
+            trainer.Pokemon.RemoveRange(entry.Team.Length, trainer.Pokemon.Count - entry.Team.Length);
+
+        for (var index = 0; index < entry.Team.Length; index++)
         {
             var source = entry.Team[index];
             var target = trainer.Pokemon[index];
@@ -93,36 +141,103 @@ public static class TrainerEditor
         }
     }
 
+    private static void Apply(TrainerData6 trainer, TrainerEntry entry)
+    {
+        trainer.Class = entry.TrainerClass;
+        trainer.BattleType = (byte)entry.Mode;
+        trainer.NumPokemon = (byte)entry.Team.Length;
+        trainer.Items = entry.Items.Select(item => (ushort)item).ToArray();
+        trainer.AI = (byte)entry.AI;
+        trainer.Healer = entry.Flag;
+        trainer.Money = (byte)entry.Money;
+        trainer.Item = entry.HasItems ?? trainer.Item;
+        trainer.Moves = entry.HasMoves ?? trainer.Moves;
+        Array.Resize(ref trainer.Team, entry.Team.Length);
+
+        for (var index = 0; index < entry.Team.Length; index++)
+        {
+            var source = entry.Team[index];
+            var target = trainer.Team[index] ??= new TrainerData6.Pokemon(new byte[100], trainer.Item, trainer.Moves);
+            target.Species = (ushort)source.Species;
+            target.Form = (ushort)source.Form;
+            target.Level = (ushort)source.Level;
+            target.Item = (ushort)source.Item;
+            target.Moves = source.Moves.Select(move => (ushort)move).ToArray();
+            target.Ability = source.Ability;
+            target.Gender = source.Gender;
+            target.IVs = (byte)source.IVs[0];
+        }
+    }
+
     /// <summary>Returns the validated entry so callers get a non-null value to apply.</summary>
-    internal static TrainerEntry Validate(TrainerEntry? entry, int classCount, int speciesCount, int itemCount, int moveCount)
+    internal static TrainerEntry Validate(TrainerEntry? entry, int classCount, int speciesCount, int itemCount, int moveCount,
+        bool generation6 = false, int maxMode = 2)
     {
         if (entry is null
             || entry.TrainerClass < 0 || entry.TrainerClass >= classCount
-            || entry.Mode is < 0 or > 2
+            || entry.Mode < 0 || entry.Mode > maxMode
             || entry.Items is not { Length: 4 }
             || entry.Items.Any(item => item < 0 || item >= itemCount)
             || entry.AI is < 0 or > byte.MaxValue
             || entry.Money is < 0 or > byte.MaxValue
             || entry.Team is null || entry.Team.Length is < 1 or > 6
-            || entry.Team.Any(pokemon => IsOutOfRange(pokemon, speciesCount, itemCount, moveCount)))
+            || entry.Team.Any(pokemon => IsOutOfRange(pokemon, speciesCount, itemCount, moveCount, generation6)))
             throw new WorkspaceException("Los datos del entrenador no son válidos.");
         return entry;
     }
 
-    private static bool IsOutOfRange(TrainerPokemonEntry pokemon, int speciesCount, int itemCount, int moveCount) =>
+    private static bool IsOutOfRange(TrainerPokemonEntry pokemon, int speciesCount, int itemCount, int moveCount, bool generation6) =>
         pokemon.Species < 0 || pokemon.Species >= speciesCount
-        || pokemon.Form is < 0 or > byte.MaxValue
+        || pokemon.Form < 0 || (generation6 ? pokemon.Form > ushort.MaxValue : pokemon.Form > byte.MaxValue)
         || pokemon.Level is < 1 or > 100
         || pokemon.Item < 0 || pokemon.Item >= itemCount
         || pokemon.Moves is not { Length: 4 }
         || pokemon.Moves.Any(move => move < 0 || move >= moveCount)
-        || pokemon.Ability is < 0 or > 3
-        || pokemon.Gender is < 0 or > 3
-        || pokemon.Nature is < 0 or > 25
+        || pokemon.Ability < 0 || pokemon.Ability > (generation6 ? 15 : 3)
+        || pokemon.Gender < 0 || pokemon.Gender > (generation6 ? 7 : 3)
+        || (!generation6 && pokemon.Nature is < 0 or > 25)
         || pokemon.IVs is not { Length: 6 }
-        || pokemon.IVs.Any(iv => iv is < 0 or > 31)
+        || pokemon.IVs.Any(iv => iv < 0 || iv > (generation6 ? byte.MaxValue : 31))
         || pokemon.EVs is not { Length: 6 }
         || pokemon.EVs.Any(ev => ev is < 0 or > byte.MaxValue);
+
+    private static void EnsureSupported(GameConfig config)
+    {
+        if (config.Generation is not (6 or 7))
+            throw new WorkspaceException("Este editor requiere un juego de Gen. VI o Gen. VII.");
+    }
+
+    private static string TextValue(GameConfig config, TextName table, int index)
+    {
+        var values = config.GetText(table);
+        return index >= 0 && index < values.Length ? values[index] : string.Empty;
+    }
+
+    private static void WriteTrainerText(GameConfig config, TextName table, int index, string? value)
+    {
+        if (value is null)
+            return;
+        var reference = config.GameText.Single(text => text.Name == table);
+        var text = new TextFile(config, config.GARCGameText.Files[reference.Index], remapChars: true);
+        if (index < 0 || index >= text.Lines.Length)
+            throw new WorkspaceException("El índice de texto del entrenador no existe.");
+        var lines = text.Lines;
+        lines[index] = value;
+        text.Lines = lines;
+        config.GARCGameText.SetFile(reference.Index, text.Data);
+    }
+
+    private static TrainerData6 ReadGen6(byte[] trdata, byte[] trpoke, bool oras)
+    {
+        try
+        {
+            return new TrainerData6(trdata, trpoke, oras);
+        }
+        catch (Exception ex) when (ex is ArgumentException or EndOfStreamException or IndexOutOfRangeException or DivideByZeroException)
+        {
+            throw new WorkspaceException("El registro de entrenador de Gen. VI está incompleto o corrupto.");
+        }
+    }
 
     private static int RequireTrainer(int trdataCount, int trpokeCount, int trainerIndex) =>
         trainerIndex >= 0 && trainerIndex < trdataCount && trainerIndex < trpokeCount

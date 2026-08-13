@@ -4,7 +4,7 @@ Este documento usa `pk3DS.WinForms` como especificación de comportamiento. Un m
 
 ## Estado actual de la web
 
-La web cubre el randomizador de RomFS completo y trece editores individuales. No equivale todavía a pk3DS para Windows: falta todo ExeFS/CRO y las herramientas de proyecto.
+La web cubre el randomizador de RomFS completo, la exportación ExeFS de TMs/HMs y más de quince editores individuales. No equivale todavía a pk3DS para Windows: faltan otros módulos ExeFS/CRO y las herramientas de proyecto.
 
 > Mantené este documento sincronizado con el código **en el mismo commit** que agrega o completa un módulo. Ya se desincronizó una vez: cuatro editores figuraban como pendientes estando implementados.
 
@@ -16,7 +16,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 1.1. Servidor local ASP.NET (`pk3DS.Mac.Web`) — Hecho
   - 1.2. Detección automática de juego y Title ID desde `exheader.bin` — Hecho
   - 1.3. Interfaz multi-página (randomizador + editores dedicados por módulo) — Hecho
-  - 1.4. Exportación a ZIP con árbol LayeredFS (`luma/titles/<title-id>/romfs`) — Hecho
+  - 1.4. Exportación a ZIP con árbol LayeredFS (`romfs` y `exefs`) — Hecho
   - 1.5. Separación en librería agnóstica de plataforma (`pk3DS.Editors`) + host — Hecho
   - 1.6. Andamiaje común de exportación (`EditorSession`) reusado por todos los editores — Hecho
 
@@ -31,29 +31,29 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 3.1. Game Text / Story Text (tabla, línea, búsqueda, exportación LayeredFS) — Hecho
   - 3.2. Mega Evolutions — Hecho
   - 3.3. Wild Encounters Gen VI/VII (`encdata`) — Hecho
-  - 3.4. Trainers Gen VII: datos y equipo (`trdata`, `trpoke`) — Parcial (falta Gen VI y edición de nombres/clases)
+  - 3.4. Trainers Gen VI/VII: datos, equipo y nombres (`trdata`, `trpoke`, `gametext`) — Hecho
   - 3.5. Static Encounters Gen VII (regalos, fijos, intercambios) — Parcial (faltan campos avanzados del formato)
   - 3.6. Personal Stats — editor individual por especie — Hecho
   - 3.7. Evolutions — editor individual por especie — Hecho
   - 3.8. Move Stats — editor individual por movimiento — Hecho
   - 3.9. Item Stats — editor individual por objeto — Hecho
-  - 3.10. Battle Maison / Royal / Tree — Pendiente
-  - 3.11. Pickup Gen VII — Pendiente
+  - 3.10. Battle Maison / Royal / Tree — Hecho
+  - 3.11. Pickup Gen VII — Hecho
   - 3.12. Title Screen Gen VI — Pendiente
   - 3.13. OWSE / scripts (mapas, scripts, texto) — Pendiente
 
-- **4. Editores ExeFS / CRO** — Pendiente
-  - 4.1. TMs / HMs — Pendiente
-  - 4.2. Move Tutors — Pendiente
-  - 4.3. Poké Mart — Pendiente
-  - 4.4. Pickup Gen VI — Pendiente
-  - 4.5. O-Powers Gen VI — Pendiente
-  - 4.6. Shiny Rate Gen VI — Pendiente
-  - 4.7. Starter Pokémon Gen VI (requiere CRO) — Pendiente
-  - 4.8. Type Chart (Gen VI requiere CRO) — Pendiente
-  - 4.9. Gift Pokémon Gen VI (requiere CRO) — Pendiente
+- **4. Editores ExeFS / CRO** — Parcial
+  - 4.1. TMs / HMs — Hecho: Gen VI/VII, lectura por firma y exportación de `code.bin` a ExeFS LayeredFS
+  - 4.2. Move Tutors — Hecho: Gen VI en `code.bin` y Gen VII en `Shop.cro`, con listas variables/precios y exportación LayeredFS
+  - 4.3. Poké Mart — Hecho: Gen VI en `code.bin` y Gen VII en `Shop.cro`, con inventarios normales/BP y exportación LayeredFS
+  - 4.4. Pickup Gen VI — Hecho: listas común/rara y exportación de `code.bin` a ExeFS LayeredFS
+  - 4.5. O-Powers Gen VI — Hecho: 65 registros editables en `code.bin`, con exportación ExeFS LayeredFS
+  - 4.6. Shiny Rate Gen VI/VII — Hecho: rerolls con el catálogo de instrucciones original y opción de todo shiny, exportación de `code.bin` a ExeFS LayeredFS
+  - 4.7. Starter Pokémon Gen VI (requiere CRO) — Hecho: grupos XY y ORAS, edición de especies y exportación conjunta de `DllPoke3Select.cro` / `DllField.cro`
+  - 4.8. Type Chart — Hecho: Gen VI desde `DllBattle.cro` y Gen VII desde `code.bin`, con matriz 18×18 y exportación LayeredFS
+  - 4.9. Gift Pokémon Gen VI (requiere CRO) — Hecho: entradas XY/ORAS, campos comunes e IVs, edición web y exportación de `DllField.cro`
   - 4.10. Static Encounters Gen VI (`DllField.cro`) — Parcial (edición individual lista; falta parche RO de Luma para usarlo)
-  - 4.11. CRO / CRR patching — Pendiente
+  - 4.11. CRO / CRR patching — Parcial: los exports de CRO recalculan hashes internos y generan `.crr/static.crr`; falta el parche RO de verificación RSA en consola
 
 - **5. Herramientas de proyecto** — Pendiente
   - 5.1. Extracción de CXI/3DS — Pendiente
@@ -68,9 +68,10 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 6.2. Suite de tests unitarios (`pk3DS.Editors.Tests`) — Hecho: empaquetado de bytes, offsets, guardas de validación y resolución de rutas
   - 6.3. CI en GitHub Actions (macOS y Linux) — Hecho
   - 6.4. Fixtures de GARC para probar lectura/escritura sin un dump completo — Hecho: `SyntheticXyWorkspace` arma un workspace X/Y con GARCs reales, y los editores se prueban de punta a punta hasta inspeccionar el ZIP LayeredFS
-  - 6.5. Fixture de Gen. VII (`SyntheticSunMoonWorkspace`) — Hecho: cubre entrenadores, encuentros estáticos, encuentros salvajes, movimientos en mini-archivo y el randomizador sobre Sol/Luna
-  - 6.6. Fixture de encuentros salvajes Gen. VII (`Area7`) — Hecho: tablas día/noche en mini-archivo `EA`, con zonedata y worlddata sintéticos
-  - 6.7. Los tests comparan la salida contra el dump de origen, no sólo la presencia del archivo en el ZIP — Hecho: es lo que destapó que los ocho editores individuales descartaban su edición
+  - 6.5. Fixture de Gen. VII (`SyntheticSunMoonWorkspace`) — Hecho: cubre entrenadores, encuentros estáticos, encuentros salvajes, TMs en ExeFS, tutores en `Shop.cro`, movimientos en mini-archivo y el randomizador sobre Sol/Luna
+  - 6.6. Fixture ExeFS/CRO de Gen. VI (`SyntheticXyWorkspace`) — Hecho: firmas sintéticas para TMs/HMs, Pickup, Shiny Rate, O-Powers, tutores y tiendas, más `DllBattle.cro` para Type Chart y `DllField.cro` para Starter/Gift, con comparación de las salidas
+  - 6.7. Fixture de encuentros salvajes Gen. VII (`Area7`) — Hecho: tablas día/noche en mini-archivo `EA`, con zonedata y worlddata sintéticos
+  - 6.8. Los tests comparan la salida contra el dump de origen, no sólo la presencia del archivo en el ZIP — Hecho: también cubre el destino ExeFS de `code.bin`
 
 ## Módulos RomFS
 
@@ -84,12 +85,12 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 | Wild Encounters | Gen 6/7 | `encdata`, `zonedata`, `worlddata` | Portado: editor individual Gen. VI/VII y exportación LayeredFS de `encdata` |
 | Mega Evolutions | Gen 6/7 | `megaevo` | Portado: editor individual y exportación LayeredFS |
 | Egg Moves | Gen 6/7 | `eggmove` | Portado: randomizador y editor individual |
-| Trainers | Gen 6/7 | `trclass`, `trdata`, `trpoke` | Parcial: editor individual Gen. VII de datos y equipo, con exportación LayeredFS de `trdata` y `trpoke`; falta Gen. VI y edición de nombres/clases |
-| Battle Maison / Royal / Tree | Gen 6/7 | `maisontr*`, `maisonpk*` | Pendiente |
+| Trainers | Gen 6/7 | `trclass`, `trdata`, `trpoke`, `gametext` | Portado: editor individual Gen. VI/VII de datos, equipo, nombre de entrenador y clase, con exportación LayeredFS conjunta |
+| Battle Maison / Royal / Tree | Gen 6/7 | `maisontr*`, `maisonpk*` | Portado: variantes normal/super o Tree/Royal, edición de entrenadores y Pokémon, exportación LayeredFS |
 | Item Stats | Gen 6/7 | `item` | Portado: editor individual y exportación LayeredFS |
 | Move Stats | Gen 6/7 | `move` | Portado: acciones globales y editor individual |
 | Static Encounters | Gen 7 | `encounterstatic` | Parcial: regalos, encuentros fijos e intercambios; edición de especie, forma, nivel, objeto y campos avanzados disponibles en el formato |
-| Pickup | Gen 7 | `pickup` | Pendiente |
+| Pickup | Gen 7 | `pickup` | Portado: tabla de objetos y probabilidades por banda de nivel, con exportación LayeredFS |
 | Title Screen | Gen 6 | `titlescreen` | Pendiente |
 | OWSE / scripts | Gen 6/7 | mapas, scripts y texto | Pendiente; módulo de desarrollo |
 
@@ -99,17 +100,17 @@ Estos módulos necesitan un workspace extraído completo (RomFS + ExeFS y, cuand
 
 | Módulo de Windows | Juegos | Estado Mac |
 | --- | --- | --- |
-| TMs / HMs | Gen 6/7 | Pendiente |
-| Move Tutors | Gen 6/7 | Pendiente |
-| Poké Mart | Gen 6/7 | Pendiente |
-| Pickup | Gen 6 | Pendiente |
-| O-Powers | Gen 6 | Pendiente |
-| Shiny Rate | Gen 6 | Pendiente |
-| Starter Pokémon | Gen 6 | Pendiente; requiere CRO |
-| Type Chart | Gen 6/7 | Pendiente; Gen 6 requiere CRO |
-| Gift Pokémon | Gen 6 | Pendiente; requiere CRO |
+| TMs / HMs | Gen 6/7 | Portado: editor web, validación de IDs, detección por firma y exportación ExeFS de `code.bin` |
+| Move Tutors | Gen 6/7 | Portado: Gen. VI en `code.bin`; Gen. VII en `Shop.cro`, con validación y exportación LayeredFS |
+| Poké Mart | Gen 6/7 | Portado: Gen. VI en `code.bin`; Gen. VII en `Shop.cro`, con inventarios normales/BP y exportación LayeredFS |
+| Pickup | Gen 6 | Portado: listas de 18 objetos comunes y 11 raros, detección por firma y exportación ExeFS de `code.bin` |
+| O-Powers | Gen 6 | Portado: editor web de 65 registros, validación de rangos y exportación ExeFS de `code.bin` |
+| Shiny Rate | Gen 6/7 | Portado: rerolls con instrucciones ARM soportadas, opción todo shiny, detección por firma y exportación ExeFS de `code.bin` |
+| Starter Pokémon | Gen 6 | Portado: grupos de X/Y y OR/AS, editor web y exportación conjunta de ambos CRO |
+| Type Chart | Gen 6/7 | Portado: matriz 18×18, Gen. VI en `DllBattle.cro`, Gen. VII en `code.bin`, editor web y exportación LayeredFS |
+| Gift Pokémon | Gen 6 | Portado: campos de regalo, IVs, editor web y exportación de `DllField.cro` |
 | Static Encounters | Gen 6 | Parcial: edición individual en `DllField.cro`; requiere parche RO de Luma para usar CRO modificado |
-| CRO / CRR patching | Gen 6/7 según módulo | Pendiente |
+| CRO / CRR patching | Gen 6/7 según módulo | Parcial: rehash headless y CRR en exports; falta parche RO/RSA de consola |
 
 ## Herramientas de proyecto
 
