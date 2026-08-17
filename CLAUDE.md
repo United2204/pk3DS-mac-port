@@ -100,8 +100,9 @@ guarda primero un backup en `.pk3ds-backups` y conserva LZSS cuando corresponde.
 
 `OverworldEditor` es el primer bloque portable de OWSE: inspecciona en modo lectura las zonas `ZO` de
 Gen. VI y los mini-archivos `ZS` (scripts de zona) y `ZI` (información de zona) de `encdata` en Gen. VII,
-además de su cabecera, instrucciones descomprimidas y texto interpretado. No ofrece exportación ni
-mutación hasta confirmar con dumps reales los formatos de mapas, entidades y scripts.
+además de su cabecera, metadatos de `zonedata`, conteos de entidades Gen. VI, instrucciones descomprimidas
+y texto interpretado. No ofrece exportación ni mutación hasta confirmar con dumps reales los formatos de
+mapas, entidades y scripts.
 
 Los GARCs de Gen. VII que pueden contener entradas LZSS (como `pickup`) deben abrirse con
 `GameConfig.GetlzGARCData`, asignar la entrada modificada y llamar a `Save()`. `GetGARCData` solo

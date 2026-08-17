@@ -45,6 +45,11 @@ public sealed class OverworldEditorTests : IDisposable
         Assert.Equal(8, response.DecompressedBytes);
         Assert.Equal([0x30u, 0x30u], response.Instructions);
         Assert.NotEmpty(response.RawHex);
+        Assert.NotNull(response.Zone);
+        Assert.Equal(0, response.Zone!.ZoneIndex);
+        Assert.Equal(0x54, response.Zone.ZoneDataBytes);
+        Assert.Equal(11, response.Zone.ZoneFileCount);
+        Assert.Equal(0, response.Zone.ParentMap);
     }
 
     [Fact]
@@ -80,5 +85,15 @@ public sealed class OverworldEditorTests : IDisposable
         Assert.Contains("Zona1", response.LocationName);
         Assert.Equal(0x0A0AF1E0u, response.Magic);
         Assert.Equal([0x30u, 0x30u], response.Instructions);
+        Assert.NotNull(response.Zone);
+        Assert.Equal(1, response.Zone!.ZoneIndex);
+        Assert.Equal(0x38, response.Zone.ZoneDataBytes);
+        Assert.Equal(4, response.Zone.ZoneFileCount);
+        Assert.Equal(1, response.Zone.ParentMap);
+        Assert.Equal(0, response.Zone.FurnitureCount);
+        Assert.Equal(0, response.Zone.NpcCount);
+        Assert.Equal(0, response.Zone.WarpCount);
+        Assert.Equal(0, response.Zone.TriggerCount);
+        Assert.Equal(0, response.Zone.UnknownEntityCount);
     }
 }

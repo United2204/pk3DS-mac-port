@@ -66,11 +66,18 @@ public sealed record OverworldCatalogRequest(string WorkspacePath, int? Language
 public sealed record OverworldScriptGroupSummary(string Id, string Name, int WorldIndex, string LocationName, int ScriptCount, long RawBytes);
 public sealed record OverworldCatalogResponse(string GameVersion, OverworldScriptGroupSummary[] Groups);
 public sealed record OverworldScriptEntryRequest(string WorkspacePath, string Group, int WorldIndex, int ScriptIndex, int? Language = null);
+public sealed record OverworldZoneSummary(
+    int ZoneIndex, int ZoneDataBytes, int ZoneFileCount, int? ParentMap = null,
+    int? MapArea = null, int? MapMatrix = null, int? TextFile = null, int? ScriptFile = null,
+    int? Weather = null, int? AreaIndex = null, int? FurnitureCount = null,
+    int? NpcCount = null, int? WarpCount = null, int? TriggerCount = null,
+    int? UnknownEntityCount = null, string? Diagnostics = null);
 public sealed record OverworldScriptEntryResponse(
     string Group, int WorldIndex, int ScriptIndex, string LocationName, int RawBytes,
     uint Magic, bool Debug, int ScriptInstructionStart, int ScriptMovementStart,
     int FinalOffset, int AllocatedMemory, int CompressedBytes, int DecompressedBytes,
-    uint[] Instructions, string[] ParsedLines, string? ParseError, string[] RawHex);
+    uint[] Instructions, string[] ParsedLines, string? ParseError, string[] RawHex,
+    OverworldZoneSummary? Zone = null);
 
 // Wild encounters, Gen VI -----------------------------------------------------
 public sealed record WildGen6CatalogRequest(string WorkspacePath, int? Language = null);

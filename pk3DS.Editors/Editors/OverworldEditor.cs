@@ -73,7 +73,9 @@ public static class OverworldEditor
         var zoneData = config.GetlzGARCData("zonedata");
         var locations = config.GetText(TextName.metlist_000000);
         var locationName = GetLocationName(zoneData.Files, locations, request.WorldIndex);
-        return Describe(request.Group, request.WorldIndex, request.ScriptIndex, locationName, scripts[request.ScriptIndex]);
+        var zone = GetGen7ZoneSummary(zoneData.Files, request.WorldIndex);
+        return Describe(request.Group, request.WorldIndex, request.ScriptIndex, locationName,
+            scripts[request.ScriptIndex], zone);
     }
 
     private static OverworldCatalogResponse GetGen6Catalog(GameConfig config)
@@ -115,7 +117,8 @@ public static class OverworldEditor
         var raw = GetGen6Script(zone, request.Group);
         var locations = config.GetText(TextName.metlist_000000);
         var locationName = GetGen6LocationName(files[0], locations, request.WorldIndex);
-        return Describe(request.Group, request.WorldIndex, request.ScriptIndex, locationName, raw);
+        var zoneSummary = GetGen6ZoneSummary(zone, request.WorldIndex);
+        return Describe(request.Group, request.WorldIndex, request.ScriptIndex, locationName, raw, zoneSummary);
     }
 
     private static void AddGen6Group(
@@ -234,24 +237,91 @@ public static class OverworldEditor
         _ => throw new WorkspaceException("El grupo OWSE indicado no es compatible. Usá zone-script o zone-info."),
     };
 
+    private static OverworldZoneSummary GetGen6ZoneSummary(byte[][] zone, int zoneIndex)
+    {
+        var zoneData = zone.Length > 0 ? zone[0] ?? [] : [];
+        var diagnostics = (string?)null;
+        int? parentMap = null;
+        int? mapArea = null;
+        int? mapMatrix = null;
+        int? textFile = null;
+        int? scriptFile = null;
+        int? weather = null;
+
+        if (zoneData.Length >= Gen6ZoneDataSize)
+        {
+            mapArea = BitConverter.ToUInt16(zoneData, 0x02);
+            mapMatrix = BitConverter.ToUInt16(zoneData, 0x04);
+            textFile = BitConverter.ToUInt16(zoneData, 0x06);
+            scriptFile = BitConverter.ToUInt16(zoneData, 0x18);
+            parentMap = BitConverter.ToUInt16(zoneData, 0x1C) & 0x3FF;
+            weather = BitConverter.ToUInt16(zoneData, 0x1E) & 0x1F;
+        }
+        else
+        {
+            diagnostics = "El bloque de datos de zona Gen. VI es menor que 0x38 bytes.";
+        }
+
+        int? furniture = null;
+        int? npcs = null;
+        int? warps = null;
+        int? triggers = null;
+        int? unknown = null;
+        var entities = zone.Length > 1 ? zone[1] ?? [] : [];
+        if (entities.Length >= 12)
+        {
+            furniture = entities[4];
+            npcs = entities[5];
+            warps = entities[6];
+            triggers = entities[7];
+            var declaredUnknown = BitConverter.ToInt32(entities, 8);
+            if (declaredUnknown >= 0)
+                unknown = declaredUnknown;
+            else
+                diagnostics = AppendError(diagnostics, "La cabecera de entidades declara una cantidad negativa.");
+        }
+        else
+        {
+            diagnostics = AppendError(diagnostics, "El bloque de entidades Gen. VI no tiene una cabecera completa.");
+        }
+
+        return new OverworldZoneSummary(
+            zoneIndex, zoneData.Length, zone.Length, parentMap, mapArea, mapMatrix, textFile, scriptFile,
+            weather, FurnitureCount: furniture, NpcCount: npcs, WarpCount: warps,
+            TriggerCount: triggers, UnknownEntityCount: unknown, Diagnostics: diagnostics);
+    }
+
+    private static OverworldZoneSummary GetGen7ZoneSummary(byte[][] zoneFiles, int worldIndex)
+    {
+        var zoneData = zoneFiles.Length > 0 ? zoneFiles[0] ?? [] : [];
+        var zoneIndex = FindGen7ZoneIndex(zoneFiles, worldIndex);
+        if (zoneIndex < 0)
+        {
+            return new OverworldZoneSummary(
+                -1, 0, FilesPerWorld, Diagnostics: "No se encontró un registro de zona Gen. VII para este mundo.");
+        }
+
+        var offset = (long)zoneIndex * ZoneData7.SIZE;
+        if (offset < 0 || offset + 0x20 > zoneData.Length)
+        {
+            var available = offset >= 0 && offset < zoneData.Length
+                ? zoneData.Length - (int)offset
+                : 0;
+            return new OverworldZoneSummary(
+                zoneIndex, available, FilesPerWorld,
+                Diagnostics: "La tabla zonedata Gen. VII no alcanza el registro de zona.");
+        }
+
+        return new OverworldZoneSummary(
+            zoneIndex, ZoneData7.SIZE, FilesPerWorld,
+            ParentMap: BitConverter.ToInt32(zoneData, (int)offset + 0x1C));
+    }
+
     private static string GetLocationName(byte[][] zoneFiles, string[] locations, int worldIndex)
     {
         var zoneData = zoneFiles.Length > 0 ? zoneFiles[0] : [];
-        var worldIndexes = zoneFiles.Length > 1 ? zoneFiles[1] : [];
         var zoneCount = zoneData.Length / ZoneData7.SIZE;
-        var zoneIndex = -1;
-
-        for (var index = 0; index + 1 < worldIndexes.Length; index += 2)
-        {
-            if (BitConverter.ToUInt16(worldIndexes, index) == worldIndex)
-            {
-                zoneIndex = index / 2;
-                break;
-            }
-        }
-
-        if (zoneIndex < 0 && worldIndex < zoneCount)
-            zoneIndex = worldIndex;
+        var zoneIndex = FindGen7ZoneIndex(zoneFiles, worldIndex);
         if (zoneIndex < 0 || zoneIndex >= zoneCount)
             return $"Área {worldIndex:000}";
 
@@ -260,6 +330,20 @@ public static class OverworldEditor
         return string.IsNullOrWhiteSpace(location)
             ? $"Área {zoneIndex:000}"
             : $"{zoneIndex:000} · {location}";
+    }
+
+    private static int FindGen7ZoneIndex(byte[][] zoneFiles, int worldIndex)
+    {
+        var zoneData = zoneFiles.Length > 0 ? zoneFiles[0] : [];
+        var worldIndexes = zoneFiles.Length > 1 ? zoneFiles[1] : [];
+        var zoneCount = zoneData.Length / ZoneData7.SIZE;
+        for (var index = 0; index + 1 < worldIndexes.Length; index += 2)
+        {
+            if (BitConverter.ToUInt16(worldIndexes, index) == worldIndex)
+                return index / 2;
+        }
+
+        return worldIndex >= 0 && worldIndex < zoneCount ? worldIndex : -1;
     }
 
     private static byte[][] ReadMiniOrEmpty(byte[] data, string identifier)
@@ -307,14 +391,15 @@ public static class OverworldEditor
     }
 
     private static OverworldScriptEntryResponse Describe(
-        string group, int worldIndex, int scriptIndex, string locationName, byte[] raw)
+        string group, int worldIndex, int scriptIndex, string locationName, byte[] raw,
+        OverworldZoneSummary? zone = null)
     {
         var rawHex = HexLines(raw);
         if (raw.Length < ScriptHeaderSize)
             return new OverworldScriptEntryResponse(
                 group, worldIndex, scriptIndex, locationName, raw.Length, 0, false,
                 0, 0, 0, 0, 0, 0, [], [],
-                "El script no contiene el encabezado mínimo de 0x1C bytes.", rawHex);
+                "El script no contiene el encabezado mínimo de 0x1C bytes.", rawHex, zone);
 
         Script script;
         try
@@ -328,7 +413,7 @@ public static class OverworldEditor
                 BitConverter.ToUInt32(raw, 4), BitConverter.ToUInt32(raw, 4) == 0x0A0AF1EF,
                 BitConverter.ToInt32(raw, 0x0C), BitConverter.ToInt32(raw, 0x10),
                 BitConverter.ToInt32(raw, 0x14), BitConverter.ToInt32(raw, 0x18), 0, 0, [], [],
-                $"No se pudo leer el encabezado del script: {exception.Message}", rawHex);
+                $"No se pudo leer el encabezado del script: {exception.Message}", rawHex, zone);
         }
 
         var instructionStart = script.ScriptInstructionStart;
@@ -372,7 +457,7 @@ public static class OverworldEditor
         return new OverworldScriptEntryResponse(
             group, worldIndex, scriptIndex, locationName, raw.Length, script.Magic, script.Debug,
             instructionStart, movementStart, finalOffset, script.AllocatedMemory,
-            compressedBytes, decompressedBytes, instructions, parsedLines, error, rawHex);
+            compressedBytes, decompressedBytes, instructions, parsedLines, error, rawHex, zone);
     }
 
     private static string? ValidateHeader(int instructionStart, int movementStart, int finalOffset, int decompressedBytes)
