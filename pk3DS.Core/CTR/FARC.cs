@@ -300,6 +300,8 @@ public sealed class FARC : IDisposable
     {
         if (string.IsNullOrWhiteSpace(name) || name.StartsWith('/') || name.Contains('\0'))
             throw new InvalidDataException("FARC contains an invalid file name.");
+        if (name.Contains('\\'))
+            throw new InvalidDataException("FARC paths must use forward slashes.");
 
         var parts = name.Split('/');
         if (parts.Any(part => part.Length == 0 || part is "." or ".."))

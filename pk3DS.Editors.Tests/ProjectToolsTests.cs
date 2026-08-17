@@ -308,6 +308,21 @@ public sealed class ProjectToolsTests : IDisposable
     }
 
     [Fact]
+    public void RejectsUnsafeFarcNamesWithoutCreatingAnOutputOrEscapingTheDestination()
+    {
+        var packed = Path.Combine(_workspace.OutputDirectory, "unsafe.farc");
+        var output = Path.Combine(_workspace.OutputDirectory, "unsafe-unpacked");
+        var escapeName = $"../farc-escape-{Guid.NewGuid():N}.bin";
+        var escaped = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(output)!, escapeName));
+        CreateFarc(packed, (escapeName, [41, 42, 43]));
+
+        Assert.Throws<WorkspaceException>(() => ProjectTools.UnpackFarc(
+            new UnpackFarcRequest(packed, output)));
+        Assert.False(Directory.Exists(output));
+        Assert.False(File.Exists(escaped));
+    }
+
+    [Fact]
     public void DecodesPortableBclimAndEncodesRgbaPng()
     {
         var pixelData = Enumerable.Repeat(new byte[] { 255, 0, 0, 255 }, 64).SelectMany(value => value).ToArray();

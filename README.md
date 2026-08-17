@@ -62,7 +62,7 @@ Además hay editores individuales para texto de juego e historia, movimientos po
 
 ## Estado del port
 
-Sigue pendiente el parche RO/RSA del sistema necesario para que algunos CRO modificados funcionen directamente en consola. La extracción de CXI/3DS, el empaquetado standalone de RomFS/ExeFS, la reconstrucción `.3ds`, la conversión `.cia` mediante `makerom`, la generación del contenido de parches de redirección, las herramientas GARC/DARC/SARC/FARC para la variante SIR0 con nombres, además del inventario, exportación raw/PNG y reemplazo a DARC de salida de Title Screen, ya están disponibles desde Herramientas de proyecto. El inspector OWSE Gen. VI/VII es de solo lectura hasta validar los formatos de escritura con dumps reales. Los exports ya recalculan el CRR cuando el dump lo incluye. El inventario de paridad y su estado real está en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
+Sigue pendiente el parche RO/RSA del sistema necesario para que algunos CRO modificados funcionen directamente en consola. La extracción de CXI/3DS, el empaquetado standalone de RomFS/ExeFS, la reconstrucción `.3ds`, la conversión `.cia` mediante `makerom`, la generación del contenido de parches de redirección, las herramientas GARC/DARC/SARC/FARC para la variante SIR0 con nombres y rutas validadas, además del inventario, exportación raw/PNG y reemplazo a DARC de salida de Title Screen, ya están disponibles desde Herramientas de proyecto. El inspector OWSE Gen. VI/VII es de solo lectura hasta validar los formatos de escritura con dumps reales. Los exports ya recalculan el CRR cuando el dump lo incluye. El inventario de paridad y su estado real está en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
 
 ## Building
 

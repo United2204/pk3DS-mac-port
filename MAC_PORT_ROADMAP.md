@@ -61,7 +61,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 5.3. Reconstrucción de ROM — Parcial: reconstrucción headless de `.3ds` desde un workspace completo, con modo recortado o padding de tarjeta; conversión a `.cia` implementada mediante `makerom` externo, pendiente validar con un dump real
   - 5.4. Creación de parches — Parcial: parche de redirección de GARCs y `.code.bin` portado; falta ensamblaje/firma CIA
   - 5.5. Edición de imágenes — Parcial: BCLIM compatibles, incluidos ETC1/ETC1A4, se decodifican, se previsualizan y exportan a PNG sin System.Drawing; PNG/BCLIM se pueden convertir y reemplazar en un DARC o copia GARC de salida, o aplicar al GARC del workspace con backup y LZSS; faltan otros formatos de edición
-  - 5.6. Herramientas GARC/DARC/SARC/FARC — Parcial: desempaquetado y empaquetado GARC, DARC de una capa y SARC portados; FARC tiene desempaquetado y empaquetado para la variante SIR0 con nombres UTF-16, mientras que las variantes indexadas por hash siguen en solo lectura
+  - 5.6. Herramientas GARC/DARC/SARC/FARC — Parcial: desempaquetado y empaquetado GARC, DARC de una capa y SARC portados; FARC tiene desempaquetado y empaquetado para la variante SIR0 con nombres UTF-16 y validación de rutas, mientras que las variantes indexadas por hash siguen en solo lectura
 
 - **6. Verificación y QA** — Parcial
   - 6.1. Pruebas de regresión: comparar archivos generados en macOS contra Windows con el mismo dump y semilla — Pendiente
