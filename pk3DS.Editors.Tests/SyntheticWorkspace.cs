@@ -227,6 +227,29 @@ public abstract class SyntheticWorkspace : IDisposable
         return data;
     }
 
+    /// <summary>A Gen. VI entity block with one record of each known entity class.</summary>
+    protected static byte[] BuildGen6EntityFixture()
+    {
+        var script = BuildScriptFixture();
+        const int furnitureCount = 1;
+        const int npcCount = 1;
+        const int warpCount = 1;
+        const int triggerCount = 1;
+        const int unknownCount = 1;
+        const int entityBytes =
+            (furnitureCount * 0x14) + (npcCount * 0x30) + (warpCount * 0x18)
+            + (triggerCount * 0x18) + (unknownCount * 0x18);
+        var data = new byte[12 + entityBytes + script.Length];
+        BitConverter.GetBytes(8 + entityBytes).CopyTo(data, 0x00); // entity header length
+        data[4] = furnitureCount;
+        data[5] = npcCount;
+        data[6] = warpCount;
+        data[7] = triggerCount;
+        BitConverter.GetBytes(unknownCount).CopyTo(data, 0x08);
+        script.CopyTo(data, 12 + entityBytes);
+        return data;
+    }
+
     protected static byte[] MaisonTrainer(ushort trainerClass, params ushort[] choices)
     {
         var data = new byte[4 + (choices.Length * sizeof(ushort))];
@@ -408,32 +431,10 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
             BitConverter.GetBytes((ushort)3).CopyTo(zoneData, 0x1E); // weather
             var encounters = new byte[0x10];
             files[zone + 1] = Mini.PackMini(
-                [zoneData, BuildGen6EntityBlock(), BuildScriptFixture(), encounters], "ZO");
+                [zoneData, BuildGen6EntityFixture(), BuildScriptFixture(), encounters], "ZO");
         }
 
         return files;
-    }
-
-    private static byte[] BuildGen6EntityBlock()
-    {
-        var script = BuildScriptFixture();
-        const int furnitureCount = 1;
-        const int npcCount = 1;
-        const int warpCount = 1;
-        const int triggerCount = 1;
-        const int unknownCount = 1;
-        const int entityBytes =
-            (furnitureCount * 0x14) + (npcCount * 0x30) + (warpCount * 0x18)
-            + (triggerCount * 0x18) + (unknownCount * 0x18);
-        var data = new byte[12 + entityBytes + script.Length];
-        BitConverter.GetBytes(8 + entityBytes).CopyTo(data, 0x00); // entity header length
-        data[4] = furnitureCount;
-        data[5] = npcCount;
-        data[6] = warpCount;
-        data[7] = triggerCount;
-        BitConverter.GetBytes(unknownCount).CopyTo(data, 0x08);
-        script.CopyTo(data, 12 + entityBytes);
-        return data;
     }
 
     /// <summary>
@@ -536,6 +537,32 @@ public sealed class SyntheticOrasWorkspace : SyntheticWorkspace
     public SyntheticOrasWorkspace()
         : base(ArchiveFileCount, speciesCount: 1, moveCount: 1, itemCount: 1)
     {
+        // EditorSession initializes the shared Gen. VI tables before opening OWSE.
+        WriteGarc(195, BuildPersonalFiles(PersonalInfoORAS.SIZE));
+        WriteGarc(191, [Learnset((1, 1))]);
+        WriteGarc(192, [new byte[EvolutionSet6.SIZE]]);
+        WriteGarc(189, [Mini.PackMini([new byte[0x22]], "WD")]);
+        WriteGarc(72, BuildTextFiles(142, (90, "Zona", 4)));
+    }
+
+    public void WriteOverworldFixture()
+    {
+        const int zoneDataSize = 0x38;
+        var master = new byte[zoneDataSize];
+        BitConverter.GetBytes((ushort)0).CopyTo(master, 0x1C);
+        var zoneData = new byte[zoneDataSize];
+        zoneData[0] = 2;
+        zoneData[1] = 1;
+        BitConverter.GetBytes((ushort)12).CopyTo(zoneData, 0x02);
+        BitConverter.GetBytes((ushort)22).CopyTo(zoneData, 0x04);
+        BitConverter.GetBytes((ushort)32).CopyTo(zoneData, 0x06);
+        BitConverter.GetBytes((ushort)42).CopyTo(zoneData, 0x18);
+        BitConverter.GetBytes((ushort)3).CopyTo(zoneData, 0x1E);
+        var zone = Mini.PackMini(
+            [master, BuildGen6EntityFixture(), BuildScriptFixture(), new byte[0x10]], "ZO");
+
+        // OR/AS reserves encdata file 1 and starts zones at file 2.
+        WriteGarc(13, [master, [], zone]);
     }
 
     public void WriteTitleScreenFixture()

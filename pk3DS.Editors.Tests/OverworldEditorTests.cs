@@ -101,4 +101,26 @@ public sealed class OverworldEditorTests : IDisposable
         Assert.Equal(1, response.Zone.TriggerCount);
         Assert.Equal(1, response.Zone.UnknownEntityCount);
     }
+
+    [Fact]
+    public void Gen6OrasStartsZonesAtTheSecondEncdataFile()
+    {
+        using var oras = new SyntheticOrasWorkspace();
+        oras.WriteOverworldFixture();
+
+        var catalog = OverworldEditor.GetCatalog(new OverworldCatalogRequest(oras.RomFs));
+
+        Assert.Equal("ORAS", catalog.GameVersion);
+        Assert.Equal(2, catalog.Groups.Length);
+        Assert.All(catalog.Groups, group =>
+        {
+            Assert.Equal(0, group.WorldIndex);
+            Assert.Contains("Zona0", group.LocationName);
+        });
+
+        var entry = OverworldEditor.GetEntry(new OverworldScriptEntryRequest(
+            oras.RomFs, "gen6-map-script", WorldIndex: 0, ScriptIndex: 0));
+        Assert.Equal(0x0A0AF1E0u, entry.Magic);
+        Assert.Equal(0, entry.Zone!.ZoneIndex);
+    }
 }

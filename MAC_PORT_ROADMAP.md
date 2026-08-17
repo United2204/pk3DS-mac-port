@@ -69,7 +69,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 6.3. CI en GitHub Actions (macOS y Linux) — Hecho
   - 6.4. Fixtures de GARC para probar lectura/escritura sin un dump completo — Hecho: `SyntheticXyWorkspace` arma un workspace X/Y con GARCs reales, y los editores se prueban de punta a punta hasta inspeccionar el ZIP LayeredFS
   - 6.5. Fixture de Gen. VII (`SyntheticSunMoonWorkspace`) — Hecho: cubre entrenadores, encuentros estáticos, encuentros salvajes, scripts OWSE `ZS`/`ZI` y metadatos de zona, TMs en ExeFS, tutores en `Shop.cro`, movimientos en mini-archivo y el randomizador sobre Sol/Luna
-  - 6.6. Fixture ExeFS/CRO de Gen. VI (`SyntheticXyWorkspace`) — Hecho: firmas sintéticas para TMs/HMs, Pickup, Shiny Rate, O-Powers, tutores y tiendas, `encdata`/`ZO` con cabecera de entidades para OWSE, más `DllBattle.cro` para Type Chart y `DllField.cro` para Starter/Gift, con comparación de las salidas
+  - 6.6. Fixture ExeFS/CRO de Gen. VI (`SyntheticXyWorkspace`) — Hecho: firmas sintéticas para TMs/HMs, Pickup, Shiny Rate, O-Powers, tutores y tiendas, `encdata`/`ZO` con cabecera de entidades para OWSE, más `DllBattle.cro` y `DllField.cro`; `SyntheticOrasWorkspace` cubre además el offset OR/AS de `encdata` y Title Screen comprimido
   - 6.7. Fixture de encuentros salvajes Gen. VII (`Area7`) — Hecho: tablas día/noche en mini-archivo `EA`, con zonedata y worlddata sintéticos
   - 6.8. Los tests comparan la salida contra el dump de origen, no sólo la presencia del archivo en el ZIP — Hecho: también cubre el destino ExeFS de `code.bin`
 
