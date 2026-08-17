@@ -120,6 +120,8 @@ public class NCCH
 
     public void ExtractNCCHFromFile(string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, ProgressBar PB_Show = null)
     {
+        TB_Progress ??= new RichTextBox();
+        PB_Show ??= new ProgressBar();
         if (!Directory.Exists(outputDirectory))
             Directory.CreateDirectory(outputDirectory);
 
@@ -186,7 +188,7 @@ public class NCCH
         byte[] romfsBytes = new byte[MEDIA_UNIT_SIZE];
 
         using (FileStream ncchstream = new(NCCH_PATH, FileMode.Open, FileAccess.Read),
-               romfsstream = new(romfsbinpath, FileMode.Append, FileAccess.Write))
+               romfsstream = new(romfsbinpath, FileMode.Create, FileAccess.Write))
         {
             ncchstream.Seek(Convert.ToInt32(Header.RomfsOffset * MEDIA_UNIT_SIZE), SeekOrigin.Begin);
             if (PB_Show.InvokeRequired)

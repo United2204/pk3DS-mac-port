@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace pk3DS.Core.CTR;
@@ -149,7 +150,7 @@ public sealed class SARC : IDisposable
         byte[] data = GetData(t);
         string name = GetFileName(t);
 
-        string dir = Path.GetDirectoryName(name) ?? throw new ArgumentException(name);
+        string dir = Path.GetDirectoryName(name) ?? string.Empty;
         string location = Path.Combine(outpath, dir);
         Directory.CreateDirectory(location);
 
@@ -184,11 +185,14 @@ public sealed class SARC : IDisposable
     {
         stream.Seek(SFNT.StringOffset, SeekOrigin.Begin);
         stream.Seek((offset & 0x00FFFFFF) * 4, SeekOrigin.Current);
-        var sb = new StringBuilder();
-        for (char c = (char)stream.ReadByte(); c != 0; c = (char)stream.ReadByte())
-            sb.Append(c);
+        var bytes = new List<byte>();
+        int value;
+        while ((value = stream.ReadByte()) > 0)
+            bytes.Add((byte)value);
+        if (value < 0)
+            throw new InvalidDataException("SARC contiene una cadena sin terminador.");
 
-        return sb.ToString().Replace('/', Path.DirectorySeparatorChar);
+        return Encoding.UTF8.GetString(bytes.ToArray()).Replace('/', Path.DirectorySeparatorChar);
     }
 
     public void SetFileName(int offset, string value)
@@ -196,17 +200,145 @@ public sealed class SARC : IDisposable
         var str = value.Replace(Path.DirectorySeparatorChar, '/');
         stream.Seek(SFNT.StringOffset, SeekOrigin.Begin);
         stream.Seek((offset & 0x00FFFFFF) * 4, SeekOrigin.Current);
-        foreach (var b in str)
-            stream.WriteByte((byte)b);
+        var bytes = Encoding.UTF8.GetBytes(str);
+        stream.Write(bytes, 0, bytes.Length);
         stream.WriteByte((byte)'\0');
     }
 
     private byte[] GetData(int offset, int length)
     {
+        if (offset < 0 || length < 0)
+            throw new InvalidDataException("SARC contiene offsets negativos.");
         byte[] fileBuffer = new byte[length];
         stream.Seek(offset + DataOffset, SeekOrigin.Begin);
-        stream.Read(fileBuffer, 0, length);
+        stream.ReadExactly(fileBuffer, 0, length);
         return fileBuffer;
+    }
+
+    /// <summary>
+    /// Packs a directory tree into a SARC archive. Names are stored as UTF-8 paths with forward
+    /// slashes and every string/data start is aligned to the boundary expected by the SFNT/SFAT
+    /// tables. The generated archive is immediately readable by <see cref="SARC"/>.
+    /// </summary>
+    public static int Pack(string folderPath, string sarcPath, int dataAlignment = 0x10)
+    {
+        if (!Directory.Exists(folderPath))
+            throw new DirectoryNotFoundException(folderPath);
+        if (dataAlignment < 4 || dataAlignment > 0x1000 || (dataAlignment & (dataAlignment - 1)) != 0)
+            throw new ArgumentOutOfRangeException(nameof(dataAlignment), "SARC alignment must be a power of two between 4 and 4096.");
+
+        var sourceFiles = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories)
+            .Select(path => new SarcSourceFile(
+                Path.GetRelativePath(folderPath, path).Replace(Path.DirectorySeparatorChar, '/'),
+                File.ReadAllBytes(path)))
+            .OrderBy(file => file.Name, StringComparer.Ordinal)
+            .ToArray();
+        if (sourceFiles.Length == 0)
+            throw new InvalidDataException("SARC input folder is empty.");
+        if (sourceFiles.Length > ushort.MaxValue)
+            throw new InvalidDataException("SARC admite como máximo 65535 archivos.");
+
+        const uint hashMultiplier = 0x65;
+        var stringBytes = new List<byte>();
+        var nameOffsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var file in sourceFiles)
+        {
+            nameOffsets[file.Name] = stringBytes.Count / 4;
+            stringBytes.AddRange(Encoding.UTF8.GetBytes(file.Name));
+            stringBytes.Add(0);
+            while (stringBytes.Count % 4 != 0)
+                stringBytes.Add(0);
+        }
+
+        var metadataLength = checked(0x14 + 0x0C + (sourceFiles.Length * 0x10) + 0x08 + stringBytes.Count);
+        var dataOffset = Align(metadataLength, dataAlignment);
+        var entries = sourceFiles
+            .Select(file => new SarcPackEntry(
+                file.Name,
+                HashName(file.Name, hashMultiplier),
+                nameOffsets[file.Name],
+                0,
+                0,
+                file.Data))
+            .OrderBy(entry => entry.Hash)
+            .ThenBy(entry => entry.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        var dataPosition = 0;
+        foreach (var entry in entries)
+        {
+            dataPosition = Align(dataPosition, 4);
+            entry.Start = dataPosition;
+            dataPosition = checked(dataPosition + entry.Data.Length);
+            entry.End = dataPosition;
+        }
+
+        var fileSize = checked(dataOffset + dataPosition);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(sarcPath))!);
+        using var stream = File.Open(sarcPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var bw = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
+        bw.Write(Encoding.ASCII.GetBytes("SARC"));
+        bw.Write((ushort)0x14);
+        bw.Write((ushort)0xFEFF);
+        bw.Write((uint)fileSize);
+        bw.Write((uint)dataOffset);
+        bw.Write(1u);
+
+        bw.Write(Encoding.ASCII.GetBytes("SFAT"));
+        bw.Write((ushort)0x0C);
+        bw.Write((ushort)entries.Length);
+        bw.Write(hashMultiplier);
+        foreach (var entry in entries)
+        {
+            bw.Write(entry.Hash);
+            bw.Write(entry.NameOffset);
+            bw.Write(entry.Start);
+            bw.Write(entry.End);
+        }
+
+        bw.Write(Encoding.ASCII.GetBytes("SFNT"));
+        bw.Write((ushort)0x08);
+        bw.Write((ushort)0);
+        bw.Write(stringBytes.ToArray());
+        while (bw.BaseStream.Position < dataOffset)
+            bw.Write((byte)0);
+
+        dataPosition = 0;
+        foreach (var entry in entries)
+        {
+            var aligned = Align(dataPosition, 4);
+            while (dataPosition < aligned)
+            {
+                bw.Write((byte)0);
+                dataPosition++;
+            }
+            bw.Write(entry.Data);
+            dataPosition += entry.Data.Length;
+        }
+
+        return entries.Length;
+    }
+
+    private static int Align(int value, int alignment) => checked((value + alignment - 1) / alignment * alignment);
+
+    private static uint HashName(string name, uint multiplier)
+    {
+        uint hash = 0;
+        foreach (var value in Encoding.UTF8.GetBytes(name))
+            hash = unchecked((hash * multiplier) + value);
+        return hash;
+    }
+
+    private sealed record SarcSourceFile(string Name, byte[] Data);
+
+    private sealed class SarcPackEntry(string name, uint hash, int nameOffset, int start, int end, byte[] data)
+    {
+        public string Name { get; } = name;
+        public uint Hash { get; } = hash;
+        public int NameOffset { get; } = nameOffset;
+        public int Start { get; set; } = start;
+        public int End { get; set; } = end;
+        public byte[] Data { get; } = data;
     }
 
     private void SetData(int offset, byte[] data)

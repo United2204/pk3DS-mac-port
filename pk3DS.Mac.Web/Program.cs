@@ -4,6 +4,7 @@ using pk3DS.Mac.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<IFolderPicker, MacFolderPicker>();
+builder.Services.AddSingleton<IFilePicker, MacFilePicker>();
 
 var app = builder.Build();
 const string address = "http://127.0.0.1:38473";

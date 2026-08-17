@@ -27,7 +27,7 @@ public class RomFS
             SuperBlockLen += 0x200 - (SuperBlockLen % 0x200);
         byte[] superblock = new byte[SuperBlockLen];
         fs.Seek(0, SeekOrigin.Begin);
-        fs.Read(superblock, 0, superblock.Length);
+        fs.ReadExactly(superblock, 0, superblock.Length);
         SuperBlockHash = SHA256.HashData(superblock);
     }
 
@@ -63,6 +63,8 @@ public class RomFS
 
     public void ExtractRomFS(string outputDirectory, RichTextBox TB_Progress = null, ProgressBar PB_Show = null)
     {
+        TB_Progress ??= new RichTextBox();
+        PB_Show ??= new ProgressBar();
         byte[] ivfcHeaderBytes = new byte[0x5C];
         using (var file = new FileStream(FileName, FileMode.Open, FileAccess.Read))
         {
@@ -248,7 +250,7 @@ public class RomFS
         while (remainingSize > 0)
         {
             int sizeToReadWrite = buffer.Length > remainingSize ? remainingSize : buffer.Length;
-            romfsFileStream.Read(buffer, 0, sizeToReadWrite);
+            romfsFileStream.ReadExactly(buffer, 0, sizeToReadWrite);
             outputFileStream.Write(buffer, 0, sizeToReadWrite);
             remainingSize -= sizeToReadWrite;
             if (PB_Show.InvokeRequired)
@@ -386,7 +388,7 @@ public class RomFS
                 for (long ofs = 0; ofs < (long)ivfc.Levels[i].DataLength; ofs += ivfc.Levels[i].BlockSize)
                 {
                     OutFileStream.Seek(hOfs, SeekOrigin.Begin);
-                    OutFileStream.Read(buffer, 0, (int)ivfc.Levels[i].BlockSize);
+                    OutFileStream.ReadExactly(buffer, 0, (int)ivfc.Levels[i].BlockSize);
                     hOfs = OutFileStream.Position;
                     byte[] hash = SHA256.HashData(buffer);
                     OutFileStream.Seek(cOfs, SeekOrigin.Begin);
@@ -422,7 +424,7 @@ public class RomFS
             OutFileStream.Seek(0, SeekOrigin.Begin);
             uint SuperBlockLen = (uint)Align(MasterHashLen + 0x60, MEDIA_UNIT_SIZE);
             byte[] MasterHashes = new byte[SuperBlockLen];
-            OutFileStream.Read(MasterHashes, 0, (int)SuperBlockLen);
+            OutFileStream.ReadExactly(MasterHashes, 0, (int)SuperBlockLen);
 
             //var SuperBlockHash = sha.ComputeHash(MasterHashes);
             //Console.WriteLine(SuperBlockHash);

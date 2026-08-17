@@ -70,6 +70,31 @@ Lo específico de plataforma va detrás de una interfaz: hoy solo `IFolderPicker
 5. Una línea en `pk3DS.Mac.Web/Endpoints.cs`.
 6. Página y script en `wwwroot/`.
 
+Las herramientas de proyecto siguen el mismo límite: `ProjectTools.ExtractProject` extrae CXI/3DS
+a un workspace nuevo, `ProjectTools.BuildFileSystems` construye `romfs.bin` y/o `exefs.bin` en una
+carpeta de salida separada, y `ProjectTools.CreateRedirectPatch` genera el `.code.bin` y el árbol
+`a0/` del parche de redirección sin tocar el origen. La operación usa el empaquetador legacy bajo un
+lock porque `RomFS.BuildRomFS` mantiene estado estático; nunca debe escribir dentro de `RomFS` o
+`ExeFS` de origen. `CreateRedirectPatch` no debe presentarse como creador de `.cia`: todavía no
+existe un ensamblador local de TMD/ticket/certificados y firma interna; `RebuildCia` solo puede
+usar un `makerom` externo indicado por el usuario o colocado junto a la aplicación. `ProjectTools.PackGarc` debe copiar
+la carpeta de entrada a una staging antes de llamar a `GARC.PackGARC`, porque el empaquetador legacy
+puede comprimir y renombrar entradas `dec_` durante el proceso. `ProjectTools.PackDarc` y
+`UnpackDarc` admiten solamente la estructura DARC de una capa; el núcleo heredado usa offsets
+UTF-16 y la cabecera de datos debe quedar alineada después de toda la tabla de nombres. `ProjectTools.PackSarc`
+y `UnpackSarc` usan `pk3DS.Core.CTR.SARC`, admiten archivos en la raíz y subcarpetas, codifican nombres
+UTF-8, validan rutas antes de escribirlas y permiten elegir una alineación de datos potencia de dos.
+`ProjectTools.UnpackFarc` usa el lector heredado de FARC, valida los offsets relativos y conserva los nombres
+UTF-16; no hay que agregar un empaquetador hasta conocer los metadatos de variante que acompañan al formato.
+
+`TitleScreenEditor` es intencionalmente headless: lee el GARC `titlescreen`, descomprime las
+entradas LZSS de OR/AS, inspecciona los DARC esperados y exporta los payloads BCLIM y PNG compatibles
+sin usar `System.Drawing`. `BCLIMPortable` cubre los formatos lineales y RGB5A1 con paleta, y
+`PortablePng` permite el roundtrip RGBA; `TitleScreenEditor.Preview` genera una vista previa PNG
+en memoria y `Replace` acepta PNG/BCLIM del mismo tamaño para escribir un DARC nuevo, mientras
+`ReplaceGarc` genera una copia completa del GARC y mantiene LZSS en OR/AS, sin modificar el
+workspace. ETC1 y la inserción persistente en el workspace quedan pendientes.
+
 Los GARCs de Gen. VII que pueden contener entradas LZSS (como `pickup`) deben abrirse con
 `GameConfig.GetlzGARCData`, asignar la entrada modificada y llamar a `Save()`. `GetGARCData` solo
 entiende el contenido GARC sin esa compresión interna.
@@ -85,7 +110,7 @@ bug: se registra con stack trace y el usuario recibe un mensaje genérico. Los e
 
 - **El dump de origen nunca se modifica.** Se copia a un RomFS temporal, se muta la copia y se
   empaqueta solo lo que cambió.
-- La salida es `luma/titles/<TITLE-ID>/romfs` o `exefs` según el editor dentro de un ZIP. No se reconstruyen `.cia` ni `.cxi`.
+- La salida de los editores es `luma/titles/<TITLE-ID>/romfs` o `exefs` dentro de un ZIP; no se reconstruyen `.cia` ni `.cxi` desde ese flujo. `ProjectTools` sí puede reconstruir un `.3ds` desde un workspace completo.
 - El Title ID sale de `exheader.bin`; sin ese archivo no se puede exportar.
 - Las rutas relativas que llegan en un request pasan por `EditorSession.GetChildPath`, que rechaza
   cualquier cosa que se escape del root. Es un límite de confianza: no lo puentees.
@@ -101,8 +126,8 @@ evoluciones de 8 bytes, movimientos empaquetados en un mini-archivo `WD` y egg m
 forma. La fixture también incluye un `code.bin` alineado con firmas sintéticas para probar TMs/HMs,
 Pickup, Shiny Rate, O-Powers, tutores, tiendas y Type Chart, además de `DllBattle.cro` para Type Chart,
 `DllField.cro` para Starter/Gift y un `Shop.cro` con tutores y tiendas Gen. VII. Los exports de CRO
-recalculan hashes internos y `.crr/static.crr` sobre copias; sus salidas
-`romfs`/`exefs` sin un dump de varios GB.
+recalculan hashes internos y `.crr/static.crr` sobre copias. `ProjectToolsTests` también verifica
+que las salidas `romfs`/`exefs` se construyan sin modificar un dump de varios GB.
 
 Al agregar un editor, sumale un caso a `EditorEndToEndTests.Exports` (o al equivalente de Gen. VII).
 Ese test verifica que el ZIP contenga realmente el archivo que el editor dice haber cambiado, y es

@@ -708,6 +708,9 @@ public static class GARC
                 Data = ng.Data;
             }
         }
+
+        /// <summary>Returns the current in-memory GARC after changing <see cref="Files"/>.</summary>
+        public byte[] Save() => Data;
     }
 
     /// <summary>

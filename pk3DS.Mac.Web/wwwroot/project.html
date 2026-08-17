@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Herramientas de proyecto · pk3DS Mac</title>
+    <link rel="stylesheet" href="app.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a>
+      <a class="header-link" href="index.html">Randomizador</a>
+    </header>
+    <main class="editor-main">
+      <div class="intro editor-intro">
+        <p class="eyebrow">HERRAMIENTAS DE PROYECTO</p>
+        <h1>Construir archivos</h1>
+        <p>Empaqueta una carpeta extraída en binarios RomFS y ExeFS para continuar el flujo de trabajo fuera de pk3DS.</p>
+      </div>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">1</span>
+          <div><p class="kicker">EXTRACCIÓN</p><h2>Extraer un CXI o 3DS</h2></div>
+        </div>
+        <p class="section-copy">Elegí un archivo de juego y una carpeta nueva. Se generará un workspace con <code>RomFS</code>, <code>ExeFS</code> y <code>exheader.bin</code>.</p>
+        <div class="path-input"><span aria-hidden="true">⌁</span><input id="input-file" type="text" placeholder="Archivo .cxi o .3ds" spellcheck="false"><button id="browse-file" class="secondary" type="button">Examinar…</button></div>
+        <label class="field project-output">Carpeta de extracción
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="extract-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-extract-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+        <div class="ready-row project-action"><div><b>El origen se conserva intacto.</b><small>La carpeta de destino debe ser nueva.</small></div><button id="extract" class="primary" type="button">Extraer →</button></div>
+        <p id="extract-result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="path-input">
+          <span aria-hidden="true">⌁</span>
+          <input id="workspace" type="text" placeholder="Carpeta completa del juego o RomFS" spellcheck="false">
+          <button id="browse" class="secondary" type="button">Examinar…</button>
+          <button id="inspect" type="button">Cargar</button>
+        </div>
+        <p id="status" class="status neutral" role="status">El origen se abrirá solo para lectura.</p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">2</span>
+          <div><p class="kicker">CONTENIDO</p><h2>Qué querés construir</h2></div>
+        </div>
+        <div class="check-grid three-columns project-options">
+          <label class="check-card"><input id="romfs" type="checkbox" checked><span>RomFS<br><small>romfs.bin completo</small></span></label>
+          <label class="check-card"><input id="exefs" type="checkbox" checked><span>ExeFS<br><small>exefs.bin empaquetado</small></span></label>
+        </div>
+        <label class="field project-output">Carpeta de salida
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="output" type="text" placeholder="Opcional: por defecto, pk3ds-mac-build"><button id="browse-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+      </section>
+
+      <section class="panel output-panel text-export">
+        <div class="ready-row">
+          <div><b id="summary">Cargá un workspace para continuar</b><small>El origen no se modifica.</small></div>
+          <button id="build" class="primary" type="button" disabled>Construir →</button>
+        </div>
+        <p id="result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">3</span>
+          <div><p class="kicker">RECONSTRUCCIÓN</p><h2>Crear una ROM .3ds</h2></div>
+        </div>
+        <p class="section-copy">Usa el RomFS, ExeFS y exheader del workspace cargado para ensamblar una ROM nueva. La opción recortada evita el padding de tarjeta y ocupa menos espacio.</p>
+        <label class="field project-output">Archivo de salida
+          <input id="rom-output" type="text" placeholder="Opcional: por defecto, newROM.3ds">
+        </label>
+        <label class="check-card project-check"><input id="trimmed" type="checkbox" checked><span>ROM recortada</span></label>
+        <div class="ready-row project-action"><div><b>Se requiere un workspace completo.</b><small>Debe incluir RomFS, ExeFS y exheader.bin.</small></div><button id="rebuild" class="primary" type="button" disabled>Reconstruir →</button></div>
+        <p id="rebuild-result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">3b</span>
+          <div><p class="kicker">CIA</p><h2>Crear un archivo .cia</h2></div>
+        </div>
+        <p class="section-copy">Reconstruye primero una ROM .3ds en staging y luego la convierte a CIA con <code>makerom</code>. El ejecutable no se incluye en el proyecto: indicá su ruta o colocalo junto a la aplicación.</p>
+        <label class="field project-output">Ejecutable makerom
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="makerom-path" type="text" placeholder="Opcional: se busca junto a la aplicación"><button id="browse-makerom" class="secondary" type="button">Examinar…</button></div>
+        </label>
+        <label class="field project-output">Archivo de salida
+          <input id="cia-output" type="text" placeholder="Opcional: por defecto, newROM.cia">
+        </label>
+        <label class="check-card project-check"><input id="cia-trimmed" type="checkbox" checked><span>ROM intermedia recortada</span></label>
+        <div class="ready-row project-action"><div><b>Se requiere un workspace completo y makerom.</b><small>El origen se conserva intacto.</small></div><button id="rebuild-cia" class="primary" type="button" disabled>Crear CIA →</button></div>
+        <p id="cia-result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">4</span>
+          <div><p class="kicker">PARCHE</p><h2>Crear parche de redirección</h2></div>
+        </div>
+        <p class="section-copy">Porta el parche “Redirect [CIA]” de pk3DS: cambia las referencias de los GARCs seleccionados en <code>code.bin</code> y copia sus archivos al árbol <code>a0/</code>. Esto genera los contenidos del parche; todavía no firma ni construye un archivo CIA.</p>
+        <label class="field project-output">GARCs o rutas de RomFS
+          <textarea id="patch-garcs" rows="4" placeholder="Un nombre por línea, por ejemplo:&#10;personal&#10;levelup&#10;gametext"></textarea>
+        </label>
+        <label class="check-card project-check"><input id="patch-all-languages" type="checkbox"><span>Incluir las ocho variantes de idioma para gametext/storytext</span></label>
+        <label class="field project-output">Carpeta del parche
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="patch-output" type="text" placeholder="Opcional: Patch (fecha y hora)"><button id="browse-patch-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+        <div class="ready-row project-action"><div><b>Se requiere ExeFS con un code.bin parcheable.</b><small>El origen se conserva intacto.</small></div><button id="create-patch" class="primary" type="button" disabled>Crear parche →</button></div>
+        <p id="patch-result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">5</span>
+          <div><p class="kicker">ARCHIVOS GARC</p><h2>Desempaquetar o empaquetar</h2></div>
+        </div>
+        <p class="section-copy">Trabaja sobre una copia de los archivos: el desempaquetado genera una carpeta nueva y el empaquetado nunca altera la carpeta de entrada.</p>
+        <div class="tool-block">
+          <h3>Desempaquetar GARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="garc-input" type="text" placeholder="Archivo .garc" spellcheck="false"><button id="browse-garc-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="garc-unpack-output" type="text" placeholder="Opcional: junto al GARC"><button id="browse-garc-unpack-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <label class="check-card project-check"><input id="garc-skip-decompression" type="checkbox"><span>No descomprimir entradas LZSS</span></label>
+          <div class="ready-row project-action"><div><b>Genera una carpeta nueva.</b></div><button id="unpack-garc" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="garc-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Empaquetar GARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="garc-folder" type="text" placeholder="Carpeta con archivos numerados" spellcheck="false"><button id="browse-garc-folder" class="secondary" type="button">Elegir…</button></div>
+          <label class="field project-output">Archivo de salida
+            <input id="garc-pack-output" type="text" placeholder="Opcional: nombre.garc">
+          </label>
+          <div class="inline-fields">
+            <label class="field">Versión
+              <select id="garc-version"><option value="4">Gen. VI (4)</option><option value="6" selected>Gen. VII (6)</option></select>
+            </label>
+            <label class="field">Padding
+              <input id="garc-padding" type="number" min="1" max="4096" value="4">
+            </label>
+          </div>
+          <div class="ready-row project-action"><div><b>La carpeta de entrada queda intacta.</b></div><button id="pack-garc" class="primary" type="button">Empaquetar →</button></div>
+          <p id="garc-pack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">6</span>
+          <div><p class="kicker">ARCHIVOS DARC</p><h2>Desempaquetar o empaquetar</h2></div>
+        </div>
+        <p class="section-copy">Trabaja con la estructura DARC habitual de una sola capa: una carpeta raíz con subcarpetas que contienen archivos.</p>
+        <div class="tool-block">
+          <h3>Desempaquetar DARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="darc-input" type="text" placeholder="Archivo .darc" spellcheck="false"><button id="browse-darc-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="darc-unpack-output" type="text" placeholder="Opcional: junto al DARC"><button id="browse-darc-unpack-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una carpeta nueva.</b></div><button id="unpack-darc" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="darc-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Empaquetar DARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="darc-folder" type="text" placeholder="Carpeta DARC de una sola capa" spellcheck="false"><button id="browse-darc-folder" class="secondary" type="button">Elegir…</button></div>
+          <label class="field project-output">Archivo de salida
+            <input id="darc-pack-output" type="text" placeholder="Opcional: nombre.darc">
+          </label>
+          <div class="ready-row project-action"><div><b>La carpeta de entrada queda intacta.</b></div><button id="pack-darc" class="primary" type="button">Empaquetar →</button></div>
+          <p id="darc-pack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">7</span>
+          <div><p class="kicker">PANTALLA DE TÍTULO</p><h2>Inventario de XY / ORAS</h2></div>
+        </div>
+        <p class="section-copy">Lee el GARC <code>titlescreen</code>, sus DARCs por juego e idioma y los recursos BCLIM internos. Podés previsualizar formatos compatibles, exportar el BCLIM original y generar PNG, sin modificar el workspace.</p>
+        <div class="ready-row project-action"><div><b id="title-screen-summary">Cargá un workspace para analizarlo.</b><small>Disponible para Pokémon X/Y y Rubí Omega / Zafiro Alfa.</small></div><button id="inspect-title-screen" class="primary" type="button" disabled>Analizar →</button></div>
+        <div id="title-screen-catalog" class="title-screen-list" hidden></div>
+        <label class="field project-output">Carpeta de exportación
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="title-screen-output" type="text" placeholder="Opcional: title-screen-export"><button id="browse-title-screen-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+        <div class="ready-row project-action"><div><b>Exporta todos los recursos válidos.</b><small>Incluye DARCs sin comprimir, BCLIM, PNG compatibles y manifest.json.</small></div><button id="export-title-screen" class="primary" type="button" disabled>Exportar →</button></div>
+        <p id="title-screen-result" class="status neutral" role="status" aria-live="polite"></p>
+        <div class="tool-block">
+          <h3>Reemplazar una imagen</h3>
+          <p class="section-copy">Elegí un archivo BCLIM o un PNG con las mismas dimensiones. Se genera un DARC nuevo fuera del workspace.</p>
+          <label class="field project-output">Archivo de título
+            <select id="title-screen-archive" disabled><option>Analizá primero el workspace</option></select>
+          </label>
+          <label class="field project-output">Recurso BCLIM
+            <select id="title-screen-asset" disabled><option>Analizá primero el archivo de título</option></select>
+          </label>
+          <div id="title-screen-preview" class="title-screen-preview" hidden>
+            <div class="title-screen-preview-heading"><b id="title-screen-preview-name">Vista previa</b><small id="title-screen-preview-meta"></small></div>
+            <img id="title-screen-preview-image" alt="Vista previa del recurso BCLIM" hidden>
+            <p id="title-screen-preview-result" class="status neutral" role="status" aria-live="polite"></p>
+          </div>
+          <div class="path-input project-output"><span aria-hidden="true">⌁</span><input id="title-screen-replacement" type="text" placeholder="Imagen .png o .bclim" spellcheck="false"><button id="browse-title-screen-replacement" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">DARC de salida
+            <input id="title-screen-replace-output" type="text" placeholder="Opcional: se genera en el workspace">
+          </label>
+          <div class="ready-row project-action"><div><b>El workspace original queda intacto.</b><small>El resultado es un DARC listo para revisar o insertar.</small></div><button id="replace-title-screen" class="primary" type="button" disabled>Reemplazar →</button></div>
+          <p id="title-screen-replace-result" class="status neutral" role="status" aria-live="polite"></p>
+          <label class="field project-output">GARC completo de salida
+            <input id="title-screen-replace-garc-output" type="text" placeholder="Opcional: se genera en el workspace">
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una copia completa del GARC.</b><small>Conserva la compresión LZSS de OR/AS cuando corresponde.</small></div><button id="replace-title-screen-garc" class="primary" type="button" disabled>Generar GARC →</button></div>
+          <p id="title-screen-replace-garc-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">8</span>
+          <div><p class="kicker">ARCHIVOS SARC</p><h2>Desempaquetar o empaquetar</h2></div>
+        </div>
+        <p class="section-copy">Conserva rutas raíz y anidadas dentro de archivos SARC. El empaquetado usa UTF-8 y una alineación de datos configurable; la carpeta de entrada queda intacta.</p>
+        <div class="tool-block">
+          <h3>Desempaquetar SARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="sarc-input" type="text" placeholder="Archivo .sarc" spellcheck="false"><button id="browse-sarc-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="sarc-unpack-output" type="text" placeholder="Opcional: junto al SARC"><button id="browse-sarc-unpack-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una carpeta nueva.</b></div><button id="unpack-sarc" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="sarc-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Empaquetar SARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="sarc-folder" type="text" placeholder="Carpeta con archivos" spellcheck="false"><button id="browse-sarc-folder" class="secondary" type="button">Elegir…</button></div>
+          <label class="field project-output">Archivo de salida
+            <input id="sarc-pack-output" type="text" placeholder="Opcional: nombre.sarc">
+          </label>
+          <label class="field project-output">Alineación de datos
+            <select id="sarc-alignment"><option value="4">4 bytes</option><option value="16" selected>0x10 · recomendada</option><option value="128">0x80</option><option value="4096">0x1000</option></select>
+          </label>
+          <div class="ready-row project-action"><div><b>La carpeta de entrada queda intacta.</b></div><button id="pack-sarc" class="primary" type="button">Empaquetar →</button></div>
+          <p id="sarc-pack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-number">9</span>
+          <div><p class="kicker">ARCHIVOS FARC</p><h2>Desempaquetar</h2></div>
+        </div>
+        <p class="section-copy">Lee el contenedor FARC heredado y conserva sus nombres UTF-16 y rutas anidadas. Esta primera integración es de solo lectura: el formato todavía no tiene un empaquetador compatible.</p>
+        <div class="tool-block">
+          <h3>Desempaquetar FARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="farc-input" type="text" placeholder="Archivo .farc" spellcheck="false"><button id="browse-farc-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="farc-unpack-output" type="text" placeholder="Opcional: junto al FARC"><button id="browse-farc-unpack-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una carpeta nueva.</b><small>El archivo original no se modifica.</small></div><button id="unpack-farc" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="farc-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+    </main>
+    <footer>pk3DS Mac trabaja de forma local. Ningún archivo se sube a internet.</footer>
+    <script src="project.js"></script>
+  </body>
+</html>

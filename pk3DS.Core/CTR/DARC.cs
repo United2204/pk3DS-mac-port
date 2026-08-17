@@ -154,17 +154,17 @@ public class DARC
                 EntryList.Add(new FileTableEntry
                 {
                     DataOffset = 1,
-                    DataLength = (uint)(files.Length + EntryList.Count),
+                    DataLength = (uint)(files.Length + EntryList.Count + 1),
                     IsFolder = true,
                     NameOffset = nameOffset,
                 });
-                nameOffset += (uint)parentName.Length + 2; // Account for null terminator
+                nameOffset += (uint)((parentName.Length + 1) * 2); // UTF-16 bytes, including null terminator
 
                 foreach (string file in files)
                 {
                     var fi = new FileInfo(file);
                     string fileName = fi.Name;
-                    NameList.Add(new NameTableEntry(nameOffset, parentName));
+                    NameList.Add(new NameTableEntry(nameOffset, fileName));
 
                     EntryList.Add(new FileTableEntry
                     {
@@ -174,7 +174,7 @@ public class DARC
                         NameOffset = nameOffset,
                     });
                     Data = [.. Data, .. File.ReadAllBytes(file)];
-                    nameOffset += (uint)fileName.Length + 2; // Account for null terminator
+                    nameOffset += (uint)((fileName.Length + 1) * 2); // UTF-16 bytes, including null terminator
                 }
             }
         }
@@ -184,14 +184,15 @@ public class DARC
         int darcFileCount = NameList.Count;
         int NameListOffset = darcFileCount * 0xC;
         int NameListLength = (int)(nameOffset + NameListOffset);
-        int DataOffset = NameListLength % 4 == 0 ? NameListLength : NameListLength + (4 - (NameListLength % 4));
+        int DataOffset = 0x1C + NameListLength;
+        DataOffset = DataOffset % 4 == 0 ? DataOffset : DataOffset + (4 - (DataOffset % 4));
         Array.Resize(ref Data, Data.Length % 4 == 0 ? Data.Length : Data.Length + 4 - (Data.Length % 4));
         int FinalSize = DataOffset + Data.Length;
 
         // Create New DARC
         var darc = new DARC
         {
-            Header =
+            Header = new DARCHeader
             {
                 Signature = "darc",
                 Endianness = 0xFEFF,
@@ -328,7 +329,7 @@ public class DARC
         {
             uint oldLength = orig.Entries[index].DataLength;
             uint offset = orig.Entries[index].DataOffset - orig.Header.FileDataOffset;
-            int diff = (int)(data.Length - oldLength);
+            long diff = checked((long)data.Length - oldLength);
 
             // Insert into Data Block
             byte[] pre = orig.Data.Take((int)offset).ToArray();
@@ -337,11 +338,13 @@ public class DARC
             // Reassemble data
             orig.Data = [.. pre, .. data, .. post];
 
-            // Fix Offset references of other files
-            foreach (var x in orig.Entries.Where(x => x.DataOffset >= offset + oldLength))
-                x.DataOffset += (uint)diff;
+            // Fix absolute data offsets of files that follow the replaced payload. Folder entries
+            // store tree indexes in DataOffset and must never be adjusted as file byte offsets.
+            var absoluteThreshold = checked((long)orig.Header.FileDataOffset + offset + oldLength);
+            foreach (var x in orig.Entries.Where(x => !x.IsFolder && x.DataOffset >= absoluteThreshold))
+                x.DataOffset = checked((uint)((long)x.DataOffset + diff));
             orig.Entries[index].DataLength = (uint)data.Length;
-            orig.Header.FileSize += (uint)diff;
+            orig.Header.FileSize = checked(orig.Header.FileDataOffset + (uint)orig.Data.Length);
             return true;
         }
         catch (Exception) { return false; }

@@ -73,6 +73,47 @@ public abstract class SyntheticWorkspace : IDisposable
         Directory.Delete(staging, recursive: true);
     }
 
+    protected byte[] BuildTitleScreenDarc(bool validBclim = false)
+    {
+        var root = Path.Combine(Root, $"title-screen-darc-{Guid.NewGuid():N}");
+        var folder = Path.Combine(root, "group");
+        Directory.CreateDirectory(folder);
+        var background = validBclim
+            ? BCLIMPortable.EncodeRgba(
+                Enumerable.Repeat(new byte[] { 255, 0, 0, 255 }, 64).SelectMany(value => value).ToArray(),
+                8,
+                8)
+            : [1, 2, 3, 4];
+        File.WriteAllBytes(Path.Combine(folder, "background.bclim"), background);
+        File.WriteAllBytes(Path.Combine(folder, "logo.bclim"), [5, 6, 7]);
+        try
+        {
+            return DARC.SetDARC(DARC.GetDARC(root));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    protected byte[] CompressFixture(byte[] data)
+    {
+        var source = Path.Combine(Root, $"fixture-{Guid.NewGuid():N}.bin");
+        var compressed = Path.Combine(Root, $"fixture-{Guid.NewGuid():N}.lz");
+        File.WriteAllBytes(source, data);
+        try
+        {
+            LZSS.Compress(source, compressed);
+            return File.ReadAllBytes(compressed);
+        }
+        finally
+        {
+            if (File.Exists(source)) File.Delete(source);
+            if (File.Exists(compressed)) File.Delete(compressed);
+        }
+    }
+
     protected static byte[][] Repeat(int count, Func<int, byte[]> build) =>
         Enumerable.Range(0, count).Select(build).ToArray();
 
@@ -323,6 +364,26 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
         WriteGen6CodeBinTables();
     }
 
+    /// <summary>
+    /// Adds the Gen. VI title-screen GARC used by the headless title-screen inventory tests.
+    /// The fixture only populates X-DE (file 467); the other expected archives stay empty so the
+    /// catalog can also prove that missing/invalid archives are reported without aborting the scan.
+    /// </summary>
+    public void WriteTitleScreenFixture()
+    {
+        var files = Enumerable.Repeat(Array.Empty<byte>(), 481).ToArray();
+        files[467] = BuildTitleScreenDarc();
+        WriteGarc(165, files);
+    }
+
+    /// <summary>Writes the same fixture with a decodable 8×8 BCLIM for replacement tests.</summary>
+    public void WritePortableTitleScreenFixture()
+    {
+        var files = Enumerable.Repeat(Array.Empty<byte>(), 481).ToArray();
+        files[467] = BuildTitleScreenDarc(validBclim: true);
+        WriteGarc(165, files);
+    }
+
     /// <summary>Gen VI egg moves are a ushort count followed by that many move ids.</summary>
     private static byte[] Gen6EggMoves(params ushort[] moves)
     {
@@ -392,6 +453,31 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
             martOffset += sizeof(ushort);
         }
         File.WriteAllBytes(Path.Combine(ExeFs, "code.bin"), code);
+    }
+}
+
+/// <summary>A minimal OR/AS workspace used to verify the compressed title-screen archives.</summary>
+public sealed class SyntheticOrasWorkspace : SyntheticWorkspace
+{
+    private const int ArchiveFileCount = 299;
+
+    public SyntheticOrasWorkspace()
+        : base(ArchiveFileCount, speciesCount: 1, moveCount: 1, itemCount: 1)
+    {
+    }
+
+    public void WriteTitleScreenFixture()
+    {
+        var files = Enumerable.Repeat(Array.Empty<byte>(), 1136).ToArray();
+        files[1120] = CompressFixture(BuildTitleScreenDarc());
+        WriteGarc(152, files);
+    }
+
+    public void WritePortableTitleScreenFixture()
+    {
+        var files = Enumerable.Repeat(Array.Empty<byte>(), 1136).ToArray();
+        files[1120] = CompressFixture(BuildTitleScreenDarc(validBclim: true));
+        WriteGarc(152, files);
     }
 }
 

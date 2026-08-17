@@ -25,7 +25,25 @@ Interfaz local para macOS basada en `pk3DS.Core`. Arranca en `http://127.0.0.1:3
 5. Pulsá **Exportar** y elegí la carpeta donde guardar el ZIP.
 6. Descomprimí el ZIP resultante en la raíz de la SD de la consola. Activa *Enable game patching* en Luma y usá la actualización del juego que corresponda a tu dump.
 
-La salida inicial genera el árbol `luma/titles/<title-id>/romfs`. No reconstruye `.cia` ni `.cxi`, ni altera el RomFS de origen.
+La salida inicial genera el árbol `luma/titles/<title-id>/romfs`. El randomizador no reconstruye `.cia` ni `.cxi`, ni altera el RomFS de origen.
+
+La pantalla **Herramientas de proyecto** permite seleccionar un workspace extraído y construir `romfs.bin`, `exefs.bin` o ambos en una carpeta de salida separada. Esta operación tampoco modifica el origen.
+
+La misma pantalla puede extraer archivos `.cxi` y `.3ds` a un workspace nuevo con `RomFS`, `ExeFS` y `exheader.bin`, y reconstruir una ROM `.3ds` recortada o con padding de tarjeta.
+
+También puede crear el contenido de un parche de redirección: actualiza las rutas seleccionadas en `.code.bin` y copia los GARCs al árbol `a0/`. La creación nativa y firma del contenedor `.cia` sigue pendiente, pero la conversión completa está disponible cuando se proporciona un `makerom` externo.
+
+La misma pantalla permite desempaquetar y empaquetar archivos GARC desde carpetas numeradas, incluyendo la opción de no intentar descomprimir entradas LZSS durante la extracción.
+
+También admite DARC con la estructura habitual de una sola capa de carpetas. Los archivos originales y las carpetas de entrada se conservan intactos.
+
+También admite SARC con rutas raíz y anidadas, nombres UTF-8 y alineación de datos configurable. El desempaquetado rechaza rutas inseguras y el empaquetado trabaja sobre una copia de la carpeta de entrada.
+
+También puede desempaquetar FARC conservando sus nombres UTF-16 y rutas anidadas. El flujo FARC es de solo lectura porque todavía no hay un empaquetador compatible con sus metadatos heredados.
+
+En **Herramientas de proyecto** también podés analizar la pantalla de título de X/Y y OR/AS. La herramienta lista los DARCs por juego e idioma, muestra una vista previa PNG de los BCLIM compatibles, exporta los recursos originales junto con un `manifest.json` y genera PNG para formatos compatibles; también acepta un PNG o BCLIM del mismo tamaño y genera un DARC nuevo o una copia completa del GARC con el recurso reemplazado, conservando la compresión LZSS de OR/AS. Esta parte no necesita Windows ni modifica el workspace; ETC1 y la inserción persistente en el GARC de origen siguen pendientes.
+
+Para intentar crear un `.cia`, indicá un ejecutable `makerom` compatible. La aplicación reconstruye primero una `.3ds` temporal y solo publica el CIA si la conversión externa termina correctamente; conviene validarlo con un dump real, ya que `makerom` puede rechazar o quedar procesando entradas sintéticas inválidas.
 
 El Title ID se obtiene automáticamente desde `exheader.bin`, por lo que la carpeta que elijas debe incluirlo. Si solo disponés de `RomFS`, la herramienta puede revisarlo, pero no podrá crear un LayeredFS con el Title ID correcto.
 
@@ -44,7 +62,7 @@ Además hay editores individuales para texto de juego e historia, movimientos po
 
 ## Estado del port
 
-Faltan las herramientas de proyecto (extracción, empaquetado y reconstrucción de ROM) y el parche RO/RSA del sistema necesario para que algunos CRO modificados funcionen directamente en consola. Los exports ya recalculan el CRR cuando el dump lo incluye. El inventario de paridad y su estado real está en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
+Sigue pendiente el parche RO/RSA del sistema necesario para que algunos CRO modificados funcionen directamente en consola. La extracción de CXI/3DS, el empaquetado standalone de RomFS/ExeFS, la reconstrucción `.3ds`, la conversión `.cia` mediante `makerom`, la generación del contenido de parches de redirección, las herramientas GARC/DARC/SARC y el desempaquetado FARC, además del inventario, exportación raw/PNG y reemplazo a DARC de salida de Title Screen, ya están disponibles desde Herramientas de proyecto. Los exports ya recalculan el CRR cuando el dump lo incluye. El inventario de paridad y su estado real está en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
 
 ## Building
 

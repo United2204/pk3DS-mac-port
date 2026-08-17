@@ -136,6 +136,8 @@ public class NCSD
 
     public void ExtractFilesFromNCSD(string NCSD_PATH, string outputDirectory, RichTextBox TB_Progress = null, ProgressBar PB_Show = null)
     {
+        TB_Progress ??= new RichTextBox();
+        PB_Show ??= new ProgressBar();
         if (!Directory.Exists(outputDirectory))
             Directory.CreateDirectory(outputDirectory);
 
@@ -160,17 +162,22 @@ public class NCSD
         string outputFile = Path.Combine(outputDirectory, "game.cxi");
         if (PB_Show.InvokeRequired)
         {
-            PB_Show.Invoke((MethodInvoker)delegate { PB_Show.Minimum = 0; PB_Show.Step = 1; PB_Show.Value = 0; PB_Show.Maximum = Convert.ToInt32(ncchSize); });
+            PB_Show.Invoke((MethodInvoker)delegate { PB_Show.Minimum = 0; PB_Show.Step = 1; PB_Show.Value = 0; PB_Show.Maximum = Convert.ToInt32((ncchSize + 9) / 10); });
         }
-        else { PB_Show.Minimum = 0; PB_Show.Step = 1; PB_Show.Value = 0; PB_Show.Maximum = Convert.ToInt32(ncchSize); }
+        else { PB_Show.Minimum = 0; PB_Show.Step = 1; PB_Show.Value = 0; PB_Show.Maximum = Convert.ToInt32((ncchSize + 9) / 10); }
 
         using FileStream inputFileStream = new(NCSD_PATH, FileMode.Open, FileAccess.Read),
-            outputFileStream = new(outputFile, FileMode.Append, FileAccess.Write);
+            outputFileStream = new(outputFile, FileMode.Create, FileAccess.Write);
         inputFileStream.Seek(0x4000, SeekOrigin.Begin);
-        for (int i = 0; i < ncchSize; i++)
+        ulong remaining = (ulong)ncchSize * MEDIA_UNIT_SIZE;
+        while (remaining > 0)
         {
-            inputFileStream.Read(buffer, 0, buffer.Length);
-            outputFileStream.Write(buffer, 0, buffer.Length);
+            int count = (int)Math.Min((ulong)buffer.Length, remaining);
+            int read = inputFileStream.Read(buffer, 0, count);
+            if (read != count)
+                throw new EndOfStreamException("El NCCH indicado por la tabla NCSD está truncado.");
+            outputFileStream.Write(buffer, 0, read);
+            remaining -= (uint)read;
             if (PB_Show.InvokeRequired)
             {
                 PB_Show.Invoke((MethodInvoker)PB_Show.PerformStep);

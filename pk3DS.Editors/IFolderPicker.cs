@@ -9,3 +9,9 @@ public interface IFolderPicker
     /// <summary>Prompts for a folder, or throws <see cref="WorkspaceException"/> if none was chosen.</summary>
     string PickFolder(string prompt);
 }
+
+public interface IFilePicker
+{
+    /// <summary>Prompts for a file, or throws <see cref="WorkspaceException"/> if none was chosen.</summary>
+    string PickFile(string prompt);
+}

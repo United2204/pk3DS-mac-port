@@ -14,10 +14,42 @@ public static class Endpoints
         var workspace = app.MapGroup("/api/workspace");
 
         workspace.MapPost("/inspect", (WorkspaceRequest request) => Results.Ok(WorkspaceInspector.Inspect(request)));
+        workspace.MapPost("/build-filesystems", (BuildFileSystemsRequest request) =>
+            Results.Ok(ProjectTools.BuildFileSystems(request)));
+        workspace.MapPost("/extract", (ExtractProjectRequest request) =>
+            Results.Ok(ProjectTools.ExtractProject(request)));
+        workspace.MapPost("/rebuild-rom", (RebuildRomRequest request) =>
+            Results.Ok(ProjectTools.RebuildRom(request)));
+        workspace.MapPost("/rebuild-cia", (RebuildCiaRequest request) =>
+            Results.Ok(ProjectTools.RebuildCia(request)));
+        workspace.MapPost("/redirect-patch", (RedirectPatchRequest request) =>
+            Results.Ok(ProjectTools.CreateRedirectPatch(request)));
+        workspace.MapPost("/unpack-garc", (UnpackGarcRequest request) =>
+            Results.Ok(ProjectTools.UnpackGarc(request)));
+        workspace.MapPost("/pack-garc", (PackGarcRequest request) =>
+            Results.Ok(ProjectTools.PackGarc(request)));
+        workspace.MapPost("/unpack-darc", (UnpackDarcRequest request) =>
+            Results.Ok(ProjectTools.UnpackDarc(request)));
+        workspace.MapPost("/pack-darc", (PackDarcRequest request) =>
+            Results.Ok(ProjectTools.PackDarc(request)));
+        workspace.MapPost("/unpack-sarc", (UnpackSarcRequest request) =>
+            Results.Ok(ProjectTools.UnpackSarc(request)));
+        workspace.MapPost("/pack-sarc", (PackSarcRequest request) =>
+            Results.Ok(ProjectTools.PackSarc(request)));
+        workspace.MapPost("/unpack-farc", (UnpackFarcRequest request) =>
+            Results.Ok(ProjectTools.UnpackFarc(request)));
         workspace.MapPost("/pick", (IFolderPicker picker) =>
             Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona la carpeta extraída del juego"))));
         workspace.MapPost("/pick-output", (IFolderPicker picker) =>
             Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona dónde guardar la salida"))));
+        workspace.MapPost("/pick-file", (IFilePicker picker) =>
+            Results.Ok(new PickFileResponse(picker.PickFile("Selecciona un archivo CXI o 3DS"))));
+        workspace.MapPost("/pick-archive", (IFilePicker picker) =>
+            Results.Ok(new PickFileResponse(picker.PickFile("Selecciona un archivo GARC, DARC, SARC o FARC"))));
+        workspace.MapPost("/pick-tool", (IFilePicker picker) =>
+            Results.Ok(new PickFileResponse(picker.PickFile("Selecciona el ejecutable makerom"))));
+        workspace.MapPost("/pick-image", (IFilePicker picker) =>
+            Results.Ok(new PickFileResponse(picker.PickFile("Selecciona una imagen PNG o BCLIM"))));
     }
 
     public static void MapEditorEndpoints(this WebApplication app)
@@ -111,5 +143,11 @@ public static class Endpoints
         editors.MapPost("/maison/pokemon", (MaisonPokemonRequest r) => Results.Ok(MaisonEditor.GetPokemon(r)));
         editors.MapPost("/maison/trainer/export", (MaisonTrainerExportRequest r) => Results.Ok(MaisonEditor.ExportTrainer(r)));
         editors.MapPost("/maison/pokemon/export", (MaisonPokemonExportRequest r) => Results.Ok(MaisonEditor.ExportPokemon(r)));
+
+        editors.MapPost("/titlescreen/catalog", (TitleScreenCatalogRequest r) => Results.Ok(TitleScreenEditor.GetCatalog(r)));
+        editors.MapPost("/titlescreen/preview", (TitleScreenPreviewRequest r) => Results.Ok(TitleScreenEditor.Preview(r)));
+        editors.MapPost("/titlescreen/export", (TitleScreenExportRequest r) => Results.Ok(TitleScreenEditor.Export(r)));
+        editors.MapPost("/titlescreen/replace", (TitleScreenReplaceRequest r) => Results.Ok(TitleScreenEditor.Replace(r)));
+        editors.MapPost("/titlescreen/replace-garc", (TitleScreenReplaceRequest r) => Results.Ok(TitleScreenEditor.ReplaceGarc(r)));
     }
 }

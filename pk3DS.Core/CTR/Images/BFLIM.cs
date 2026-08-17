@@ -23,9 +23,9 @@ public class BFLIM : BXLIM
     private void ReadBFLIM(Stream ms)
     {
         PixelData = new byte[ms.Length - FLIMHeader.SIZE];
-        ms.Read(PixelData, 0, PixelData.Length);
+        ms.ReadExactly(PixelData, 0, PixelData.Length);
         var footer = new byte[FLIMHeader.SIZE];
-        ms.Read(footer, 0, footer.Length);
+        ms.ReadExactly(footer, 0, footer.Length);
         Footer = footer.ToStructure<FLIMHeader>();
     }
 }

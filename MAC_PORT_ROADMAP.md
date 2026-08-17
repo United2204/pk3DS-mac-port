@@ -4,7 +4,7 @@ Este documento usa `pk3DS.WinForms` como especificación de comportamiento. Un m
 
 ## Estado actual de la web
 
-La web cubre el randomizador de RomFS completo, la exportación ExeFS de TMs/HMs y más de quince editores individuales. No equivale todavía a pk3DS para Windows: faltan otros módulos ExeFS/CRO y las herramientas de proyecto.
+La web cubre el randomizador de RomFS completo, la exportación ExeFS de TMs/HMs, más de quince editores individuales y el empaquetado standalone de RomFS/ExeFS. No equivale todavía a pk3DS para Windows: faltan otros módulos ExeFS/CRO y varias herramientas de proyecto.
 
 > Mantené este documento sincronizado con el código **en el mismo commit** que agrega o completa un módulo. Ya se desincronizó una vez: cuatro editores figuraban como pendientes estando implementados.
 
@@ -39,7 +39,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 3.9. Item Stats — editor individual por objeto — Hecho
   - 3.10. Battle Maison / Royal / Tree — Hecho
   - 3.11. Pickup Gen VII — Hecho
-  - 3.12. Title Screen Gen VI — Pendiente
+  - 3.12. Title Screen Gen VI — Parcial: inventario de DARC por juego/idioma, vista previa PNG de BCLIM compatibles, exportación raw/PNG y reemplazo PNG/BCLIM con salida a un DARC o copia GARC nueva; falta ETC1 y la inserción persistente en el workspace
   - 3.13. OWSE / scripts (mapas, scripts, texto) — Pendiente
 
 - **4. Editores ExeFS / CRO** — Parcial
@@ -55,13 +55,13 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 4.10. Static Encounters Gen VI (`DllField.cro`) — Parcial (edición individual lista; falta parche RO de Luma para usarlo)
   - 4.11. CRO / CRR patching — Parcial: los exports de CRO recalculan hashes internos y generan `.crr/static.crr`; falta el parche RO de verificación RSA en consola
 
-- **5. Herramientas de proyecto** — Pendiente
-  - 5.1. Extracción de CXI/3DS — Pendiente
-  - 5.2. Empaquetado de RomFS/ExeFS — Pendiente
-  - 5.3. Reconstrucción de ROM — Pendiente
-  - 5.4. Creación de parches — Pendiente
-  - 5.5. Edición de imágenes — Pendiente
-  - 5.6. Herramientas GARC/DARC — Pendiente
+- **5. Herramientas de proyecto** — Parcial
+  - 5.1. Extracción de CXI/3DS — Parcial: extracción headless desde la web a un workspace nuevo, con selector nativo de archivos
+  - 5.2. Empaquetado de RomFS/ExeFS — Parcial: la web construye `romfs.bin` y/o `exefs.bin` desde un workspace extraído, con validación de rutas y sin tocar el origen
+  - 5.3. Reconstrucción de ROM — Parcial: reconstrucción headless de `.3ds` desde un workspace completo, con modo recortado o padding de tarjeta; conversión a `.cia` implementada mediante `makerom` externo, pendiente validar con un dump real
+  - 5.4. Creación de parches — Parcial: parche de redirección de GARCs y `.code.bin` portado; falta ensamblaje/firma CIA
+  - 5.5. Edición de imágenes — Parcial: BCLIM compatibles se decodifican, se previsualizan y exportan a PNG sin System.Drawing; PNG/BCLIM se pueden convertir y reemplazar en un DARC o copia GARC de salida; falta inserción persistente en el workspace y soporte ETC1
+  - 5.6. Herramientas GARC/DARC/SARC/FARC — Parcial: desempaquetado y empaquetado GARC, DARC de una capa y SARC portados; FARC tiene desempaquetado seguro de solo lectura y todavía no tiene empaquetador
 
 - **6. Verificación y QA** — Parcial
   - 6.1. Pruebas de regresión: comparar archivos generados en macOS contra Windows con el mismo dump y semilla — Pendiente
@@ -91,7 +91,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 | Move Stats | Gen 6/7 | `move` | Portado: acciones globales y editor individual |
 | Static Encounters | Gen 7 | `encounterstatic` | Parcial: regalos, encuentros fijos e intercambios; edición de especie, forma, nivel, objeto y campos avanzados disponibles en el formato |
 | Pickup | Gen 7 | `pickup` | Portado: tabla de objetos y probabilidades por banda de nivel, con exportación LayeredFS |
-| Title Screen | Gen 6 | `titlescreen` | Pendiente |
+| Title Screen | Gen 6 | `titlescreen` | Parcial: inventario DARC/BCLIM, vista previa, exportación raw/PNG y reemplazo a DARC/copia GARC; falta ETC1 e integración persistente |
 | OWSE / scripts | Gen 6/7 | mapas, scripts y texto | Pendiente; módulo de desarrollo |
 
 ## Módulos ExeFS y CRO
@@ -114,4 +114,4 @@ Estos módulos necesitan un workspace extraído completo (RomFS + ExeFS y, cuand
 
 ## Herramientas de proyecto
 
-También forman parte de pk3DS Windows: extracción de CXI/3DS, empaquetado de RomFS/ExeFS, reconstrucción de ROM, creación de parches, edición de imágenes y herramientas GARC/DARC. Se portarán después de que la edición y salida LayeredFS de los módulos sea verificable.
+También forman parte de pk3DS Windows: extracción de CXI/3DS, empaquetado de RomFS/ExeFS, reconstrucción de ROM, creación de parches, edición de imágenes y herramientas GARC/DARC/SARC/FARC. En Mac ya se puede extraer, empaquetar y reconstruir `.3ds` desde **Herramientas de proyecto**, y solicitar la conversión a `.cia` mediante un `makerom` externo; esa conversión aún requiere validación con un dump real. La pantalla también crea el contenido del parche de redirección (`.code.bin` y árbol `a0/`), desempaqueta/empaqueta GARCs, DARCs de una capa y SARC, desempaqueta FARC en modo de solo lectura e inventaría, previsualiza y exporta los recursos DARC/BCLIM de Title Screen; además convierte PNG/BCLIM y genera un DARC o copia GARC nueva con un recurso reemplazado, manteniendo LZSS cuando corresponde. Siguen pendientes ETC1, la inserción persistente en el workspace, el empaquetador FARC y otros contenedores.
