@@ -111,6 +111,12 @@ function setTitleScreenReplaceGarcResult(message, state = 'neutral') {
   element.className = `status ${state}`;
 }
 
+function setTitleScreenApplyResult(message, state = 'neutral') {
+  const element = byId('title-screen-apply-result');
+  element.textContent = message;
+  element.className = `status ${state}`;
+}
+
 function setTitleScreenPreviewResult(message, state = 'neutral') {
   const element = byId('title-screen-preview-result');
   element.textContent = message;
@@ -142,6 +148,7 @@ function resetTitleScreenReplacementSelectors() {
   byId('title-screen-preview-name').textContent = 'Vista previa';
   byId('title-screen-preview-meta').textContent = '';
   setTitleScreenPreviewResult('Elegí un recurso BCLIM compatible para verlo.', 'neutral');
+  setTitleScreenApplyResult('Elegí un recurso y un archivo de reemplazo para aplicarlo al workspace.', 'neutral');
 }
 
 function updateTitleScreenAssets() {
@@ -241,6 +248,7 @@ function updateBuildState() {
     || assetSelect.disabled
     || !assetSelect.value;
   byId('replace-title-screen-garc').disabled = byId('replace-title-screen').disabled;
+  byId('apply-title-screen').disabled = byId('replace-title-screen').disabled;
   if (!byId('romfs').checked && !byId('exefs').checked)
     byId('summary').textContent = 'Elegí al menos un archivo';
   else if (inspected)
@@ -258,6 +266,7 @@ async function inspectWorkspace() {
   byId('title-screen-summary').textContent = 'Cargá un workspace para analizarlo.';
   resetTitleScreenReplacementSelectors();
   setTitleScreenReplaceResult('Analizá el workspace para elegir una imagen.', 'neutral');
+  setTitleScreenApplyResult('Analizá el workspace para elegir una imagen.', 'neutral');
   setStatus('Cargando el juego…');
   try {
     const data = await post('/api/workspace/inspect', { workspacePath: workspace.value });
@@ -774,6 +783,7 @@ byId('inspect-title-screen').addEventListener('click', async () => {
     byId('title-screen-catalog').hidden = true;
     resetTitleScreenReplacementSelectors();
     setTitleScreenResult(error.message, 'error');
+    setTitleScreenApplyResult(error.message, 'error');
   } finally {
     updateBuildState();
   }
@@ -834,6 +844,26 @@ byId('replace-title-screen-garc').addEventListener('click', async () => {
     setTitleScreenReplaceGarcResult(`Listo: GARC${compression} generado en ${data.outputFile}.`, 'success');
   } catch (error) {
     setTitleScreenReplaceGarcResult(error.message, 'error');
+  } finally {
+    updateBuildState();
+  }
+});
+
+byId('apply-title-screen').addEventListener('click', async () => {
+  const button = byId('apply-title-screen');
+  button.disabled = true;
+  setTitleScreenApplyResult('Guardando una copia y actualizando el GARC del workspace…');
+  try {
+    const data = await post('/api/editors/titlescreen/apply', {
+      workspacePath: workspace.value,
+      fileNumber: Number(byId('title-screen-archive').value),
+      assetEntryIndex: Number(byId('title-screen-asset').value),
+      replacementFile: byId('title-screen-replacement').value,
+    });
+    setTitleScreenApplyResult(`Listo: workspace actualizado. Copia de seguridad en ${data.backupFile}.`, 'success');
+    loadTitleScreenPreview();
+  } catch (error) {
+    setTitleScreenApplyResult(error.message, 'error');
   } finally {
     updateBuildState();
   }

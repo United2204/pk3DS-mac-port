@@ -58,7 +58,7 @@
 
       <section class="panel output-panel text-export">
         <div class="ready-row">
-          <div><b id="summary">Cargá un workspace para continuar</b><small>El origen no se modifica.</small></div>
+          <div><b id="summary">Cargá un workspace para continuar</b><small>Esta construcción no modifica el origen.</small></div>
           <button id="build" class="primary" type="button" disabled>Construir →</button>
         </div>
         <p id="result" class="status neutral" role="status" aria-live="polite"></p>
@@ -178,7 +178,7 @@
           <span class="section-number">7</span>
           <div><p class="kicker">PANTALLA DE TÍTULO</p><h2>Inventario de XY / ORAS</h2></div>
         </div>
-        <p class="section-copy">Lee el GARC <code>titlescreen</code>, sus DARCs por juego e idioma y los recursos BCLIM internos. Podés previsualizar formatos compatibles, exportar el BCLIM original y generar PNG, sin modificar el workspace.</p>
+        <p class="section-copy">Lee el GARC <code>titlescreen</code>, sus DARCs por juego e idioma y los recursos BCLIM internos. Podés previsualizar formatos compatibles, exportar el BCLIM original y generar PNG; también podés aplicar un reemplazo al workspace con copia de seguridad automática.</p>
         <div class="ready-row project-action"><div><b id="title-screen-summary">Cargá un workspace para analizarlo.</b><small>Disponible para Pokémon X/Y y Rubí Omega / Zafiro Alfa.</small></div><button id="inspect-title-screen" class="primary" type="button" disabled>Analizar →</button></div>
         <div id="title-screen-catalog" class="title-screen-list" hidden></div>
         <label class="field project-output">Carpeta de exportación
@@ -211,6 +211,8 @@
           </label>
           <div class="ready-row project-action"><div><b>Genera una copia completa del GARC.</b><small>Conserva la compresión LZSS de OR/AS cuando corresponde.</small></div><button id="replace-title-screen-garc" class="primary" type="button" disabled>Generar GARC →</button></div>
           <p id="title-screen-replace-garc-result" class="status neutral" role="status" aria-live="polite"></p>
+          <div class="ready-row project-action"><div><b>Aplica el reemplazo al workspace.</b><small>Guarda primero una copia en <code>.pk3ds-backups</code> y conserva LZSS cuando corresponde.</small></div><button id="apply-title-screen" class="primary" type="button" disabled>Aplicar →</button></div>
+          <p id="title-screen-apply-result" class="status neutral" role="status" aria-live="polite"></p>
         </div>
       </section>
 

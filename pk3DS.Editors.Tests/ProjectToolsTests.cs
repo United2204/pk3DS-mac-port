@@ -310,6 +310,78 @@ public sealed class ProjectToolsTests : IDisposable
     }
 
     [Fact]
+    public void DecodesPortableEtc1AndEtc1A4Bclim()
+    {
+        var colorBlock = CreateEtc1Block(red: 8, green: 4, blue: 2);
+        var etc1Payload = Enumerable.Repeat(colorBlock, 4).SelectMany(value => value).ToArray();
+        var etc1Rgba = BCLIMPortable.Read(CreateBclim(8, 8, XLIMEncoding.ETC1, etc1Payload)).GetRgbaData();
+
+        for (var offset = 0; offset < etc1Rgba.Length; offset += 4)
+            Assert.Equal([138, 70, 36, 255], etc1Rgba.AsSpan(offset, 4).ToArray());
+
+        var alphaBlock = CreateEtc1AlphaBlock();
+        var etc1A4Payload = Enumerable.Range(0, 4)
+            .SelectMany(_ => alphaBlock.Concat(colorBlock))
+            .ToArray();
+        var etc1A4Rgba = BCLIMPortable.Read(CreateBclim(8, 8, XLIMEncoding.ETC1A4, etc1A4Payload)).GetRgbaData();
+
+        Assert.Equal([138, 70, 36, 51], etc1A4Rgba[..4]);
+        Assert.Equal([138, 70, 36, 34], etc1A4Rgba[(8 * 4)..(9 * 4)]);
+        Assert.Equal([138, 70, 36, 17], etc1A4Rgba[(16 * 4)..(17 * 4)]);
+        Assert.Equal([138, 70, 36, 0], etc1A4Rgba[(24 * 4)..(25 * 4)]);
+    }
+
+    [Fact]
+    public void DecodesPortableEtc1TileOrderForRectangularImages()
+    {
+        var compressedBlocks = Enumerable.Range(0, 8)
+            .SelectMany(index => CreateEtc1Block((byte)(index + 1), green: 4, blue: 8))
+            .ToArray();
+        var rgba = BCLIMPortable.Read(CreateBclim(16, 8, XLIMEncoding.ETC1, compressedBlocks)).GetRgbaData();
+        // The ETC1 tile permutation is followed by the format's vertical orientation.
+        int[] tileScramble = [2, 3, 6, 7, 0, 1, 4, 5];
+
+        for (var outputTile = 0; outputTile < tileScramble.Length; outputTile++)
+        {
+            var x = (outputTile % 4) * 4;
+            var y = (outputTile / 4) * 4;
+            var sourceBlock = tileScramble[outputTile];
+            var offset = ((x + (y * 16)) * 4);
+            Assert.Equal((byte)(17 * (sourceBlock + 1) + 2), rgba[offset]);
+            Assert.Equal(70, rgba[offset + 1]);
+            Assert.Equal(138, rgba[offset + 2]);
+            Assert.Equal(255, rgba[offset + 3]);
+        }
+    }
+
+    [Fact]
+    public void PreviewsAndExportsAnEtc1TitleScreenAsset()
+    {
+        _workspace.WritePortableTitleScreenFixture();
+        var catalog = TitleScreenEditor.GetCatalog(new TitleScreenCatalogRequest(_workspace.Root));
+        var archive = Assert.Single(catalog.Archives, entry => entry.FileNumber == 467);
+        var asset = Assert.Single(archive.Assets, entry => entry.Name == "background.bclim");
+        var colorBlock = CreateEtc1Block(red: 8, green: 4, blue: 2);
+        var payload = Enumerable.Repeat(colorBlock, 4).SelectMany(value => value).ToArray();
+        ReplaceGarcDarcEntry(catalog.GarcPath, archive.FileNumber, asset.EntryIndex,
+            CreateBclim(8, 8, XLIMEncoding.ETC1, payload));
+
+        var preview = TitleScreenEditor.Preview(new TitleScreenPreviewRequest(
+            _workspace.Root, archive.FileNumber, asset.EntryIndex));
+        var previewImage = PortablePng.DecodeRgba(Convert.FromBase64String(preview.PngBase64));
+        Assert.Equal("ETC1", preview.BclimFormat);
+        Assert.Equal([138, 70, 36, 255], previewImage.Rgba[..4]);
+
+        var output = Path.Combine(_workspace.OutputDirectory, "etc1-title-screen");
+        var export = TitleScreenEditor.Export(new TitleScreenExportRequest(
+            _workspace.Root, output, archive.FileNumber, IncludePng: true));
+        Assert.Equal(1, export.Pngs);
+        var png = export.Files.Single(file => file.EndsWith("background.png", StringComparison.Ordinal));
+        var exportedImage = PortablePng.DecodeRgba(File.ReadAllBytes(Path.Combine(output, png.Replace('/', Path.DirectorySeparatorChar))));
+        Assert.Equal([138, 70, 36, 255], exportedImage.Rgba[..4]);
+    }
+
+    [Fact]
     public void GeneratesAnInMemoryPreviewForAPortableTitleScreenBclim()
     {
         _workspace.WritePortableTitleScreenFixture();
@@ -410,6 +482,62 @@ public sealed class ProjectToolsTests : IDisposable
         var entryIndex = Array.FindIndex(replacedDarc.FileNameTable, entry => entry.FileName == "background.bclim");
         Assert.True(entryIndex >= 0);
         Assert.Equal(replacementRgba, BCLIMPortable.Read(ReadDarcEntry(replacedDarc, entryIndex)).GetRgbaData());
+    }
+
+    [Fact]
+    public void AppliesPortableTitleScreenPngToWorkspaceAndKeepsBackup()
+    {
+        _workspace.WritePortableTitleScreenFixture();
+        var catalog = TitleScreenEditor.GetCatalog(new TitleScreenCatalogRequest(_workspace.Root));
+        var archive = Assert.Single(catalog.Archives, entry => entry.FileNumber == 467);
+        var asset = Assert.Single(archive.Assets, entry => entry.Name == "background.bclim");
+        var originalGarc = File.ReadAllBytes(catalog.GarcPath);
+        var replacementRgba = Enumerable.Repeat(new byte[] { 0, 255, 0, 255 }, 64).SelectMany(value => value).ToArray();
+        var replacement = Path.Combine(_workspace.OutputDirectory, "workspace-replacement.png");
+        File.WriteAllBytes(replacement, PortablePng.EncodeRgba(replacementRgba, 8, 8));
+
+        var response = TitleScreenEditor.Apply(new TitleScreenApplyRequest(
+            _workspace.Root, archive.FileNumber, asset.EntryIndex, replacement));
+
+        Assert.Equal(catalog.GarcPath, response.GarcPath);
+        Assert.False(response.Compressed);
+        Assert.True(File.Exists(response.BackupFile));
+        Assert.Equal(originalGarc, File.ReadAllBytes(response.BackupFile));
+        var updatedGarc = new GARC.MemGARC(File.ReadAllBytes(catalog.GarcPath));
+        var updatedDarc = new DARC(updatedGarc.GetFile(archive.FileNumber));
+        var entryIndex = Array.FindIndex(updatedDarc.FileNameTable, entry => entry.FileName == "background.bclim");
+        Assert.True(entryIndex >= 0);
+        Assert.Equal(replacementRgba, BCLIMPortable.Read(ReadDarcEntry(updatedDarc, entryIndex)).GetRgbaData());
+    }
+
+    [Fact]
+    public void AppliesPortableTitleScreenPngToCompressedOrasWorkspace()
+    {
+        using var workspace = new SyntheticOrasWorkspace();
+        workspace.WritePortableTitleScreenFixture();
+        var catalog = TitleScreenEditor.GetCatalog(new TitleScreenCatalogRequest(workspace.Root));
+        var archive = Assert.Single(catalog.Archives, entry => entry.FileNumber == 1120);
+        var asset = Assert.Single(archive.Assets, entry => entry.Name == "background.bclim");
+        var originalGarc = File.ReadAllBytes(catalog.GarcPath);
+        var replacementRgba = Enumerable.Repeat(new byte[] { 255, 255, 0, 255 }, 64).SelectMany(value => value).ToArray();
+        var replacement = Path.Combine(workspace.OutputDirectory, "workspace-replacement-oras.png");
+        File.WriteAllBytes(replacement, PortablePng.EncodeRgba(replacementRgba, 8, 8));
+
+        var response = TitleScreenEditor.Apply(new TitleScreenApplyRequest(
+            workspace.Root, archive.FileNumber, asset.EntryIndex, replacement));
+
+        Assert.True(response.Compressed);
+        Assert.Equal(originalGarc, File.ReadAllBytes(response.BackupFile));
+        var updatedGarc = new GARC.MemGARC(File.ReadAllBytes(catalog.GarcPath));
+        var compressedArchive = updatedGarc.GetFile(archive.FileNumber);
+        Assert.Equal(0x11, compressedArchive[0]);
+        using var compressed = new MemoryStream(compressedArchive);
+        using var decompressed = new MemoryStream();
+        LZSS.Decompress(compressed, compressed.Length, decompressed);
+        var updatedDarc = new DARC(decompressed.ToArray());
+        var entryIndex = Array.FindIndex(updatedDarc.FileNameTable, entry => entry.FileName == "background.bclim");
+        Assert.True(entryIndex >= 0);
+        Assert.Equal(replacementRgba, BCLIMPortable.Read(ReadDarcEntry(updatedDarc, entryIndex)).GetRgbaData());
     }
 
     [Fact]
@@ -634,11 +762,51 @@ public sealed class ProjectToolsTests : IDisposable
         return stream.ToArray();
     }
 
+    private static byte[] CreateEtc1Block(byte red, byte green, byte blue, bool flipped = false)
+    {
+        var high = ((uint)(red & 0x0F) << 28) |
+            ((uint)(red & 0x0F) << 24) |
+            ((uint)(green & 0x0F) << 20) |
+            ((uint)(green & 0x0F) << 16) |
+            ((uint)(blue & 0x0F) << 12) |
+            ((uint)(blue & 0x0F) << 8) |
+            (flipped ? 1u : 0u);
+        var standard = new byte[8];
+        standard[0] = (byte)(high >> 24);
+        standard[1] = (byte)(high >> 16);
+        standard[2] = (byte)(high >> 8);
+        standard[3] = (byte)high;
+        // A zero modulation word selects the first modifier for every pixel.
+        return [standard[7], standard[6], standard[5], standard[4], standard[3], standard[2], standard[1], standard[0]];
+    }
+
+    private static byte[] CreateEtc1AlphaBlock()
+    {
+        var alpha = new byte[8];
+        for (var x = 0; x < 4; x++)
+        {
+            alpha[(2 * x) + 0] = 0x10; // y=0 -> 0, y=1 -> 1
+            alpha[(2 * x) + 1] = 0x32; // y=2 -> 2, y=3 -> 3
+        }
+        return alpha;
+    }
+
     private static byte[] ReadDarcEntry(DARC darc, int index)
     {
         var entry = darc.Entries[index];
         var offset = checked((int)(entry.DataOffset - darc.Header.FileDataOffset));
         return darc.Data.AsSpan(offset, checked((int)entry.DataLength)).ToArray();
+    }
+
+    private static void ReplaceGarcDarcEntry(string garcPath, int fileNumber, int entryIndex, byte[] replacement)
+    {
+        var garc = new GARC.MemGARC(File.ReadAllBytes(garcPath));
+        var darc = new DARC(garc.GetFile(fileNumber));
+        Assert.True(DARC.InsertFile(ref darc, entryIndex, replacement));
+        var files = garc.Files;
+        files[fileNumber] = DARC.SetDARC(darc);
+        garc.Files = files;
+        File.WriteAllBytes(garcPath, garc.Save());
     }
 
     private static int Align(int value, int alignment) => (value + alignment - 1) / alignment * alignment;

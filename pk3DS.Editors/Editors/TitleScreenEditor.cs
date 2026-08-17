@@ -9,7 +9,8 @@ namespace pk3DS.Editors;
 ///
 /// The portable path reads the GARC/DARC containers and exports original BCLIM payloads. When
 /// requested, it also decodes supported BCLIM formats and writes PNG previews without requiring
-/// a Windows image stack or changing the source workspace.
+/// a Windows image stack. The explicit <see cref="Apply"/> operation is the only title-screen
+/// action that updates the workspace, and it creates a backup before replacing the source GARC.
 /// </summary>
 public static class TitleScreenEditor
 {
@@ -98,8 +99,8 @@ public static class TitleScreenEditor
                         }
                         catch (Exception ex) when (ex is ArgumentException or EndOfStreamException or InvalidDataException or FormatException or OverflowException)
                         {
-                            // Keep raw BCLIM export useful when a title asset uses an unsupported
-                            // GPU format (for example ETC1) that still needs a native decoder.
+                            // Keep the raw BCLIM export useful when an asset is malformed or uses
+                            // a format that this portable reader does not cover yet.
                         }
                     }
                     exportedAssets.Add(relative);
@@ -247,45 +248,14 @@ public static class TitleScreenEditor
         var originalImage = BCLIMPortable.Read(originalBytes);
         var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height);
 
-        DARC darc;
-        try
-        {
-            darc = new DARC(archive.DarcData);
-        }
-        catch (Exception ex) when (ex is ArgumentException or EndOfStreamException or IOException or InvalidDataException)
-        {
-            throw new WorkspaceException($"No pude abrir el DARC para reemplazar la imagen: {ex.Message}");
-        }
-        if (darc.Header is null || darc.Entries is null || darc.FileNameTable is null || darc.Data is null
-            || request.AssetEntryIndex < 0 || request.AssetEntryIndex >= darc.Entries.Length
-            || darc.Entries[request.AssetEntryIndex].IsFolder)
-            throw new WorkspaceException("La entrada BCLIM seleccionada no es válida dentro del DARC.");
-        if (!DARC.InsertFile(ref darc, request.AssetEntryIndex, replacement.Data))
-            throw new WorkspaceException("No pude reemplazar el contenido BCLIM dentro del DARC.");
-
-        var replacementDarc = DARC.SetDARC(darc);
-        var storedArchive = archive.Summary.Compressed ? CompressLzss(replacementDarc) : replacementDarc;
         var output = ResolveGarcReplacementOutput(workspace, archive.Summary, request.OutputFile);
-        GARC.MemGARC garc;
-        try
-        {
-            garc = new GARC.MemGARC(File.ReadAllBytes(catalog.GarcPath));
-            if (request.FileNumber < 0 || request.FileNumber >= garc.FileCount)
-                throw new WorkspaceException($"El GARC no contiene la entrada {request.FileNumber}.");
-            var files = garc.Files;
-            files[request.FileNumber] = storedArchive;
-            garc.Files = files;
-        }
-        catch (WorkspaceException)
-        {
-            throw;
-        }
-        catch (Exception ex) when (ex is ArgumentException or EndOfStreamException or IOException or InvalidDataException or FormatException or OverflowException)
-        {
-            throw new WorkspaceException($"No pude reconstruir el GARC de pantalla de título: {ex.Message}");
-        }
-
-        var garcBytes = garc.Save();
+        var garcBytes = BuildGarcReplacement(
+            catalog.GarcPath,
+            request.FileNumber,
+            request.AssetEntryIndex,
+            archive.DarcData,
+            archive.Summary.Compressed,
+            replacement.Data);
         Directory.CreateDirectory(Directory.GetParent(output)!.FullName);
         File.WriteAllBytes(output, garcBytes);
         return new TitleScreenGarcReplaceResponse(
@@ -301,6 +271,145 @@ public static class TitleScreenEditor
             output,
             garcBytes.LongLength,
             "Copia GARC nueva generada con el DARC reemplazado; el workspace original no se modifica.");
+    }
+
+    public static TitleScreenApplyResponse Apply(TitleScreenApplyRequest request)
+    {
+        var workspace = GameWorkspace.Open(request.WorkspacePath);
+        var catalog = ReadCatalog(workspace);
+        var archive = catalog.Archives.FirstOrDefault(entry => entry.Summary.FileNumber == request.FileNumber);
+        if (archive is null)
+            throw new WorkspaceException($"No existe el archivo de pantalla de título {request.FileNumber} para {workspace.Version}.");
+        if (!archive.Summary.Valid || archive.DarcData is null)
+            throw new WorkspaceException($"No puedo modificar {archive.Summary.Game}-{archive.Summary.Language}: {archive.Summary.Error}");
+
+        var asset = archive.Summary.Assets.FirstOrDefault(entry => entry.EntryIndex == request.AssetEntryIndex);
+        if (asset is null || !archive.AssetData.TryGetValue(request.AssetEntryIndex, out var originalBytes))
+            throw new WorkspaceException($"No existe el recurso BCLIM #{request.AssetEntryIndex} dentro de {archive.Summary.Game}-{archive.Summary.Language}.");
+        var replacementPath = ResolveExistingReplacement(request.ReplacementFile);
+        var originalImage = BCLIMPortable.Read(originalBytes);
+        var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height);
+        var originalGarc = ReadSourceGarc(catalog.GarcPath);
+        var garcBytes = BuildGarcReplacement(
+            catalog.GarcPath,
+            request.FileNumber,
+            request.AssetEntryIndex,
+            archive.DarcData,
+            archive.Summary.Compressed,
+            replacement.Data);
+        var backupFile = CreateWorkspaceBackupPath(workspace.RootPath, archive.Summary, catalog.GarcPath);
+
+        try
+        {
+            Directory.CreateDirectory(Directory.GetParent(backupFile)!.FullName);
+            File.WriteAllBytes(backupFile, originalGarc);
+            WriteAtomically(catalog.GarcPath, garcBytes);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            throw new WorkspaceException($"No pude actualizar el GARC del workspace: {ex.Message}");
+        }
+
+        return new TitleScreenApplyResponse(
+            workspace.Version.ToString(),
+            archive.Summary.Game,
+            archive.Summary.Language,
+            request.FileNumber,
+            request.AssetEntryIndex,
+            asset.Name,
+            replacement.Format,
+            replacement.BclimFormat,
+            archive.Summary.Compressed,
+            catalog.GarcPath,
+            backupFile,
+            garcBytes.LongLength,
+            "GARC del workspace actualizado; se guardó una copia de seguridad antes de escribir y se conservó LZSS cuando correspondía.");
+    }
+
+    private static byte[] BuildGarcReplacement(string garcPath, int fileNumber, int assetEntryIndex,
+        byte[] darcData, bool compressed, byte[] replacementData)
+    {
+        DARC darc;
+        try
+        {
+            darc = new DARC(darcData);
+        }
+        catch (Exception ex) when (ex is ArgumentException or EndOfStreamException or IOException or InvalidDataException)
+        {
+            throw new WorkspaceException($"No pude abrir el DARC para reemplazar la imagen: {ex.Message}");
+        }
+        if (darc.Header is null || darc.Entries is null || darc.FileNameTable is null || darc.Data is null
+            || assetEntryIndex < 0 || assetEntryIndex >= darc.Entries.Length
+            || darc.Entries[assetEntryIndex].IsFolder)
+            throw new WorkspaceException("La entrada BCLIM seleccionada no es válida dentro del DARC.");
+        if (!DARC.InsertFile(ref darc, assetEntryIndex, replacementData))
+            throw new WorkspaceException("No pude reemplazar el contenido BCLIM dentro del DARC.");
+
+        var replacementDarc = DARC.SetDARC(darc);
+        var storedArchive = compressed ? CompressLzss(replacementDarc) : replacementDarc;
+        try
+        {
+            var garc = new GARC.MemGARC(File.ReadAllBytes(garcPath));
+            if (fileNumber < 0 || fileNumber >= garc.FileCount)
+                throw new WorkspaceException($"El GARC no contiene la entrada {fileNumber}.");
+            var files = garc.Files;
+            files[fileNumber] = storedArchive;
+            garc.Files = files;
+            return garc.Save();
+        }
+        catch (WorkspaceException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is ArgumentException or EndOfStreamException or IOException or InvalidDataException or FormatException or OverflowException)
+        {
+            throw new WorkspaceException($"No pude reconstruir el GARC de pantalla de título: {ex.Message}");
+        }
+    }
+
+    private static byte[] ReadSourceGarc(string path)
+    {
+        try
+        {
+            return File.ReadAllBytes(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            throw new WorkspaceException($"No pude leer el GARC original para crear la copia de seguridad: {ex.Message}");
+        }
+    }
+
+    private static string CreateWorkspaceBackupPath(string workspaceRoot, TitleScreenArchiveSummary archive, string garcPath)
+    {
+        var directory = Path.Combine(workspaceRoot, ".pk3ds-backups");
+        var baseName = $"{archive.Game}-{archive.Language}-{archive.FileNumber}-{Path.GetFileName(garcPath)}";
+        var first = Path.Combine(directory, $"{baseName}.bak");
+        if (!File.Exists(first))
+            return first;
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        return Path.Combine(directory, $"{baseName}-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{suffix}.bak");
+    }
+
+    private static void WriteAtomically(string target, byte[] data)
+    {
+        var temporary = $"{target}.pk3ds-tmp-{Guid.NewGuid():N}";
+        try
+        {
+            File.WriteAllBytes(temporary, data);
+            File.Move(temporary, target, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(temporary))
+                    File.Delete(temporary);
+            }
+            catch
+            {
+                // The replacement has already been written; a stale temp file is harmless.
+            }
+        }
     }
 
     private static CatalogReadResult ReadCatalog(GameWorkspace workspace)

@@ -227,6 +227,27 @@ public sealed record TitleScreenGarcReplaceResponse(
     long Bytes,
     string Note);
 
+public sealed record TitleScreenApplyRequest(
+    string WorkspacePath,
+    int FileNumber,
+    int AssetEntryIndex,
+    string ReplacementFile);
+
+public sealed record TitleScreenApplyResponse(
+    string GameVersion,
+    string Game,
+    string Language,
+    int FileNumber,
+    int AssetEntryIndex,
+    string AssetName,
+    string ReplacementFormat,
+    string BclimFormat,
+    bool Compressed,
+    string GarcPath,
+    string BackupFile,
+    long Bytes,
+    string Note);
+
 public sealed record TitleScreenPreviewRequest(
     string WorkspacePath,
     int FileNumber,

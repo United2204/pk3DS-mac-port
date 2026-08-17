@@ -3,10 +3,7 @@ using pk3DS.Core.CTR;
 
 namespace pk3DS.Editors;
 
-/// <summary>
-/// Read-only description of an extracted 3DS game workspace.
-/// The source workspace is never edited; operations copy only modified files to LayeredFS output.
-/// </summary>
+/// <summary>Describes an extracted 3DS game workspace and its detected components.</summary>
 public sealed record GameWorkspace(
     string RootPath,
     string RomFsPath,

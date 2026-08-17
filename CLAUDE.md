@@ -89,11 +89,12 @@ UTF-16; no hay que agregar un empaquetador hasta conocer los metadatos de varian
 
 `TitleScreenEditor` es intencionalmente headless: lee el GARC `titlescreen`, descomprime las
 entradas LZSS de OR/AS, inspecciona los DARC esperados y exporta los payloads BCLIM y PNG compatibles
-sin usar `System.Drawing`. `BCLIMPortable` cubre los formatos lineales y RGB5A1 con paleta, y
-`PortablePng` permite el roundtrip RGBA; `TitleScreenEditor.Preview` genera una vista previa PNG
-en memoria y `Replace` acepta PNG/BCLIM del mismo tamaño para escribir un DARC nuevo, mientras
-`ReplaceGarc` genera una copia completa del GARC y mantiene LZSS en OR/AS, sin modificar el
-workspace. ETC1 y la inserción persistente en el workspace quedan pendientes.
+sin usar `System.Drawing`. `BCLIMPortable` cubre los formatos lineales, RGB5A1 con paleta y la
+decodificación ETC1/ETC1A4, y `PortablePng` permite el roundtrip RGBA; `TitleScreenEditor.Preview`
+genera una vista previa PNG en memoria y `Replace` acepta PNG/BCLIM del mismo tamaño para escribir
+un DARC nuevo, mientras `ReplaceGarc` genera una copia completa del GARC y mantiene LZSS en OR/AS.
+`TitleScreenEditor.Apply` es la acción explícita que actualiza el GARC del workspace de forma atómica,
+guarda primero un backup en `.pk3ds-backups` y conserva LZSS cuando corresponde.
 
 Los GARCs de Gen. VII que pueden contener entradas LZSS (como `pickup`) deben abrirse con
 `GameConfig.GetlzGARCData`, asignar la entrada modificada y llamar a `Save()`. `GetGARCData` solo

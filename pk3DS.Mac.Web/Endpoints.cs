@@ -149,5 +149,6 @@ public static class Endpoints
         editors.MapPost("/titlescreen/export", (TitleScreenExportRequest r) => Results.Ok(TitleScreenEditor.Export(r)));
         editors.MapPost("/titlescreen/replace", (TitleScreenReplaceRequest r) => Results.Ok(TitleScreenEditor.Replace(r)));
         editors.MapPost("/titlescreen/replace-garc", (TitleScreenReplaceRequest r) => Results.Ok(TitleScreenEditor.ReplaceGarc(r)));
+        editors.MapPost("/titlescreen/apply", (TitleScreenApplyRequest r) => Results.Ok(TitleScreenEditor.Apply(r)));
     }
 }

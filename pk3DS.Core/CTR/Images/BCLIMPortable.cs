@@ -60,7 +60,20 @@ public sealed class BCLIMPortable
         if (Format == XLIMEncoding.RGB5A1 && PixelData.Length >= 4 && BitConverter.ToUInt16(PixelData, 0) == 2)
             return GetPalettePixels(expected);
         if (Format is XLIMEncoding.ETC1 or XLIMEncoding.ETC1A4)
-            throw new FormatException($"El formato BCLIM {Format} todavía no está soportado en modo portable.");
+        {
+            var rgba = ETC1Portable.Decode(PixelData, Width, Height, Format);
+            var etcPixels = new uint[expected];
+            for (uint index = 0; index < etcPixels.Length; index++)
+            {
+                var coordinate = orienter.Get(index);
+                if (coordinate.X >= orienter.Width || coordinate.Y >= orienter.Height)
+                    continue;
+                var offset = checked((int)((coordinate.X + (coordinate.Y * orienter.Width)) * 4));
+                etcPixels[index] = (uint)((rgba[offset + 3] << 24) | (rgba[offset] << 16) |
+                    (rgba[offset + 1] << 8) | rgba[offset + 2]);
+            }
+            return etcPixels;
+        }
 
         var pixels = PixelConverter.GetPixels(PixelData, Format).Take(expected).ToArray();
         if (pixels.Length != expected)
