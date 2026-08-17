@@ -93,6 +93,12 @@ function setFarcUnpackResult(message, state = 'neutral') {
   element.className = `status ${state}`;
 }
 
+function setFarcPackResult(message, state = 'neutral') {
+  const element = byId('farc-pack-result');
+  element.textContent = message;
+  element.className = `status ${state}`;
+}
+
 function setTitleScreenResult(message, state = 'neutral') {
   const element = byId('title-screen-result');
   element.textContent = message;
@@ -505,6 +511,19 @@ byId('browse-farc-unpack-output').addEventListener('click', async () => {
   }
 });
 
+byId('browse-farc-folder').addEventListener('click', async () => {
+  const button = byId('browse-farc-folder');
+  button.disabled = true;
+  try {
+    const data = await post('/api/workspace/pick-output');
+    byId('farc-folder').value = data.path;
+  } catch (error) {
+    setFarcPackResult(error.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+});
+
 byId('inspect').addEventListener('click', inspectWorkspace);
 workspace.addEventListener('input', () => {
   inspected = false;
@@ -733,6 +752,24 @@ byId('unpack-farc').addEventListener('click', async () => {
     setFarcUnpackResult(`Listo: ${data.files} archivo(s) en ${data.outputDirectory}.`, 'success');
   } catch (error) {
     setFarcUnpackResult(error.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+byId('pack-farc').addEventListener('click', async () => {
+  const button = byId('pack-farc');
+  button.disabled = true;
+  setFarcPackResult('Empaquetando el FARC…');
+  try {
+    const data = await post('/api/workspace/pack-farc', {
+      inputDirectory: byId('farc-folder').value,
+      outputFile: byId('farc-pack-output').value.trim() || null,
+      dataAlignment: Number(byId('farc-alignment').value),
+    });
+    setFarcPackResult(`Listo: ${data.files} archivo(s), ${data.bytes.toLocaleString()} bytes.`, 'success');
+  } catch (error) {
+    setFarcPackResult(error.message, 'error');
   } finally {
     button.disabled = false;
   }

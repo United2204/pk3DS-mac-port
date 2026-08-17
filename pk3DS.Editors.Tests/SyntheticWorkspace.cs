@@ -211,6 +211,22 @@ public abstract class SyntheticWorkspace : IDisposable
         return files;
     }
 
+    /// <summary>A tiny valid compressed script shared by the Gen. VI and Gen. VII OWSE fixtures.</summary>
+    protected static byte[] BuildScriptFixture()
+    {
+        const int headerSize = 0x1C;
+        var data = new byte[headerSize + 2];
+        BitConverter.GetBytes(data.Length).CopyTo(data, 0x00);
+        BitConverter.GetBytes(0x0A0AF1E0u).CopyTo(data, 0x04);
+        BitConverter.GetBytes(headerSize).CopyTo(data, 0x0C);
+        BitConverter.GetBytes(headerSize + 8).CopyTo(data, 0x10);
+        BitConverter.GetBytes(headerSize + 8).CopyTo(data, 0x14);
+        BitConverter.GetBytes(headerSize + 8).CopyTo(data, 0x18);
+        data[headerSize] = 0x30;
+        data[headerSize + 1] = 0x30;
+        return data;
+    }
+
     protected static byte[] MaisonTrainer(ushort trainerClass, params ushort[] choices)
     {
         var data = new byte[4 + (choices.Length * sizeof(ushort))];
@@ -291,7 +307,7 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
     private const int ArchiveFileCount = 271;
 
     // GARC file numbers for X/Y, from GARCReference.GARCReference_XY.
-    private const int TrDataGarc = 38, TrClassGarc = 39, TrPokeGarc = 40,
+    private const int EncDataGarc = 12, TrDataGarc = 38, TrClassGarc = 39, TrPokeGarc = 40,
         MoveGarc = 212, EggMoveGarc = 213, LevelUpGarc = 214,
         EvolutionGarc = 215, MegaEvoGarc = 216, PersonalGarc = 218, ItemGarc = 220, GameTextGarc = 72;
 
@@ -318,7 +334,9 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
             (17, "Tipo", 18),
             (20, "Clase", 6),
             (21, "Entrenador", 3),
-            (47, "Naturaleza", 25)));
+            (47, "Naturaleza", 25),
+            (72, "Zona", 32)));
+        WriteGarc(EncDataGarc, BuildOverworldFiles());
         WriteGarc(TrClassGarc, Repeat(6, _ => new byte[4]));
         WriteGarc(TrDataGarc,
         [
@@ -362,6 +380,40 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
         }
         AddCodeBytes(0x00400000, opower);
         WriteGen6CodeBinTables();
+    }
+
+    /// <summary>
+    /// Minimal X/Y encdata for the read-only OWSE fixture: file 0 is the master zone table and
+    /// each following file is a ZO mini-archive with an overworld and map script.
+    /// </summary>
+    private static byte[][] BuildOverworldFiles()
+    {
+        const int zoneCount = 2;
+        const int zoneDataSize = 0x38;
+        var master = new byte[zoneCount * zoneDataSize];
+        var files = new byte[zoneCount + 1][];
+        files[0] = master;
+
+        for (var zone = 0; zone < zoneCount; zone++)
+        {
+            BitConverter.GetBytes((ushort)zone).CopyTo(master, zone * zoneDataSize + 0x1C);
+            var zoneData = new byte[zoneDataSize];
+            BitConverter.GetBytes((ushort)zone).CopyTo(zoneData, 0x1C);
+            var encounters = new byte[0x10];
+            files[zone + 1] = Mini.PackMini(
+                [zoneData, BuildGen6EntityBlock(), BuildScriptFixture(), encounters], "ZO");
+        }
+
+        return files;
+    }
+
+    private static byte[] BuildGen6EntityBlock()
+    {
+        var script = BuildScriptFixture();
+        var data = new byte[12 + script.Length];
+        BitConverter.GetBytes(8).CopyTo(data, 0x00); // entity header length, as used by OWSE
+        script.CopyTo(data, 12);
+        return data;
     }
 
     /// <summary>
@@ -723,6 +775,8 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
         {
             var tables = Repeat(TablesPerArea, _ => DayNightEntry());
             files[AreaFileNumber(area)] = Mini.PackMini(tables, "EA");
+            files[(area * FilesPerArea) + 7] = Mini.PackMini([BuildScriptFixture()], "ZS");
+            files[(area * FilesPerArea) + 8] = Mini.PackMini([BuildScriptFixture()], "ZI");
         }
         return files;
     }

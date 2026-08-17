@@ -248,9 +248,9 @@
       <section class="panel">
         <div class="section-heading">
           <span class="section-number">9</span>
-          <div><p class="kicker">ARCHIVOS FARC</p><h2>Desempaquetar</h2></div>
+          <div><p class="kicker">ARCHIVOS FARC</p><h2>Desempaquetar o empaquetar</h2></div>
         </div>
-        <p class="section-copy">Lee el contenedor FARC heredado y conserva sus nombres UTF-16 y rutas anidadas. Esta primera integración es de solo lectura: el formato todavía no tiene un empaquetador compatible.</p>
+        <p class="section-copy">Trabaja con la variante FARC heredada que usa un índice SIR0 con nombres UTF-16 y rutas anidadas. Las variantes indexadas por hash no se modifican.</p>
         <div class="tool-block">
           <h3>Desempaquetar FARC</h3>
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="farc-input" type="text" placeholder="Archivo .farc" spellcheck="false"><button id="browse-farc-input" class="secondary" type="button">Examinar…</button></div>
@@ -259,6 +259,18 @@
           </label>
           <div class="ready-row project-action"><div><b>Genera una carpeta nueva.</b><small>El archivo original no se modifica.</small></div><button id="unpack-farc" class="primary" type="button">Desempaquetar →</button></div>
           <p id="farc-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Empaquetar FARC</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="farc-folder" type="text" placeholder="Carpeta con archivos" spellcheck="false"><button id="browse-farc-folder" class="secondary" type="button">Elegir…</button></div>
+          <label class="field project-output">Archivo de salida
+            <input id="farc-pack-output" type="text" placeholder="Opcional: nombre.farc">
+          </label>
+          <label class="field project-output">Alineación de datos
+            <select id="farc-alignment"><option value="16">0x10</option><option value="128" selected>0x80 · recomendada</option><option value="4096">0x1000</option></select>
+          </label>
+          <div class="ready-row project-action"><div><b>La carpeta de entrada queda intacta.</b><small>Genera el índice SIR0 y conserva nombres UTF-16.</small></div><button id="pack-farc" class="primary" type="button">Empaquetar →</button></div>
+          <p id="farc-pack-result" class="status neutral" role="status" aria-live="polite"></p>
         </div>
       </section>
     </main>

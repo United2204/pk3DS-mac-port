@@ -61,6 +61,17 @@ public sealed record WildEncounterTable(int MinLevel, int MaxLevel, WildEncounte
 public sealed record WildTableResponse(int FileNumber, string AreaName, int TableIndex, WildEncounterTable Day, WildEncounterTable Night, NamedEntry[] Species);
 public sealed record WildExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int FileNumber, int TableIndex, WildEncounterTable Day, WildEncounterTable Night, int? Language = null);
 
+// OWSE / scripts del mundo, Gen VI/VII (solo lectura) ------------------------
+public sealed record OverworldCatalogRequest(string WorkspacePath, int? Language = null);
+public sealed record OverworldScriptGroupSummary(string Id, string Name, int WorldIndex, string LocationName, int ScriptCount, long RawBytes);
+public sealed record OverworldCatalogResponse(string GameVersion, OverworldScriptGroupSummary[] Groups);
+public sealed record OverworldScriptEntryRequest(string WorkspacePath, string Group, int WorldIndex, int ScriptIndex, int? Language = null);
+public sealed record OverworldScriptEntryResponse(
+    string Group, int WorldIndex, int ScriptIndex, string LocationName, int RawBytes,
+    uint Magic, bool Debug, int ScriptInstructionStart, int ScriptMovementStart,
+    int FinalOffset, int AllocatedMemory, int CompressedBytes, int DecompressedBytes,
+    uint[] Instructions, string[] ParsedLines, string? ParseError, string[] RawHex);
+
 // Wild encounters, Gen VI -----------------------------------------------------
 public sealed record WildGen6CatalogRequest(string WorkspacePath, int? Language = null);
 public sealed record WildGen6AreaSummary(int FileIndex, int LocationIndex, string Name, bool HasEncounters);

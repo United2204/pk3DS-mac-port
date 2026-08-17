@@ -85,7 +85,9 @@ UTF-16 y la cabecera de datos debe quedar alineada después de toda la tabla de 
 y `UnpackSarc` usan `pk3DS.Core.CTR.SARC`, admiten archivos en la raíz y subcarpetas, codifican nombres
 UTF-8, validan rutas antes de escribirlas y permiten elegir una alineación de datos potencia de dos.
 `ProjectTools.UnpackFarc` usa el lector heredado de FARC, valida los offsets relativos y conserva los nombres
-UTF-16; no hay que agregar un empaquetador hasta conocer los metadatos de variante que acompañan al formato.
+UTF-16. `ProjectTools.PackFarc` escribe únicamente la variante SIR0 con índice de nombres UTF-16 que entiende
+ese lector, valida rutas y trabaja desde una staging; las variantes FARC indexadas por hash no deben presentarse
+como editables hasta incorporar sus metadatos específicos.
 
 `TitleScreenEditor` es intencionalmente headless: lee el GARC `titlescreen`, descomprime las
 entradas LZSS de OR/AS, inspecciona los DARC esperados y exporta los payloads BCLIM y PNG compatibles
@@ -95,6 +97,11 @@ genera una vista previa PNG en memoria y `Replace` acepta PNG/BCLIM del mismo ta
 un DARC nuevo, mientras `ReplaceGarc` genera una copia completa del GARC y mantiene LZSS en OR/AS.
 `TitleScreenEditor.Apply` es la acción explícita que actualiza el GARC del workspace de forma atómica,
 guarda primero un backup en `.pk3ds-backups` y conserva LZSS cuando corresponde.
+
+`OverworldEditor` es el primer bloque portable de OWSE: inspecciona en modo lectura las zonas `ZO` de
+Gen. VI y los mini-archivos `ZS` (scripts de zona) y `ZI` (información de zona) de `encdata` en Gen. VII,
+además de su cabecera, instrucciones descomprimidas y texto interpretado. No ofrece exportación ni
+mutación hasta confirmar con dumps reales los formatos de mapas, entidades y scripts.
 
 Los GARCs de Gen. VII que pueden contener entradas LZSS (como `pickup`) deben abrirse con
 `GameConfig.GetlzGARCData`, asignar la entrada modificada y llamar a `Save()`. `GetGARCData` solo

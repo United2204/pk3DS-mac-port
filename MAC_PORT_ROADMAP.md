@@ -40,7 +40,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 3.10. Battle Maison / Royal / Tree — Hecho
   - 3.11. Pickup Gen VII — Hecho
   - 3.12. Title Screen Gen VI — Parcial: inventario de DARC por juego/idioma, vista previa PNG de BCLIM compatibles incluyendo ETC1/ETC1A4, exportación raw/PNG, reemplazo PNG/BCLIM con salida a un DARC o copia GARC nueva y aplicación al workspace con backup; faltan otros flujos avanzados
-  - 3.13. OWSE / scripts (mapas, scripts, texto) — Pendiente
+  - 3.13. OWSE / scripts (mapas, scripts, texto) — Parcial: inspector de scripts Gen. VI `ZO` y Gen. VII `ZS`/`ZI` en modo lectura; edición de mapas, entidades y texto pendientes
 
 - **4. Editores ExeFS / CRO** — Parcial
   - 4.1. TMs / HMs — Hecho: Gen VI/VII, lectura por firma y exportación de `code.bin` a ExeFS LayeredFS
@@ -61,15 +61,15 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 5.3. Reconstrucción de ROM — Parcial: reconstrucción headless de `.3ds` desde un workspace completo, con modo recortado o padding de tarjeta; conversión a `.cia` implementada mediante `makerom` externo, pendiente validar con un dump real
   - 5.4. Creación de parches — Parcial: parche de redirección de GARCs y `.code.bin` portado; falta ensamblaje/firma CIA
   - 5.5. Edición de imágenes — Parcial: BCLIM compatibles, incluidos ETC1/ETC1A4, se decodifican, se previsualizan y exportan a PNG sin System.Drawing; PNG/BCLIM se pueden convertir y reemplazar en un DARC o copia GARC de salida, o aplicar al GARC del workspace con backup y LZSS; faltan otros formatos de edición
-  - 5.6. Herramientas GARC/DARC/SARC/FARC — Parcial: desempaquetado y empaquetado GARC, DARC de una capa y SARC portados; FARC tiene desempaquetado seguro de solo lectura y todavía no tiene empaquetador
+  - 5.6. Herramientas GARC/DARC/SARC/FARC — Parcial: desempaquetado y empaquetado GARC, DARC de una capa y SARC portados; FARC tiene desempaquetado y empaquetado para la variante SIR0 con nombres UTF-16, mientras que las variantes indexadas por hash siguen en solo lectura
 
 - **6. Verificación y QA** — Parcial
   - 6.1. Pruebas de regresión: comparar archivos generados en macOS contra Windows con el mismo dump y semilla — Pendiente
   - 6.2. Suite de tests unitarios (`pk3DS.Editors.Tests`) — Hecho: empaquetado de bytes, offsets, guardas de validación y resolución de rutas
   - 6.3. CI en GitHub Actions (macOS y Linux) — Hecho
   - 6.4. Fixtures de GARC para probar lectura/escritura sin un dump completo — Hecho: `SyntheticXyWorkspace` arma un workspace X/Y con GARCs reales, y los editores se prueban de punta a punta hasta inspeccionar el ZIP LayeredFS
-  - 6.5. Fixture de Gen. VII (`SyntheticSunMoonWorkspace`) — Hecho: cubre entrenadores, encuentros estáticos, encuentros salvajes, TMs en ExeFS, tutores en `Shop.cro`, movimientos en mini-archivo y el randomizador sobre Sol/Luna
-  - 6.6. Fixture ExeFS/CRO de Gen. VI (`SyntheticXyWorkspace`) — Hecho: firmas sintéticas para TMs/HMs, Pickup, Shiny Rate, O-Powers, tutores y tiendas, más `DllBattle.cro` para Type Chart y `DllField.cro` para Starter/Gift, con comparación de las salidas
+  - 6.5. Fixture de Gen. VII (`SyntheticSunMoonWorkspace`) — Hecho: cubre entrenadores, encuentros estáticos, encuentros salvajes, scripts OWSE `ZS`/`ZI`, TMs en ExeFS, tutores en `Shop.cro`, movimientos en mini-archivo y el randomizador sobre Sol/Luna
+  - 6.6. Fixture ExeFS/CRO de Gen. VI (`SyntheticXyWorkspace`) — Hecho: firmas sintéticas para TMs/HMs, Pickup, Shiny Rate, O-Powers, tutores y tiendas, `encdata`/`ZO` para OWSE, más `DllBattle.cro` para Type Chart y `DllField.cro` para Starter/Gift, con comparación de las salidas
   - 6.7. Fixture de encuentros salvajes Gen. VII (`Area7`) — Hecho: tablas día/noche en mini-archivo `EA`, con zonedata y worlddata sintéticos
   - 6.8. Los tests comparan la salida contra el dump de origen, no sólo la presencia del archivo en el ZIP — Hecho: también cubre el destino ExeFS de `code.bin`
 
@@ -92,7 +92,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 | Static Encounters | Gen 7 | `encounterstatic` | Parcial: regalos, encuentros fijos e intercambios; edición de especie, forma, nivel, objeto y campos avanzados disponibles en el formato |
 | Pickup | Gen 7 | `pickup` | Portado: tabla de objetos y probabilidades por banda de nivel, con exportación LayeredFS |
 | Title Screen | Gen 6 | `titlescreen` | Parcial: inventario DARC/BCLIM, vista previa ETC1/ETC1A4, exportación raw/PNG, reemplazo a DARC/copia GARC y aplicación persistente con backup |
-| OWSE / scripts | Gen 6/7 | mapas, scripts y texto | Pendiente; módulo de desarrollo |
+| OWSE / scripts | Gen 6/7 | mapas, scripts y texto | Parcial: lectura de scripts Gen. VI `ZO` y Gen. VII `ZS`/`ZI`; edición de mapas/entidades y texto pendientes |
 
 ## Módulos ExeFS y CRO
 
@@ -114,4 +114,4 @@ Estos módulos necesitan un workspace extraído completo (RomFS + ExeFS y, cuand
 
 ## Herramientas de proyecto
 
-También forman parte de pk3DS Windows: extracción de CXI/3DS, empaquetado de RomFS/ExeFS, reconstrucción de ROM, creación de parches, edición de imágenes y herramientas GARC/DARC/SARC/FARC. En Mac ya se puede extraer, empaquetar y reconstruir `.3ds` desde **Herramientas de proyecto**, y solicitar la conversión a `.cia` mediante un `makerom` externo; esa conversión aún requiere validación con un dump real. La pantalla también crea el contenido del parche de redirección (`.code.bin` y árbol `a0/`), desempaqueta/empaqueta GARCs, DARCs de una capa y SARC, desempaqueta FARC en modo de solo lectura e inventaría, previsualiza y exporta los recursos DARC/BCLIM de Title Screen —incluidos ETC1/ETC1A4—; además convierte PNG/BCLIM, genera un DARC o copia GARC nueva con un recurso reemplazado y puede actualizar el GARC del workspace con backup y LZSS. Siguen pendientes el empaquetador FARC y otros contenedores.
+También forman parte de pk3DS Windows: extracción de CXI/3DS, empaquetado de RomFS/ExeFS, reconstrucción de ROM, creación de parches, edición de imágenes y herramientas GARC/DARC/SARC/FARC. En Mac ya se puede extraer, empaquetar y reconstruir `.3ds` desde **Herramientas de proyecto**, y solicitar la conversión a `.cia` mediante un `makerom` externo; esa conversión aún requiere validación con un dump real. La pantalla también crea el contenido del parche de redirección (`.code.bin` y árbol `a0/`), desempaqueta/empaqueta GARCs, DARCs de una capa, SARC y la variante FARC SIR0 con nombres UTF-16, e inventaría, previsualiza y exporta los recursos DARC/BCLIM de Title Screen —incluidos ETC1/ETC1A4—; además convierte PNG/BCLIM, genera un DARC o copia GARC nueva con un recurso reemplazado y puede actualizar el GARC del workspace con backup y LZSS. Siguen pendientes las variantes FARC indexadas por hash y otros contenedores.

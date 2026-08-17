@@ -142,6 +142,18 @@ public sealed record PackSarcResponse(
     int DataAlignment,
     string Note);
 
+public sealed record PackFarcRequest(
+    string InputDirectory,
+    string? OutputFile = null,
+    int DataAlignment = 0x80);
+
+public sealed record PackFarcResponse(
+    string OutputFile,
+    int Files,
+    long Bytes,
+    int DataAlignment,
+    string Note);
+
 public sealed record UnpackFarcRequest(
     string InputFile,
     string? OutputDirectory = null);

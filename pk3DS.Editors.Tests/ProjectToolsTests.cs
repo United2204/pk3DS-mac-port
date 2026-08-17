@@ -277,6 +277,37 @@ public sealed class ProjectToolsTests : IDisposable
     }
 
     [Fact]
+    public void PacksNamedFarcWithUtf16PathsAndRoundTripsWithoutChangingTheSource()
+    {
+        var input = Path.Combine(_workspace.OutputDirectory, "farc-input");
+        var nested = Path.Combine(input, "folder", "subfolder");
+        Directory.CreateDirectory(nested);
+        File.WriteAllBytes(Path.Combine(input, "raíz.bin"), [31, 32, 33]);
+        File.WriteAllBytes(Path.Combine(nested, "á.bin"), [34, 35, 36, 37]);
+        var sourceHash = SHA256.HashData(File.ReadAllBytes(Path.Combine(nested, "á.bin")));
+        var packed = Path.Combine(_workspace.OutputDirectory, "packed.farc");
+        var unpacked = Path.Combine(_workspace.OutputDirectory, "packed-farc-unpacked");
+
+        var packResponse = ProjectTools.PackFarc(new PackFarcRequest(input, packed, DataAlignment: 0x80));
+        var unpackResponse = ProjectTools.UnpackFarc(new UnpackFarcRequest(packed, unpacked));
+
+        Assert.Equal(2, packResponse.Files);
+        Assert.Equal(2, unpackResponse.Files);
+        Assert.Equal(0x80, packResponse.DataAlignment);
+        Assert.True(File.Exists(packed));
+        Assert.Equal(sourceHash, SHA256.HashData(File.ReadAllBytes(Path.Combine(nested, "á.bin"))));
+        Assert.Equal([31, 32, 33], File.ReadAllBytes(Path.Combine(unpacked, "raíz.bin")));
+        Assert.Equal([34, 35, 36, 37], File.ReadAllBytes(Path.Combine(unpacked, "folder", "subfolder", "á.bin")));
+
+        using var farc = new FARC(packed);
+        Assert.True(farc.SigMatches);
+        Assert.Equal(2u, farc.FileCount);
+        Assert.Equal(0u, farc.DataOffset % 0x80u);
+        Assert.Contains(farc.Files, file => farc.GetFileName(file) == "raíz.bin");
+        Assert.Contains(farc.Files, file => farc.GetFileName(file) == Path.Combine("folder", "subfolder", "á.bin"));
+    }
+
+    [Fact]
     public void DecodesPortableBclimAndEncodesRgbaPng()
     {
         var pixelData = Enumerable.Repeat(new byte[] { 255, 0, 0, 255 }, 64).SelectMany(value => value).ToArray();

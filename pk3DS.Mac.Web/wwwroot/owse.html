@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>OWSE / Scripts · pk3DS Mac</title>
+    <link rel="stylesheet" href="app.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a>
+      <a class="header-link" href="index.html">Randomizador</a>
+    </header>
+    <main class="editor-main">
+      <div class="intro editor-intro">
+        <p class="eyebrow">INSPECTOR ROMFS · GEN. VI/VII</p>
+        <h1>OWSE / Scripts del mundo</h1>
+        <p>Revisa los scripts <code>ZO</code> de Gen. VI y <code>ZS</code>/<code>ZI</code> de Gen. VII dentro de <code>encdata</code>. Esta etapa es deliberadamente de solo lectura: no modifica el dump ni exporta cambios.</p>
+      </div>
+      <section class="panel">
+        <div class="path-input">
+          <span aria-hidden="true">⌁</span>
+          <input id="workspace" placeholder="Carpeta completa del juego o RomFS" spellcheck="false" autocomplete="off">
+          <button id="browse" class="secondary" type="button">Examinar…</button>
+          <button id="load" type="button">Cargar</button>
+        </div>
+        <p id="status" class="status neutral" role="status">Disponible para X/Y, OR/AS, Sol/Luna y Ultrasol/Ultraluna.</p>
+      </section>
+      <section id="editor" class="panel">
+        <div class="text-toolbar owse-toolbar">
+          <label class="field">Grupo<select id="group" disabled></select></label>
+          <label class="field">Índice del script<input id="script-index" type="number" min="0" value="0" disabled></label>
+          <button id="open" class="secondary-button" type="button" disabled>Leer script</button>
+        </div>
+        <p class="muted">El grupo se corresponde con el bloque de mundo y conserva los bytes originales para poder diagnosticar scripts incompletos o experimentales.</p>
+        <p id="result" class="status neutral"></p>
+        <div class="owse-panels">
+          <section class="owse-card">
+            <h2>Cabecera</h2>
+            <div id="metadata" class="owse-meta"><span class="muted">Todavía no hay un script abierto.</span></div>
+          </section>
+          <section class="owse-card">
+            <h2>Instrucciones descomprimidas</h2>
+            <pre id="instructions" class="owse-code">—</pre>
+          </section>
+          <section class="owse-card">
+            <h2>Interpretación</h2>
+            <pre id="parsed" class="owse-code">—</pre>
+          </section>
+          <section class="owse-card owse-card-wide">
+            <h2>Bytes crudos</h2>
+            <pre id="raw" class="owse-code">—</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+    <footer>pk3DS Mac trabaja de forma local.</footer>
+    <script src="owse.js"></script>
+  </body>
+</html>

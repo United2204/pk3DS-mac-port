@@ -39,7 +39,7 @@ También admite DARC con la estructura habitual de una sola capa de carpetas. Lo
 
 También admite SARC con rutas raíz y anidadas, nombres UTF-8 y alineación de datos configurable. El desempaquetado rechaza rutas inseguras y el empaquetado trabaja sobre una copia de la carpeta de entrada.
 
-También puede desempaquetar FARC conservando sus nombres UTF-16 y rutas anidadas. El flujo FARC es de solo lectura porque todavía no hay un empaquetador compatible con sus metadatos heredados.
+También puede desempaquetar y empaquetar la variante FARC heredada con índice SIR0, nombres UTF-16 y rutas anidadas. Las variantes FARC indexadas por hash siguen siendo de solo lectura.
 
 En **Herramientas de proyecto** también podés analizar la pantalla de título de X/Y y OR/AS. La herramienta lista los DARCs por juego e idioma, muestra una vista previa PNG de los BCLIM compatibles —incluidos ETC1 y ETC1A4—, exporta los recursos originales junto con un `manifest.json` y genera PNG para formatos compatibles; también acepta un PNG o BCLIM del mismo tamaño, genera un DARC nuevo o una copia completa del GARC con el recurso reemplazado y puede aplicar el cambio directamente al workspace, siempre creando primero un backup en `.pk3ds-backups` y conservando la compresión LZSS de OR/AS. Las salidas de revisión no modifican el workspace.
 
@@ -58,11 +58,11 @@ El Title ID se obtiene automáticamente desde `exheader.bin`, por lo que la carp
 - acciones globales de Move Stats: tipos, categorías físico/especial y modo Metronome;
 - evoluciones: conservar, randomizar resultados con filtros de BST/EXP/tipo, eliminar intercambios o modo de evolución por nivel.
 
-Además hay editores individuales para texto de juego e historia, movimientos por nivel, movimientos huevo, evoluciones, datos personales, movimientos, objetos, TMs/HMs (Gen. VI y VII), Move Tutors (Gen. VI y VII), Poké Mart (Gen. VI y VII), O-Powers (Gen. VI), Shiny Rate (Gen. VI y VII), Type Chart (Gen. VI y VII), Starter Pokémon (Gen. VI), Gift Pokémon (Gen. VI), Pickup (Gen. VI y VII), Battle Maison / Tree / Royal, megaevoluciones, encuentros salvajes (Gen. VI y VII), encuentros estáticos (Gen. VI y VII) y entrenadores (Gen. VI y VII).
+Además hay editores individuales para texto de juego e historia, movimientos por nivel, movimientos huevo, evoluciones, datos personales, movimientos, objetos, TMs/HMs (Gen. VI y VII), Move Tutors (Gen. VI y VII), Poké Mart (Gen. VI y VII), O-Powers (Gen. VI), Shiny Rate (Gen. VI y VII), Type Chart (Gen. VI y VII), Starter Pokémon (Gen. VI), Gift Pokémon (Gen. VI), Pickup (Gen. VI y VII), Battle Maison / Tree / Royal, megaevoluciones, encuentros salvajes (Gen. VI y VII), encuentros estáticos (Gen. VI y VII) y entrenadores (Gen. VI y VII). La página **OWSE / Scripts** permite inspeccionar en modo lectura los scripts `ZO` de Gen. VI y `ZS`/`ZI` de Gen. VII, mostrando cabecera, bytes crudos, instrucciones descomprimidas y diagnóstico del parser.
 
 ## Estado del port
 
-Sigue pendiente el parche RO/RSA del sistema necesario para que algunos CRO modificados funcionen directamente en consola. La extracción de CXI/3DS, el empaquetado standalone de RomFS/ExeFS, la reconstrucción `.3ds`, la conversión `.cia` mediante `makerom`, la generación del contenido de parches de redirección, las herramientas GARC/DARC/SARC y el desempaquetado FARC, además del inventario, exportación raw/PNG y reemplazo a DARC de salida de Title Screen, ya están disponibles desde Herramientas de proyecto. Los exports ya recalculan el CRR cuando el dump lo incluye. El inventario de paridad y su estado real está en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
+Sigue pendiente el parche RO/RSA del sistema necesario para que algunos CRO modificados funcionen directamente en consola. La extracción de CXI/3DS, el empaquetado standalone de RomFS/ExeFS, la reconstrucción `.3ds`, la conversión `.cia` mediante `makerom`, la generación del contenido de parches de redirección, las herramientas GARC/DARC/SARC/FARC para la variante SIR0 con nombres, además del inventario, exportación raw/PNG y reemplazo a DARC de salida de Title Screen, ya están disponibles desde Herramientas de proyecto. El inspector OWSE Gen. VI/VII es de solo lectura hasta validar los formatos de escritura con dumps reales. Los exports ya recalculan el CRR cuando el dump lo incluye. El inventario de paridad y su estado real está en [MAC_PORT_ROADMAP.md](MAC_PORT_ROADMAP.md).
 
 ## Building
 

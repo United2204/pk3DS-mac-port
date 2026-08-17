@@ -707,12 +707,77 @@ public static class ProjectTools
             return new UnpackFarcResponse(
                 output,
                 files,
-                "FARC desempaquetado en modo de solo lectura; el formato heredado todavía no tiene empaquetador.");
+                "FARC desempaquetado conservando nombres UTF-16 y rutas anidadas; la variante SIR0 con nombres también se puede volver a empaquetar.");
         }
         finally
         {
             if (Directory.Exists(staging))
                 Directory.Delete(staging, recursive: true);
+        }
+    }
+
+    public static PackFarcResponse PackFarc(PackFarcRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.InputDirectory))
+            throw new WorkspaceException("Elegí una carpeta FARC para empaquetar.");
+        var input = Path.GetFullPath(request.InputDirectory.Trim());
+        if (!Directory.Exists(input))
+            throw new WorkspaceException("La carpeta de entrada no existe.");
+        if (!Directory.EnumerateFiles(input, "*", SearchOption.AllDirectories).Any())
+            throw new WorkspaceException("La carpeta de entrada no contiene archivos.");
+        if (request.DataAlignment < 4 || request.DataAlignment > 0x1000
+            || (request.DataAlignment & (request.DataAlignment - 1)) != 0)
+        {
+            throw new WorkspaceException("La alineación FARC debe ser una potencia de dos entre 4 y 4096 bytes.");
+        }
+
+        var output = string.IsNullOrWhiteSpace(request.OutputFile)
+            ? Path.Combine(Directory.GetParent(input)!.FullName, $"{new DirectoryInfo(input).Name}.farc")
+            : Path.GetFullPath(request.OutputFile.Trim());
+        if (Directory.Exists(output))
+            throw new WorkspaceException("La salida indicada es una carpeta; elegí un archivo .farc.");
+        if (File.Exists(output))
+            throw new WorkspaceException("El archivo de salida ya existe. Elegí otro nombre para no sobrescribirlo.");
+        if (IsInside(output, input))
+            throw new WorkspaceException("El FARC de salida no puede guardarse dentro de la carpeta de entrada.");
+
+        var parent = Directory.GetParent(output)!.FullName;
+        Directory.CreateDirectory(parent);
+        var stagingDirectory = Path.Combine(Path.GetTempPath(), $"pk3ds-farc-pack-{Guid.NewGuid():N}");
+        var stagedInput = Path.Combine(stagingDirectory, "input");
+        var stagedOutput = Path.Combine(stagingDirectory, "output.farc");
+        Directory.CreateDirectory(stagingDirectory);
+        try
+        {
+            CopyDirectory(input, stagedInput);
+            int files;
+            lock (GarcToolLock)
+            {
+                try
+                {
+                    files = FARC.Pack(stagedInput, stagedOutput, request.DataAlignment);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                    or InvalidDataException or OverflowException)
+                {
+                    throw new WorkspaceException($"No pude empaquetar el FARC: {ex.Message}");
+                }
+            }
+
+            if (!File.Exists(stagedOutput))
+                throw new WorkspaceException("El empaquetador no generó el archivo FARC.");
+            File.Move(stagedOutput, output);
+            return new PackFarcResponse(
+                output,
+                files,
+                new FileInfo(output).Length,
+                request.DataAlignment,
+                "FARC empaquetado con índice SIR0 y nombres UTF-16 desde una copia de la carpeta de entrada; el origen no se modifica.");
+        }
+        finally
+        {
+            if (Directory.Exists(stagingDirectory))
+                Directory.Delete(stagingDirectory, recursive: true);
         }
     }
 

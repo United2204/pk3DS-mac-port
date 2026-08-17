@@ -38,6 +38,8 @@ public static class Endpoints
             Results.Ok(ProjectTools.PackSarc(request)));
         workspace.MapPost("/unpack-farc", (UnpackFarcRequest request) =>
             Results.Ok(ProjectTools.UnpackFarc(request)));
+        workspace.MapPost("/pack-farc", (PackFarcRequest request) =>
+            Results.Ok(ProjectTools.PackFarc(request)));
         workspace.MapPost("/pick", (IFolderPicker picker) =>
             Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona la carpeta extraída del juego"))));
         workspace.MapPost("/pick-output", (IFolderPicker picker) =>
@@ -89,6 +91,9 @@ public static class Endpoints
         editors.MapPost("/wild/gen6/areas", (WildGen6CatalogRequest r) => Results.Ok(WildGen6Editor.GetCatalog(r)));
         editors.MapPost("/wild/gen6/table", (WildGen6TableRequest r) => Results.Ok(WildGen6Editor.GetTable(r)));
         editors.MapPost("/wild/gen6/export", (WildGen6ExportRequest r) => Results.Ok(WildGen6Editor.Export(r)));
+
+        editors.MapPost("/owse/catalog", (OverworldCatalogRequest r) => Results.Ok(OverworldEditor.GetCatalog(r)));
+        editors.MapPost("/owse/entry", (OverworldScriptEntryRequest r) => Results.Ok(OverworldEditor.GetEntry(r)));
 
         editors.MapPost("/static/catalog", (StaticCatalogRequest r) => Results.Ok(StaticEditor.GetCatalog(r)));
         editors.MapPost("/static/entry", (StaticEntryRequest r) => Results.Ok(StaticEditor.GetEntry(r)));
