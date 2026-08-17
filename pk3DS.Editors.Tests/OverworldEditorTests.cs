@@ -90,10 +90,15 @@ public sealed class OverworldEditorTests : IDisposable
         Assert.Equal(0x38, response.Zone.ZoneDataBytes);
         Assert.Equal(4, response.Zone.ZoneFileCount);
         Assert.Equal(1, response.Zone.ParentMap);
-        Assert.Equal(0, response.Zone.FurnitureCount);
-        Assert.Equal(0, response.Zone.NpcCount);
-        Assert.Equal(0, response.Zone.WarpCount);
-        Assert.Equal(0, response.Zone.TriggerCount);
-        Assert.Equal(0, response.Zone.UnknownEntityCount);
+        Assert.Equal(11, response.Zone.MapArea);
+        Assert.Equal(21, response.Zone.MapMatrix);
+        Assert.Equal(31, response.Zone.TextFile);
+        Assert.Equal(41, response.Zone.ScriptFile);
+        Assert.Equal(3, response.Zone.Weather);
+        Assert.Equal(1, response.Zone.FurnitureCount);
+        Assert.Equal(1, response.Zone.NpcCount);
+        Assert.Equal(1, response.Zone.WarpCount);
+        Assert.Equal(1, response.Zone.TriggerCount);
+        Assert.Equal(1, response.Zone.UnknownEntityCount);
     }
 }

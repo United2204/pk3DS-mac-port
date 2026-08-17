@@ -398,7 +398,14 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
         {
             BitConverter.GetBytes((ushort)zone).CopyTo(master, zone * zoneDataSize + 0x1C);
             var zoneData = new byte[zoneDataSize];
+            zoneData[0] = 2; // map type
+            zoneData[1] = 1; // map movement
+            BitConverter.GetBytes((ushort)(10 + zone)).CopyTo(zoneData, 0x02);
+            BitConverter.GetBytes((ushort)(20 + zone)).CopyTo(zoneData, 0x04);
+            BitConverter.GetBytes((ushort)(30 + zone)).CopyTo(zoneData, 0x06);
+            BitConverter.GetBytes((ushort)(40 + zone)).CopyTo(zoneData, 0x18);
             BitConverter.GetBytes((ushort)zone).CopyTo(zoneData, 0x1C);
+            BitConverter.GetBytes((ushort)3).CopyTo(zoneData, 0x1E); // weather
             var encounters = new byte[0x10];
             files[zone + 1] = Mini.PackMini(
                 [zoneData, BuildGen6EntityBlock(), BuildScriptFixture(), encounters], "ZO");
@@ -410,9 +417,22 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
     private static byte[] BuildGen6EntityBlock()
     {
         var script = BuildScriptFixture();
-        var data = new byte[12 + script.Length];
-        BitConverter.GetBytes(8).CopyTo(data, 0x00); // entity header length, as used by OWSE
-        script.CopyTo(data, 12);
+        const int furnitureCount = 1;
+        const int npcCount = 1;
+        const int warpCount = 1;
+        const int triggerCount = 1;
+        const int unknownCount = 1;
+        const int entityBytes =
+            (furnitureCount * 0x14) + (npcCount * 0x30) + (warpCount * 0x18)
+            + (triggerCount * 0x18) + (unknownCount * 0x18);
+        var data = new byte[12 + entityBytes + script.Length];
+        BitConverter.GetBytes(8 + entityBytes).CopyTo(data, 0x00); // entity header length
+        data[4] = furnitureCount;
+        data[5] = npcCount;
+        data[6] = warpCount;
+        data[7] = triggerCount;
+        BitConverter.GetBytes(unknownCount).CopyTo(data, 0x08);
+        script.CopyTo(data, 12 + entityBytes);
         return data;
     }
 
