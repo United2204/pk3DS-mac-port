@@ -22,7 +22,7 @@ public static class ShinyRateEditor
         var always = ReadAlwaysShiny(code);
         return new ShinyRateTableResponse(config.Version.ToString(), rerolls, always,
             Instructions.Select(instruction => instruction.Value).ToArray(),
-            "El code.bin debe estar descomprimido. La salida es un parche ExeFS para Luma; los valores no incluidos se redondean al siguiente valor soportado.");
+            "La aplicación normaliza automáticamente code.bin BLZ. La salida es un parche ExeFS para Luma; los valores no incluidos se redondean al siguiente valor soportado.");
     }
 
     public static ExportResult Export(ShinyRateExportRequest request) =>
@@ -106,13 +106,7 @@ public static class ShinyRateEditor
     private static int Find(byte[] data, byte[] pattern) => data.AsSpan().IndexOf(pattern);
 
     private static byte[] ReadCode(GameWorkspace workspace)
-    {
-        if (workspace.ExeFsPath is null)
-            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar Shiny Rate.");
-        var path = Directory.EnumerateFiles(workspace.ExeFsPath)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase));
-        return path is null ? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.") : File.ReadAllBytes(path);
-    }
+        => EditorSession.ReadCode(workspace);
 
     private static void EnsureSupported(GameConfig config)
     {

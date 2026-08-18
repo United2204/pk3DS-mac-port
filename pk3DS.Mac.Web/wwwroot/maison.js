@@ -140,7 +140,7 @@ async function loadCatalog() {
     game = await post('/api/workspace/inspect', { workspacePath: $('workspace').value });
     if (!['XY', 'ORAS', 'SM', 'USUM'].includes(game.gameVersion))
       throw new Error('Maison está disponible solo para X/Y, OR/AS y juegos de Gen. VII completos.');
-    catalog = await post('/api/editors/maison/catalog', { workspacePath: $('workspace').value, variant: $('variant').value, language: 1 });
+    catalog = await post('/api/editors/maison/catalog', { workspacePath: $('workspace').value, variant: $('variant').value, language: 2 });
     populateCatalog();
     $('editor').classList.remove('is-disabled');
     setStatus(`${game.gameVersion} cargado: variante ${catalog.variant}.`, 'success');
@@ -159,7 +159,7 @@ async function openRecord() {
     const kind = $('kind').value;
     const index = Number($(kind === 'trainer' ? 'trainer' : 'pokemon').value);
     const endpoint = kind === 'trainer' ? '/api/editors/maison/trainer' : '/api/editors/maison/pokemon';
-    const data = await post(endpoint, { workspacePath: $('workspace').value, variant: $('variant').value, [`${kind}Index`]: index, language: 1 });
+    const data = await post(endpoint, { workspacePath: $('workspace').value, variant: $('variant').value, [`${kind}Index`]: index, language: 2 });
     current = { kind, index, entry: structuredClone(data.entry) };
     original = structuredClone(data.entry);
     kind === 'trainer' ? renderTrainer(current.entry) : renderPokemon(current.entry);
@@ -195,7 +195,7 @@ $('export').onclick = async () => {
       variant: $('variant').value,
       [`${current.kind}Index`]: current.index,
       entry: readCurrent(),
-      language: 1,
+      language: 2,
     };
     const endpoint = current.kind === 'trainer' ? '/api/editors/maison/trainer/export' : '/api/editors/maison/pokemon/export';
     const result = await post(endpoint, payload);

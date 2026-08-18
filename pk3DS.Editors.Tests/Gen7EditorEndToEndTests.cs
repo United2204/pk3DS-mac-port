@@ -236,6 +236,20 @@ public class Gen7EditorEndToEndTests : IDisposable
     }
 
     [Fact]
+    public void AdvancedStaticEncounterFieldsCanBeExported()
+    {
+        var result = StaticEditor.Export(new StaticExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId,
+            "static", EntryIndex: 0,
+            Entry: new StaticEntry(
+                Species: 3, Form: 1, Level: 40, HeldItem: 1, Gender: 2, Shiny: true,
+                ShinyLock: true, Map: 42, Aura: 2, Allies: 2, Ally1: 3, Ally2: 4,
+                RelearnMoves: [1, 2, 3, 4], IVs: [31, 30, 29, 28, 27, 26], EVs: [1, 2, 3, 4, 5, 6])));
+
+        AssertArchiveDiffersFromSource(result);
+    }
+
+    [Fact]
     public void AStaticEntryWithAnImpossibleLevelIsRejected() =>
         Assert.Throws<WorkspaceException>(() => StaticEditor.Export(new StaticExportRequest(
             _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId,

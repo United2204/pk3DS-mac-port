@@ -40,7 +40,7 @@ public class PathSafetyTests
 public class LanguageTests
 {
     [Fact]
-    public void MissingLanguageFallsBackToEnglish() => Assert.Equal(1, EditorSession.NormalizeLanguage(null));
+    public void MissingLanguageFallsBackToEnglish() => Assert.Equal(2, EditorSession.NormalizeLanguage(null));
 
     [Theory]
     [InlineData(0)]

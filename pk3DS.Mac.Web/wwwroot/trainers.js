@@ -179,7 +179,7 @@ async function load() {
   try {
     const [inspect, cat] = await Promise.all([
       post('/api/workspace/inspect', { workspacePath: $('workspace').value }),
-      post('/api/editors/trainers/catalog', { workspacePath: $('workspace').value, language: 1 }),
+      post('/api/editors/trainers/catalog', { workspacePath: $('workspace').value, language: 2 }),
     ]);
     game = inspect;
     catalog = cat;
@@ -200,7 +200,7 @@ async function load() {
 async function open() {
   try {
     const response = await post('/api/editors/trainers/entry', {
-      workspacePath: $('workspace').value, trainerIndex: +$('trainer').value, language: 1,
+      workspacePath: $('workspace').value, trainerIndex: +$('trainer').value, language: 2,
     });
     const entry = response.entry;
     data = {
@@ -261,7 +261,7 @@ $('export').onclick = async () => {
     const { trainerIndex, ...entry } = data;
     const result = await post('/api/editors/trainers/export', {
       workspacePath: $('workspace').value, outputDirectory: out.path, titleId: game.titleId,
-      trainerIndex, entry, language: 1,
+      trainerIndex, entry, language: 2,
     });
     original = structuredClone(data);
     msg('result', `Listo. ZIP: ${result.zipPath}`, 'success');

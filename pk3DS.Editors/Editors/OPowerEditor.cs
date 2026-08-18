@@ -17,7 +17,7 @@ public static class OPowerEditor
         var code = ReadCode(workspace);
         var entries = Read(code, FindOffset(code));
         return new OPowerTableResponse(config.Version.ToString(), entries,
-            "El code.bin debe estar descomprimido. Se editan costos, etapas, duración y eficacia; los campos internos restantes se conservan.");
+            "La aplicación normaliza automáticamente code.bin BLZ. Se editan costos, etapas, duración y eficacia; los campos internos restantes se conservan.");
     }
 
     public static ExportResult Export(OPowerExportRequest request) =>
@@ -87,13 +87,7 @@ public static class OPowerEditor
     }
 
     private static byte[] ReadCode(GameWorkspace workspace)
-    {
-        if (workspace.ExeFsPath is null)
-            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar O-Powers.");
-        var path = Directory.EnumerateFiles(workspace.ExeFsPath)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase));
-        return path is null ? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.") : File.ReadAllBytes(path);
-    }
+        => EditorSession.ReadCode(workspace);
 
     private static void EnsureSupported(GameConfig config)
     {

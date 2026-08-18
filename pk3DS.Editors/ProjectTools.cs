@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 using pk3DS.Core;
@@ -19,6 +20,7 @@ public static class ProjectTools
     // two simultaneous web requests from interleaving their metadata or temporary output.
     private static readonly object RomFsBuildLock = new();
     private static readonly object GarcToolLock = new();
+    private static readonly object CiaBuildLock = new();
 
     public static BuildFileSystemsResponse BuildFileSystems(BuildFileSystemsRequest request)
     {
@@ -126,6 +128,11 @@ public static class ProjectTools
                 throw new WorkspaceException($"No pude extraer el archivo: {ex.Message}");
             }
 
+            // An empty destination is safe to reuse, but Move cannot replace an
+            // existing directory. Remove only the directory we already verified
+            // is empty, immediately before promoting the completed staging tree.
+            if (Directory.Exists(output))
+                Directory.Delete(output);
             Directory.Move(staging, output);
             var files = Directory.EnumerateFiles(output, "*", SearchOption.AllDirectories)
                 .Select(path => Path.GetRelativePath(output, path).Replace(Path.DirectorySeparatorChar, '/'))
@@ -216,6 +223,15 @@ public static class ProjectTools
 
     public static RebuildCiaResponse RebuildCia(RebuildCiaRequest request)
     {
+        // The staging flow is synchronous and publishes a single user-selected output file.
+        // Serialising CIA builds prevents two rapid clicks from racing past the existence check
+        // and turning the second File.Move into an unrelated generic 500 error.
+        lock (CiaBuildLock)
+            return RebuildCiaCore(request);
+    }
+
+    private static RebuildCiaResponse RebuildCiaCore(RebuildCiaRequest request)
+    {
         var workspace = GameWorkspace.Open(request.WorkspacePath);
         var outputFile = ResolveCiaOutputFile(workspace, request.OutputFile);
         var makerom = ResolveMakeromPath(workspace, request.MakeromPath);
@@ -231,19 +247,28 @@ public static class ProjectTools
                 request.SerialText));
 
             var stagedCia = Path.Combine(stagingDirectory, "rebuilt.cia");
-            RunMakerom(makerom, stagedThreeDs, stagedCia);
+            var ciaRsf = Path.Combine(stagingDirectory, "decrypted-cia.rsf");
+            File.WriteAllText(ciaRsf, "Option:\n  EnableCrypt: false\n");
+            RunMakerom(makerom, stagedThreeDs, stagedCia, ciaRsf);
             if (!File.Exists(stagedCia))
                 throw new WorkspaceException("makerom terminó sin generar el archivo CIA.");
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputFile)!);
-            File.Move(stagedCia, outputFile);
+            try
+            {
+                File.Move(stagedCia, outputFile);
+            }
+            catch (IOException) when (File.Exists(outputFile))
+            {
+                throw new WorkspaceException("El archivo CIA de salida ya existe. Elegí otro nombre para no sobrescribirlo.");
+            }
             return new RebuildCiaResponse(
                 workspace.Version.ToString(),
                 outputFile,
                 new FileInfo(outputFile).Length,
                 request.Trimmed,
                 makerom,
-                "CIA generado mediante makerom a partir de una ROM reconstruida; el workspace original no se modifica.");
+                "CIA desencriptado generado mediante makerom ignorando las firmas retail del contenido reconstruido; el workspace original no se modifica.");
         }
         finally
         {
@@ -819,8 +844,10 @@ public static class ProjectTools
         var output = string.IsNullOrWhiteSpace(requested)
             ? Path.Combine(Path.GetDirectoryName(input)!, $"{Path.GetFileNameWithoutExtension(input)}-extracted")
             : Path.GetFullPath(requested.Trim());
-        if (File.Exists(output) || Directory.Exists(output))
-            throw new WorkspaceException("La carpeta de extracción ya existe. Elegí una carpeta nueva para evitar mezclar archivos.");
+        if (File.Exists(output))
+            throw new WorkspaceException("La ruta de extracción ya existe como archivo. Elegí una carpeta nueva.");
+        if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any())
+            throw new WorkspaceException("La carpeta de extracción ya existe y no está vacía. Elegí una carpeta nueva o vacía.");
         return output;
     }
 
@@ -844,6 +871,8 @@ public static class ProjectTools
         var output = string.IsNullOrWhiteSpace(requested)
             ? Path.Combine(workspace.RootPath, "newROM.cia")
             : Path.GetFullPath(requested.Trim());
+        if (!output.EndsWith(".cia", StringComparison.OrdinalIgnoreCase))
+            output += ".cia";
         if (Directory.Exists(output))
             throw new WorkspaceException("La salida indicada es una carpeta; elegí un archivo .cia.");
         if (File.Exists(output))
@@ -858,23 +887,33 @@ public static class ProjectTools
 
     private static string ResolveMakeromPath(GameWorkspace workspace, string? requested)
     {
-        var candidates = new[]
+        var bundledArchitecture = RuntimeInformation.ProcessArchitecture switch
         {
+            Architecture.Arm64 => "macos-arm64",
+            Architecture.X64 => "macos-x64",
+            _ => null,
+        };
+        string[] bundled = bundledArchitecture is null
+            ? []
+            : new[] { Path.Combine(AppContext.BaseDirectory, "tools", bundledArchitecture, "makerom") };
+        string?[] candidates =
+        [
             requested,
             Environment.GetEnvironmentVariable("PK3DS_MAKEROM"),
+            .. bundled,
             Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "makerom.exe" : "makerom"),
             Path.Combine(workspace.RootPath, OperatingSystem.IsWindows() ? "makerom.exe" : "makerom"),
-        };
+        ];
         var makerom = candidates
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => Path.GetFullPath(path!.Trim()))
             .FirstOrDefault(File.Exists);
         if (makerom is null)
-            throw new WorkspaceException("No encuentro makerom. Indicá la ruta al ejecutable makerom o colocá uno junto a la aplicación.");
+            throw new WorkspaceException("No encuentro makerom compatible. La aplicación busca primero su herramienta incluida; si falta, indicá la ruta al ejecutable o colocá uno junto a la aplicación.");
         return makerom;
     }
 
-    private static void RunMakerom(string makerom, string inputThreeDs, string outputCia)
+    private static void RunMakerom(string makerom, string inputThreeDs, string outputCia, string ciaRsf)
     {
         using var process = new Process
         {
@@ -889,6 +928,12 @@ public static class ProjectTools
         };
         process.StartInfo.ArgumentList.Add("-f");
         process.StartInfo.ArgumentList.Add("cia");
+        // The workspace comes from a retail dump and the rebuilt NCCH is intentionally
+        // unsigned after its contents are edited. makerom must package it without trying
+        // to validate those retail signatures; this does not alter the source workspace.
+        process.StartInfo.ArgumentList.Add("-ignoresign");
+        process.StartInfo.ArgumentList.Add("-rsf");
+        process.StartInfo.ArgumentList.Add(ciaRsf);
         process.StartInfo.ArgumentList.Add("-ccitocia");
         process.StartInfo.ArgumentList.Add(inputThreeDs);
         process.StartInfo.ArgumentList.Add("-o");
@@ -953,7 +998,7 @@ public static class ProjectTools
 
     private static List<RedirectFile> ResolveRedirectFiles(GameWorkspace workspace, RedirectPatchRequest request)
     {
-        var language = request.Language ?? 1;
+        var language = request.Language ?? EditorSession.DefaultLanguage;
         if (language is < 0 or > 11)
             throw new WorkspaceException("El idioma debe estar entre 0 y 11.");
 

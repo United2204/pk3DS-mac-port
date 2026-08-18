@@ -15,7 +15,7 @@
       <div class="intro editor-intro">
         <p class="eyebrow">INSPECTOR ROMFS · GEN. VI/VII</p>
         <h1>OWSE / Scripts del mundo</h1>
-        <p>Revisa los scripts <code>ZO</code> de Gen. VI y <code>ZS</code>/<code>ZI</code> de Gen. VII dentro de <code>encdata</code>. Esta etapa es deliberadamente de solo lectura: no modifica el dump ni exporta cambios.</p>
+        <p>Revisa los scripts <code>ZO</code> de Gen. VI y <code>ZS</code>/<code>ZI</code> de Gen. VII dentro de <code>encdata</code>. Podés editar instrucciones de script en ambas generaciones, entidades y propiedades de movimiento en Gen. VI, y consultar o exportar las posiciones <code>EP</code>, <code>EM</code> principal, <code>EB</code>, <code>ES</code>, <code>EA</code> tipo 5 y <code>ET</code> tipo 7 confirmadas de Gen. VII junto al inventario estructural <code>ED</code>. El dump original nunca se modifica.</p>
       </div>
       <section class="panel">
         <div class="path-input">
@@ -34,6 +34,98 @@
         </div>
         <p class="muted">El grupo se corresponde con el bloque de mundo y conserva los bytes originales para poder diagnosticar scripts incompletos o experimentales.</p>
         <p id="result" class="status neutral"></p>
+        <div id="script-fields" class="owse-script-fields is-hidden">
+          <div class="ready-row">
+            <div>
+              <h3>Instrucciones del script</h3>
+              <p class="muted">Una instrucción hexadecimal por línea. La cantidad y la frontera script/movimientos deben permanecer iguales.</p>
+            </div>
+            <button id="export-script" class="secondary-button" type="button" disabled>Exportar script →</button>
+          </div>
+          <textarea id="script-instructions" rows="8" spellcheck="false" aria-label="Instrucciones del script"></textarea>
+          <p id="script-result" class="status neutral"></p>
+        </div>
+        <div id="gen7-zone-fields" class="owse-zone-fields is-hidden">
+          <div class="ready-row">
+            <div>
+              <h3>Metadatos de zona Gen. VII</h3>
+              <p class="muted">Edita el mapa padre de la zona. Los demás bytes de <code>zonedata</code> se conservan.</p>
+            </div>
+            <button id="export-zone7" class="secondary-button" type="button" disabled>Exportar zona →</button>
+          </div>
+          <label>Mapa padre<input id="gen7-parent-map" type="number" min="0" value="0" disabled></label>
+          <p id="gen7-zone-result" class="status neutral"></p>
+        </div>
+        <div id="gen7-entity-fields" class="owse-zone-fields is-hidden">
+          <div class="ready-row">
+            <div>
+              <h3>Posiciones EP, EM, EB, ES, EA y ET Gen. VII</h3>
+              <p class="muted">Las posiciones se leen automáticamente al abrir la zona. Podés volver a leerlas cuando quieras. Solo se editan los vectores X/Y/Z confirmados de EP, del EM principal, del EB tipo 2, del ES tipo 4, del EA tipo 5 y del ET tipo 7; los demás campos de <code>ED</code> se conservan.</p>
+            </div>
+            <div class="owse-actions">
+              <button id="load-gen7-entities" class="secondary-button" type="button" onclick="loadGen7Entities()" disabled>Leer posiciones</button>
+              <button id="export-gen7-entities" class="secondary-button" type="button" onclick="exportGen7Entities()" disabled>Exportar posiciones →</button>
+            </div>
+          </div>
+          <div id="gen7-entity-summary" class="owse-meta"><span class="muted">Todavía no hay posiciones EP/EM/EB/ES/EA/ET abiertas.</span></div>
+          <p class="muted">El inventario ED también muestra el tamaño de cada subentrada y sus cabeceras <code>count</code>/<code>kind</code> cuando están presentes. Es información de diagnóstico; solo los vectores de las tablas confirmadas se pueden editar.</p>
+          <div id="gen7-entity-table" class="owse-entities">
+            <h3>Posiciones EP</h3>
+            <div id="gen7-ep-table"></div>
+            <h3>Posiciones EM principales</h3>
+            <p class="muted">El segundo esquema EM puede variar entre zonas y permanece sin edición.</p>
+            <div id="gen7-em-table"></div>
+            <h3>Posiciones EB primarias</h3>
+            <p class="muted">Solo se editan los registros EB tipo 2 con stride confirmado. Los datos posteriores a cada registro se conservan.</p>
+            <div id="gen7-eb-table"></div>
+            <h3>Posiciones ES primarias</h3>
+            <p class="muted">Solo se editan los registros ES tipo 4 que completan el stride confirmado. Las variantes cortas permanecen en diagnóstico.</p>
+            <div id="gen7-es-table"></div>
+            <h3>Posiciones EA tipo 5</h3>
+            <p class="muted">Solo se editan los registros EA tipo 5. La variante EA tipo 6 permanece en diagnóstico porque combina referencias y subregistros.</p>
+            <div id="gen7-ea-table"></div>
+            <h3>Posiciones ET tipo 7</h3>
+            <p class="muted">Solo se editan los registros ET tipo 7 con stride confirmado. La variante ET tipo 9 permanece en diagnóstico.</p>
+            <div id="gen7-et-table"></div>
+          </div>
+          <p id="gen7-entity-result" class="status neutral"></p>
+        </div>
+        <section id="gen6-editor" class="owse-card owse-card-wide is-hidden">
+          <div class="ready-row">
+            <div>
+              <h2>Entidades de zona Gen. VI</h2>
+              <p class="muted">Edita posiciones, destinos y referencias sin cambiar la cantidad de registros ni tocar bytes no interpretados.</p>
+            </div>
+            <div class="owse-actions">
+              <button id="load-zone" class="secondary-button" type="button">Abrir zona editable</button>
+              <button id="export-zone" class="primary" type="button" disabled>Exportar parche →</button>
+            </div>
+          </div>
+          <div id="map-fields" class="owse-map-fields is-hidden">
+            <div class="ready-row">
+              <div>
+                <h3>Propiedades de movimiento del mapa</h3>
+                <p class="muted">Edita una celda de la grilla GR por vez. La matriz MM se muestra como diagnóstico y sus bytes no interpretados se conservan.</p>
+              </div>
+              <div class="owse-actions">
+                <button id="load-map" class="secondary-button" type="button" disabled>Leer mapa</button>
+                <button id="export-map" class="secondary-button" type="button" disabled>Exportar mapa →</button>
+              </div>
+            </div>
+            <div id="map-summary" class="owse-meta"><span class="muted">Todavía no hay un mapa abierto.</span></div>
+            <div class="owse-map-cell">
+              <label>Celda X<input id="map-x" type="number" min="0" value="0" disabled></label>
+              <label>Celda Y<input id="map-y" type="number" min="0" value="0" disabled></label>
+              <label>Propiedad uint32<input id="map-value" type="text" value="0x00000000" spellcheck="false" disabled></label>
+              <button id="apply-map-cell" class="secondary-button" type="button" disabled>Aplicar celda</button>
+            </div>
+            <pre id="map-matrix" class="owse-code">—</pre>
+            <p id="map-result" class="status neutral"></p>
+          </div>
+          <div id="zone-fields" class="owse-zone-fields"><span class="muted">Seleccioná una zona Gen. VI para editar sus metadatos.</span></div>
+          <div id="entity-fields" class="owse-entities"><span class="muted">Seleccioná una zona Gen. VI para editarla.</span></div>
+          <p id="entity-result" class="status neutral"></p>
+        </section>
         <div class="owse-panels">
           <section class="owse-card">
             <h2>Cabecera</h2>
@@ -59,6 +151,6 @@
       </section>
     </main>
     <footer>pk3DS Mac trabaja de forma local.</footer>
-    <script src="owse.js"></script>
+  <script src="owse.js?v=20"></script>
   </body>
 </html>

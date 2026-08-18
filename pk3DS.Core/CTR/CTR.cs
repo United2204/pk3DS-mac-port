@@ -91,7 +91,10 @@ public static class CTRUtil
         NCCH.Header.Flags[4] = 1; // Content Platform: 1 = CTR;
         NCCH.Header.Flags[5] = 0x3; // Content Type Bitflags: 1=Data, 2=Executable, 4=SysUpdate, 8=Manual, 0x10=Trial;
         NCCH.Header.Flags[6] = 0; // MEDIA_UNIT_SIZE = 0x200*Math.Pow(2, Content.header.Flags[6]);
-        NCCH.Header.Flags[7] = 1; // FixedCrypto = 1, NoMountRomfs = 2; NoCrypto=4;
+        // The rebuilt workspace contains plain ExeFS/RomFS data. Mark the NCCH as
+        // decrypted so CIA consumers (including Azahar) do not see a contradictory
+        // combination of an unencrypted TMD and an encrypted NCCH header.
+        NCCH.Header.Flags[7] = 1 | 4; // FixedCrypto = 1, NoMountRomfs = 2; NoCrypto = 4;
         NCCH.Header.LogoOffset = (uint)(Len / MEDIA_UNIT_SIZE);
         NCCH.Header.LogoSize = (uint)(NCCH.logo.Length / MEDIA_UNIT_SIZE);
         Len += (uint)NCCH.logo.Length;
@@ -207,11 +210,16 @@ public static class CTRUtil
             OutFileStream.Write(NCSD.Data, 0, NCSD.Data.Length);
             UpdateTB(TB_Progress, "Writing NCCH...");
             OutFileStream.Write(NCSD.NCCH_Array[0].Header.Data, 0, NCSD.NCCH_Array[0].Header.Data.Length); //Write NCCH header
-            //AES time.
-            byte[] key = new byte[0x10]; //Fixed-Crypto key is all zero.
+            // The rebuilt ROM is marked NoCrypto because the workspace contains
+            // plain ExeFS/RomFS data. Keep the legacy fixed-crypto writer available
+            // for callers that explicitly build an encrypted NCCH.
+            bool noCrypto = (NCSD.NCCH_Array[0].Header.Flags[7] & 4) != 0;
+            byte[] key = new byte[0x10]; // Fixed-Crypto key is all zero.
             for (int i = 0; i < 3; i++)
             {
-                var aesctr = new AesCtr(key, NCSD.NCCH_Array[0].Header.ProgramId, (ulong)(i + 1) << 56); //CTR is ProgramID, section id<<88
+                var aesctr = noCrypto
+                    ? null
+                    : new AesCtr(key, NCSD.NCCH_Array[0].Header.ProgramId, (ulong)(i + 1) << 56); // CTR is ProgramID, section id<<88
                 switch (i)
                 {
                     case 0: //Exheader + AccessDesc
@@ -220,14 +228,20 @@ public static class CTRUtil
                         byte[] outEncExheader = new byte[NCSD.NCCH_Array[0].Exheader.Data.Length + NCSD.NCCH_Array[0].Exheader.AccessDescriptor.Length];
                         Array.Copy(NCSD.NCCH_Array[0].Exheader.Data, inEncExheader, NCSD.NCCH_Array[0].Exheader.Data.Length);
                         Array.Copy(NCSD.NCCH_Array[0].Exheader.AccessDescriptor, 0, inEncExheader, NCSD.NCCH_Array[0].Exheader.Data.Length, NCSD.NCCH_Array[0].Exheader.AccessDescriptor.Length);
-                        aesctr.TransformBlock(inEncExheader, 0, inEncExheader.Length, outEncExheader, 0);
+                        if (aesctr is null)
+                            Array.Copy(inEncExheader, outEncExheader, inEncExheader.Length);
+                        else
+                            aesctr.TransformBlock(inEncExheader, 0, inEncExheader.Length, outEncExheader, 0);
                         OutFileStream.Write(outEncExheader, 0, outEncExheader.Length); // Write Exheader
                         break;
                     case 1: //Exefs
                         UpdateTB(TB_Progress, "Writing Exefs...");
                         OutFileStream.Seek(0x4000 + (NCSD.NCCH_Array[0].Header.ExefsOffset * MEDIA_UNIT_SIZE), SeekOrigin.Begin);
                         byte[] OutExefs = new byte[NCSD.NCCH_Array[0].ExeFS.Data.Length];
-                        aesctr.TransformBlock(NCSD.NCCH_Array[0].ExeFS.Data, 0, NCSD.NCCH_Array[0].ExeFS.Data.Length, OutExefs, 0);
+                        if (aesctr is null)
+                            Array.Copy(NCSD.NCCH_Array[0].ExeFS.Data, OutExefs, OutExefs.Length);
+                        else
+                            aesctr.TransformBlock(NCSD.NCCH_Array[0].ExeFS.Data, 0, NCSD.NCCH_Array[0].ExeFS.Data.Length, OutExefs, 0);
                         OutFileStream.Write(OutExefs, 0, OutExefs.Length);
                         break;
                     case 2: //Romfs
@@ -235,7 +249,7 @@ public static class CTRUtil
                         OutFileStream.Seek(0x4000 + (NCSD.NCCH_Array[0].Header.RomfsOffset * MEDIA_UNIT_SIZE), SeekOrigin.Begin);
                         using (var InFileStream = new FileStream(NCSD.NCCH_Array[0].RomFS.FileName, FileMode.Open, FileAccess.Read))
                         {
-                            uint BUFFER_SIZE;
+                                uint BUFFER_SIZE;
                             ulong RomfsLen = NCSD.NCCH_Array[0].Header.RomfsSize * MEDIA_UNIT_SIZE;
                             PB_Show.Invoke(() =>
                             {
@@ -250,7 +264,10 @@ public static class CTRUtil
                                 byte[] buf = new byte[BUFFER_SIZE];
                                 byte[] outbuf = new byte[BUFFER_SIZE];
                                 InFileStream.ReadExactly(buf, 0, (int)BUFFER_SIZE);
-                                aesctr.TransformBlock(buf, 0, (int)BUFFER_SIZE, outbuf, 0);
+                                if (aesctr is null)
+                                    Array.Copy(buf, outbuf, buf.Length);
+                                else
+                                    aesctr.TransformBlock(buf, 0, (int)BUFFER_SIZE, outbuf, 0);
                                 OutFileStream.Write(outbuf, 0, (int)BUFFER_SIZE);
                                 PB_Show.Invoke(PB_Show.PerformStep);
                             }

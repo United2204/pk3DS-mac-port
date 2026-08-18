@@ -15,7 +15,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 - **1. Fundación de la app web** — Hecho
   - 1.1. Servidor local ASP.NET (`pk3DS.Mac.Web`) — Hecho
   - 1.2. Detección automática de juego y Title ID desde `exheader.bin` — Hecho
-  - 1.3. Interfaz multi-página (randomizador + editores dedicados por módulo) — Hecho
+  - 1.3. Shell React con React Router, navegación por RomFS/ExeFS/CRO/Salida y puente de compatibilidad para editores existentes — Hecho (migración de formularios en curso)
   - 1.4. Exportación a ZIP con árbol LayeredFS (`romfs` y `exefs`) — Hecho
   - 1.5. Separación en librería agnóstica de plataforma (`pk3DS.Editors`) + host — Hecho
   - 1.6. Andamiaje común de exportación (`EditorSession`) reusado por todos los editores — Hecho
@@ -32,7 +32,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 3.2. Mega Evolutions — Hecho
   - 3.3. Wild Encounters Gen VI/VII (`encdata`) — Hecho
   - 3.4. Trainers Gen VI/VII: datos, equipo y nombres (`trdata`, `trpoke`, `gametext`) — Hecho
-  - 3.5. Static Encounters Gen VII (regalos, fijos, intercambios) — Parcial (faltan campos avanzados del formato)
+  - 3.5. Static Encounters Gen VII (regalos, fijos, intercambios) — Hecho: especies, forma, nivel, objetos, género, habilidad, naturaleza, shiny, mapa, aliados SOS, movimientos relearn, IVs/EVs y datos de OT/intercambios con exportación LayeredFS
   - 3.6. Personal Stats — editor individual por especie — Hecho
   - 3.7. Evolutions — editor individual por especie — Hecho
   - 3.8. Move Stats — editor individual por movimiento — Hecho
@@ -40,7 +40,7 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 3.10. Battle Maison / Royal / Tree — Hecho
   - 3.11. Pickup Gen VII — Hecho
   - 3.12. Title Screen Gen VI — Parcial: inventario de DARC por juego/idioma, vista previa PNG de BCLIM compatibles incluyendo ETC1/ETC1A4, exportación raw/PNG, reemplazo PNG/BCLIM con salida a un DARC o copia GARC nueva y aplicación al workspace con backup; faltan otros flujos avanzados
-  - 3.13. OWSE / scripts (mapas, scripts, texto) — Parcial: inspector de scripts Gen. VI `ZO` y Gen. VII `ZS`/`ZI` en modo lectura, con metadatos de `zonedata` y conteos de entidades Gen. VI; edición de mapas, entidades y texto pendientes
+  - 3.13. OWSE / scripts (mapas, scripts, texto) — Parcial: inspector de scripts Gen. VI `ZO` y Gen. VII `ZS`/`ZI`; Gen. VI permite editar metadatos, entidades de zona, propiedades de movimiento `uint32` de `mapGR` e instrucciones `uint32` de scripts, y Gen. VII permite editar/exportar el mapa padre de `zonedata`, inventariar `ED` hasta sus subentradas y cabeceras `count`/`kind`, editar/exportar posiciones `EP`, `EM` principal, `EB` tipo 2, `ES` tipo 4, `EA` tipo 5 y `ET` tipo 7 confirmadas e instrucciones manteniendo la cantidad y preservando bytes desconocidos; faltan edición de mapas 3D/texto de alto nivel, el esquema EM tipo 3, las variantes ES cortas, EA tipo 6, ET tipo 9 y los demás campos de entidades Gen. VII
 
 - **4. Editores ExeFS / CRO** — Parcial
   - 4.1. TMs / HMs — Hecho: Gen VI/VII, lectura por firma y exportación de `code.bin` a ExeFS LayeredFS
@@ -58,13 +58,13 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 - **5. Herramientas de proyecto** — Parcial
   - 5.1. Extracción de CXI/3DS — Parcial: extracción headless desde la web a un workspace nuevo, con selector nativo de archivos
   - 5.2. Empaquetado de RomFS/ExeFS — Parcial: la web construye `romfs.bin` y/o `exefs.bin` desde un workspace extraído, con validación de rutas y sin tocar el origen
-  - 5.3. Reconstrucción de ROM — Parcial: reconstrucción headless de `.3ds` desde un workspace completo, con modo recortado o padding de tarjeta; conversión a `.cia` implementada mediante `makerom` externo, pendiente validar con un dump real
+  - 5.3. Reconstrucción de ROM — Parcial: reconstrucción headless de `.3ds` y conversión a `.cia` mediante `makerom` macOS arm64 incluido ejecutadas correctamente contra dumps reales de X y ORAS; falta validar instalación y arranque. Los editores también fueron probados hasta la salida LayeredFS; ver `REAL_DUMP_VALIDATION.md`
   - 5.4. Creación de parches — Parcial: parche de redirección de GARCs y `.code.bin` portado; falta ensamblaje/firma CIA
   - 5.5. Edición de imágenes — Parcial: BCLIM compatibles, incluidos ETC1/ETC1A4, se decodifican, se previsualizan y exportan a PNG sin System.Drawing; PNG/BCLIM se pueden convertir y reemplazar en un DARC o copia GARC de salida, o aplicar al GARC del workspace con backup y LZSS; faltan otros formatos de edición
   - 5.6. Herramientas GARC/DARC/SARC/FARC — Parcial: desempaquetado y empaquetado GARC, DARC de una capa y SARC portados; FARC tiene desempaquetado y empaquetado para la variante SIR0 con nombres UTF-16 y validación de rutas, mientras que las variantes indexadas por hash siguen en solo lectura
 
 - **6. Verificación y QA** — Parcial
-  - 6.1. Pruebas de regresión: comparar archivos generados en macOS contra Windows con el mismo dump y semilla — Pendiente
+  - 6.1. Pruebas de regresión: comparar archivos generados en macOS contra Windows con el mismo dump y semilla — Parcial: lectura y exportación round-trip verificadas contra dumps reales de X y ORAS, incluyendo lectura OWSE Gen. VI; falta comparación byte a byte con Windows y arranque en consola (ver `REAL_DUMP_VALIDATION.md`)
   - 6.2. Suite de tests unitarios (`pk3DS.Editors.Tests`) — Hecho: empaquetado de bytes, offsets, guardas de validación y resolución de rutas
   - 6.3. CI en GitHub Actions (macOS y Linux) — Hecho
   - 6.4. Fixtures de GARC para probar lectura/escritura sin un dump completo — Hecho: `SyntheticXyWorkspace` arma un workspace X/Y con GARCs reales, y los editores se prueban de punta a punta hasta inspeccionar el ZIP LayeredFS
@@ -89,10 +89,10 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 | Battle Maison / Royal / Tree | Gen 6/7 | `maisontr*`, `maisonpk*` | Portado: variantes normal/super o Tree/Royal, edición de entrenadores y Pokémon, exportación LayeredFS |
 | Item Stats | Gen 6/7 | `item` | Portado: editor individual y exportación LayeredFS |
 | Move Stats | Gen 6/7 | `move` | Portado: acciones globales y editor individual |
-| Static Encounters | Gen 7 | `encounterstatic` | Parcial: regalos, encuentros fijos e intercambios; edición de especie, forma, nivel, objeto y campos avanzados disponibles en el formato |
+| Static Encounters | Gen 7 | `encounterstatic` | Portado: regalos, encuentros fijos e intercambios; campos comunes y avanzados del formato, con exportación LayeredFS |
 | Pickup | Gen 7 | `pickup` | Portado: tabla de objetos y probabilidades por banda de nivel, con exportación LayeredFS |
 | Title Screen | Gen 6 | `titlescreen` | Parcial: inventario DARC/BCLIM, vista previa ETC1/ETC1A4, exportación raw/PNG, reemplazo a DARC/copia GARC y aplicación persistente con backup |
-| OWSE / scripts | Gen 6/7 | mapas, scripts y texto | Parcial: lectura de scripts Gen. VI `ZO` y Gen. VII `ZS`/`ZI`, metadatos de zona y conteos de entidades Gen. VI; edición de mapas/entidades y texto pendientes |
+| OWSE / scripts | Gen 6/7 | mapas, scripts y texto | Parcial: lectura de `ZO` y `ZS`/`ZI`; edición/exportación Gen. VI de metadatos, entidades (muebles, NPC, warps y triggers), grilla de propiedades `mapGR` e instrucciones `uint32`, más edición/exportación Gen. VII del mapa padre de `zonedata`, inventario estructural `ED` hasta sus cabeceras `count`/`kind`, posiciones `EP`, `EM` principal, `EB` tipo 2, `ES` tipo 4, `EA` tipo 5 y `ET` tipo 7 confirmadas e instrucciones `uint32`; faltan mapas 3D/texto de alto nivel, el esquema EM tipo 3, las variantes ES cortas, EA tipo 6, ET tipo 9 y los demás campos editables de entidades Gen. VII |
 
 ## Módulos ExeFS y CRO
 
@@ -114,4 +114,4 @@ Estos módulos necesitan un workspace extraído completo (RomFS + ExeFS y, cuand
 
 ## Herramientas de proyecto
 
-También forman parte de pk3DS Windows: extracción de CXI/3DS, empaquetado de RomFS/ExeFS, reconstrucción de ROM, creación de parches, edición de imágenes y herramientas GARC/DARC/SARC/FARC. En Mac ya se puede extraer, empaquetar y reconstruir `.3ds` desde **Herramientas de proyecto**, y solicitar la conversión a `.cia` mediante un `makerom` externo; esa conversión aún requiere validación con un dump real. La pantalla también crea el contenido del parche de redirección (`.code.bin` y árbol `a0/`), desempaqueta/empaqueta GARCs, DARCs de una capa, SARC y la variante FARC SIR0 con nombres UTF-16, e inventaría, previsualiza y exporta los recursos DARC/BCLIM de Title Screen —incluidos ETC1/ETC1A4—; además convierte PNG/BCLIM, genera un DARC o copia GARC nueva con un recurso reemplazado y puede actualizar el GARC del workspace con backup y LZSS. Siguen pendientes las variantes FARC indexadas por hash y otros contenedores.
+También forman parte de pk3DS Windows: extracción de CXI/3DS, empaquetado de RomFS/ExeFS, reconstrucción de ROM, creación de parches, edición de imágenes y herramientas GARC/DARC/SARC/FARC. En Mac ya se puede extraer, empaquetar y reconstruir `.3ds` desde **Herramientas de proyecto**, y solicitar la conversión a `.cia` mediante el `makerom` macOS arm64 incluido; ambas operaciones fueron ejecutadas con dumps reales de X y ORAS, aunque aún falta validar instalación y arranque. La pantalla también crea el contenido del parche de redirección (`.code.bin` y árbol `a0/`), desempaqueta/empaqueta GARCs, DARCs de una capa, SARC y la variante FARC SIR0 con nombres UTF-16, e inventaría, previsualiza y exporta los recursos DARC/BCLIM de Title Screen —incluidos ETC1/ETC1A4—; además convierte PNG/BCLIM, genera un DARC o copia GARC nueva con un recurso reemplazado y puede actualizar el GARC del workspace con backup y LZSS. Siguen pendientes las variantes FARC indexadas por hash y otros contenedores.

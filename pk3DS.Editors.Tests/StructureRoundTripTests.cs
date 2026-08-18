@@ -111,6 +111,11 @@ public class Gen7EncounterLayoutTests
             Form = 2,
             Level = 60,
             HeldItem = 1,
+            Gender = 2,
+            Shiny = true,
+            ShinyLock = true,
+            Map = 42,
+            Allies = 2,
         };
 
         var reloaded = new EncounterStatic7(encounter.Data);
@@ -119,6 +124,11 @@ public class Gen7EncounterLayoutTests
         Assert.Equal(2, reloaded.Form);
         Assert.Equal(60, reloaded.Level);
         Assert.Equal(1, reloaded.HeldItem);
+        Assert.Equal(2, reloaded.Gender);
+        Assert.True(reloaded.Shiny);
+        Assert.True(reloaded.ShinyLock);
+        Assert.Equal(42, reloaded.Map);
+        Assert.Equal(2, reloaded.Allies);
     }
 
     [Fact]
@@ -140,6 +150,13 @@ public class Gen7EncounterLayoutTests
             Species = 132,
             Level = 5,
             HeldItem = 0,
+            TID = 1234,
+            SID = 5678,
+            OT_Gender = 1,
+            OT_Intensity = 2,
+            OT_Memory = 3,
+            OT_TextVar = 4,
+            OT_Feeling = 5,
         };
 
         var reloaded = new EncounterTrade7(trade.Data);
@@ -147,6 +164,13 @@ public class Gen7EncounterLayoutTests
         Assert.Equal(132, reloaded.Species);
         Assert.Equal(5, reloaded.Level);
         Assert.Equal(0, reloaded.HeldItem);
+        Assert.Equal(1234, reloaded.TID);
+        Assert.Equal(5678, reloaded.SID);
+        Assert.Equal(1, reloaded.OT_Gender);
+        Assert.Equal(2, reloaded.OT_Intensity);
+        Assert.Equal(3, reloaded.OT_Memory);
+        Assert.Equal(4, reloaded.OT_TextVar);
+        Assert.Equal(5, reloaded.OT_Feeling);
     }
 
     [Theory]

@@ -30,7 +30,7 @@ async function load() {
 }
 async function open() {
   try {
-    table = await post('/api/editors/shiny-rate/table', { workspacePath: $('workspace').value, language: 1 });
+    table = await post('/api/editors/shiny-rate/table', { workspacePath: $('workspace').value, language: 2 });
     original = structuredClone(table);
     render();
   } catch (error) { $('result').textContent = error.message; }
@@ -45,7 +45,7 @@ $('everything-shiny').onchange = ui;
 $('export').onclick = async () => {
   try {
     const output = await post('/api/workspace/pick-output');
-    const result = await post('/api/editors/shiny-rate/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, rerolls: +$('rerolls').value, everythingShiny: $('everything-shiny').checked, language: 1 });
+    const result = await post('/api/editors/shiny-rate/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, rerolls: +$('rerolls').value, everythingShiny: $('everything-shiny').checked, language: 2 });
     table.rerolls = +$('rerolls').value;
     table.everythingShiny = $('everything-shiny').checked;
     original = structuredClone(table);

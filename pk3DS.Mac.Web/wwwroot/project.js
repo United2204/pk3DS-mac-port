@@ -1,6 +1,7 @@
 const byId = (id) => document.getElementById(id);
 const workspace = byId('workspace');
 let inspected = false;
+let inspectedData = null;
 let titleScreenCatalog = null;
 let titleScreenPreviewRequest = 0;
 
@@ -239,11 +240,16 @@ function renderTitleScreenCatalog(data) {
 }
 
 function updateBuildState() {
+  const hasExeFs = Boolean(inspectedData?.exeFsPath);
+  const hasExheader = Boolean(inspectedData?.exheaderPath);
+  const exefsControl = byId('exefs');
+  exefsControl.disabled = inspected && !hasExeFs;
+  if (exefsControl.disabled) exefsControl.checked = false;
   const canBuild = inspected && (byId('romfs').checked || byId('exefs').checked);
-  byId('build').disabled = !canBuild;
-  byId('rebuild').disabled = !inspected;
-  byId('rebuild-cia').disabled = !inspected;
-  byId('create-patch').disabled = !inspected;
+  byId('build-action').disabled = !canBuild;
+  byId('rebuild-action').disabled = !inspected || !hasExeFs || !hasExheader;
+  byId('rebuild-cia-action').disabled = !inspected || !hasExeFs || !hasExheader;
+  byId('create-patch').disabled = !inspected || !hasExeFs;
   byId('inspect-title-screen').disabled = !inspected;
   byId('export-title-screen').disabled = !titleScreenCatalog || titleScreenCatalog.archives.some((archive) => !archive.valid);
   const archiveSelect = byId('title-screen-archive');
@@ -264,9 +270,10 @@ function updateBuildState() {
 }
 
 async function inspectWorkspace() {
-  const button = byId('inspect');
+  const button = byId('inspect-action');
   button.disabled = true;
   inspected = false;
+  inspectedData = null;
   titleScreenCatalog = null;
   byId('title-screen-catalog').hidden = true;
   byId('title-screen-summary').textContent = 'Cargá un workspace para analizarlo.';
@@ -277,6 +284,8 @@ async function inspectWorkspace() {
   try {
     const data = await post('/api/workspace/inspect', { workspacePath: workspace.value });
     inspected = true;
+    inspectedData = data;
+    setCiaResult('', 'neutral');
     const exefs = data.exeFsPath ? ' ExeFS detectado.' : ' No hay ExeFS detectado.';
     setStatus(`Listo: ${data.gameVersion}.${exefs}`, 'success');
     setResult('Podés construir una copia binaria desde este workspace.');
@@ -524,7 +533,7 @@ byId('browse-farc-folder').addEventListener('click', async () => {
   }
 });
 
-byId('inspect').addEventListener('click', inspectWorkspace);
+byId('inspect-action').addEventListener('click', inspectWorkspace);
 workspace.addEventListener('input', () => {
   inspected = false;
   titleScreenCatalog = null;
@@ -537,8 +546,8 @@ workspace.addEventListener('input', () => {
 });
 document.querySelectorAll('#romfs, #exefs').forEach((control) => control.addEventListener('change', updateBuildState));
 
-byId('build').addEventListener('click', async () => {
-  const button = byId('build');
+byId('build-action').addEventListener('click', async () => {
+  const button = byId('build-action');
   button.disabled = true;
   setResult('Construyendo binarios…');
   try {
@@ -557,8 +566,8 @@ byId('build').addEventListener('click', async () => {
   }
 });
 
-byId('extract').addEventListener('click', async () => {
-  const button = byId('extract');
+byId('extract-action').addEventListener('click', async () => {
+  const button = byId('extract-action');
   button.disabled = true;
   setExtractResult('Extrayendo el archivo…');
   try {
@@ -574,8 +583,8 @@ byId('extract').addEventListener('click', async () => {
   }
 });
 
-byId('rebuild').addEventListener('click', async () => {
-  const button = byId('rebuild');
+byId('rebuild-action').addEventListener('click', async () => {
+  const button = byId('rebuild-action');
   button.disabled = true;
   setRebuildResult('Empaquetando RomFS y ExeFS y ensamblando la ROM…');
   try {
@@ -592,8 +601,8 @@ byId('rebuild').addEventListener('click', async () => {
   }
 });
 
-byId('rebuild-cia').addEventListener('click', async () => {
-  const button = byId('rebuild-cia');
+byId('rebuild-cia-action').addEventListener('click', async () => {
+  const button = byId('rebuild-cia-action');
   button.disabled = true;
   setCiaResult('Reconstruyendo la ROM intermedia y creando el CIA…');
   try {

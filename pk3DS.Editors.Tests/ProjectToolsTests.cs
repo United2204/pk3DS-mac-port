@@ -87,6 +87,21 @@ public sealed class ProjectToolsTests : IDisposable
     }
 
     [Fact]
+    public void ExtractsIntoAnExistingEmptyDirectory()
+    {
+        var cxi = CreateCxi();
+        var output = Path.Combine(_workspace.OutputDirectory, "cxi-extracted-empty");
+        Directory.CreateDirectory(output);
+
+        var response = ProjectTools.ExtractProject(new ExtractProjectRequest(cxi, output));
+
+        Assert.Equal("CXI", response.Format);
+        Assert.Contains("exheader.bin", response.Files);
+        Assert.Contains("exefs/code.bin", response.Files);
+        Assert.Contains("romfs/a/0/0/0", response.Files);
+    }
+
+    [Fact]
     public void ExtractsTheFirstCxiFromAThreeDsWithoutOverreadingIt()
     {
         var cxi = CreateCxi();
@@ -136,6 +151,12 @@ public sealed class ProjectToolsTests : IDisposable
         Assert.Equal(0x4453434Eu, ReadUInt32(stream));
         stream.Position = 0x4000 + 0x100;
         Assert.Equal(0x4843434Eu, ReadUInt32(stream));
+        stream.Position = 0x4000 + 0x188 + 7;
+        Assert.Equal(5, stream.ReadByte()); // FixedCrypto + NoCrypto.
+        stream.Position = 0x4000 + 0x200;
+        var embeddedExheader = new byte[0x400];
+        stream.ReadExactly(embeddedExheader);
+        Assert.Equal(exheader.AsSpan(0, 0x400).ToArray(), embeddedExheader);
         Assert.Equal(sourceCodeHash, SHA256.HashData(File.ReadAllBytes(Path.Combine(_workspace.ExeFs, "code.bin"))));
     }
 

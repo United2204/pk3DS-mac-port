@@ -31,13 +31,35 @@ public class EditorEndToEndTests : IDisposable
     [Fact]
     public void TheFixtureIsRecognisedAsAValidWorkspace()
     {
-        var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.RomFs));
+        var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
 
         Assert.Equal("XY", response.GameVersion);
         Assert.NotEmpty(response.Modules);
         Assert.True(response.Modules.Single(module => module.Id == "gift6").SourceAvailable);
         Assert.True(response.Modules.Single(module => module.Id == "tutors6").SourceAvailable);
         Assert.True(response.Modules.Single(module => module.Id == "marts6").SourceAvailable);
+    }
+
+    [Fact]
+    public void RomFsOnlyWorkspaceDoesNotEnableExeFsEditors()
+    {
+        var isolated = Path.Combine(_workspace.Root, "romfs-only");
+        var isolatedRomFs = Path.Combine(isolated, "RomFS");
+        foreach (var source in Directory.EnumerateFiles(_workspace.RomFs, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(_workspace.RomFs, source);
+            var destination = Path.Combine(isolatedRomFs, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(source, destination);
+        }
+
+        var response = WorkspaceInspector.Inspect(new WorkspaceRequest(isolated));
+
+        Assert.False(response.Modules.Single(module => module.Id == "pickup6").SourceAvailable);
+        Assert.False(response.Modules.Single(module => module.Id == "tutors6").SourceAvailable);
+        Assert.False(response.Modules.Single(module => module.Id == "marts6").SourceAvailable);
+        Assert.False(response.Modules.Single(module => module.Id == "opowers").SourceAvailable);
+        Assert.Contains("ExeFS", response.Modules.Single(module => module.Id == "marts6").Requirement);
     }
 
     [Fact]
@@ -135,7 +157,7 @@ public class EditorEndToEndTests : IDisposable
                 Name: "Entrenador editado", ClassName: "Clase editada")));
 
         Assert.Equal(3, result.ChangedFiles.Length);
-        Assert.Contains("a/0/7/3", result.ChangedFiles);
+        Assert.Contains("a/0/7/4", result.ChangedFiles);
         ExportAssertions.AssertContentDiffersFromSource(result, _workspace);
     }
 

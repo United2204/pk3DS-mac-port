@@ -130,15 +130,7 @@ public static class TmHmEditor
         : config.ORAS ? 0x004A67EE : 0x00464796;
 
     private static byte[] ReadCode(GameWorkspace workspace)
-    {
-        if (workspace.ExeFsPath is null)
-            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar TMs/HMs.");
-        var path = Directory.EnumerateFiles(workspace.ExeFsPath)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase));
-        return path is null
-            ? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.")
-            : File.ReadAllBytes(path);
-    }
+        => EditorSession.ReadCode(workspace);
 
     private static void EnsureSupported(GameConfig config)
     {
@@ -147,6 +139,6 @@ public static class TmHmEditor
     }
 
     private static string Warning(GameConfig config) => config.Generation == 6
-        ? "El code.bin debe estar descomprimido. La salida es un parche ExeFS para Luma; los HMs de Gen. VI también se editan."
-        : "El code.bin debe estar descomprimido. Gen. VII almacena 100 TMs y no tiene tabla HM separada.";
+        ? "La aplicación normaliza automáticamente code.bin BLZ. La salida es un parche ExeFS para Luma; los HMs de Gen. VI también se editan."
+        : "La aplicación normaliza automáticamente code.bin BLZ. Gen. VII almacena 100 TMs y no tiene tabla HM separada.";
 }

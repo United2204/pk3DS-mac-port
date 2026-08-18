@@ -31,7 +31,7 @@ public static class TypeChartEditor
             Catalogs.Types(config),
             config.Generation == 6
                 ? "Gen. VI modifica DllBattle.cro. La salida es un parche RomFS para Luma."
-                : "Gen. VII modifica code.bin descomprimido. La salida es un parche ExeFS para Luma.");
+                : "Gen. VII modifica code.bin; si está BLZ comprimido, se normaliza en memoria. La salida es un parche ExeFS para Luma.");
     }
 
     public static ExportResult Export(TypeChartExportRequest request)
@@ -109,13 +109,7 @@ public static class TypeChartEditor
     }
 
     private static byte[] ReadCode(GameWorkspace workspace)
-    {
-        if (workspace.ExeFsPath is null)
-            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar la tabla de tipos.");
-        var path = Directory.EnumerateFiles(workspace.ExeFsPath)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase));
-        return path is null ? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.") : File.ReadAllBytes(path);
-    }
+        => EditorSession.ReadCode(workspace);
 
     private static void EnsureSupported(GameConfig config)
     {

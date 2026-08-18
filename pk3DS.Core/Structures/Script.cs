@@ -54,4 +54,28 @@ public class Script
     {
         return Raw;
     }
+
+    /// <summary>
+    /// Rebuilds the compressed payload after changing instruction values while preserving the
+    /// script layout. The instruction count must remain unchanged so movement offsets and any
+    /// references outside this structure remain valid.
+    /// </summary>
+    public byte[] WriteInstructions(uint[] instructions)
+    {
+        if (Raw is null || Raw.Length < 0x1C || ScriptInstructionStart < 0x1C ||
+            ScriptInstructionStart > Raw.Length || DecompressedLength < 0 || DecompressedLength % 4 != 0)
+            throw new ArgumentException("El script no tiene un encabezado serializable.");
+        if (instructions is null || instructions.Length != DecompressedLength / 4)
+            throw new ArgumentException("La cantidad de instrucciones debe permanecer sin cambios.");
+
+        var compressed = Scripts.CompressScript(Scripts.GetBytes(instructions));
+        if (compressed is null)
+            throw new ArgumentException("No se pudo comprimir el bloque de instrucciones.");
+
+        var result = new byte[ScriptInstructionStart + compressed.Length];
+        Buffer.BlockCopy(Raw, 0, result, 0, ScriptInstructionStart);
+        BitConverter.GetBytes(result.Length).CopyTo(result, 0);
+        Buffer.BlockCopy(compressed, 0, result, ScriptInstructionStart, compressed.Length);
+        return result;
+    }
 }

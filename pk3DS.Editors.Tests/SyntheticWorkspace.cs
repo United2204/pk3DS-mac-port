@@ -331,7 +331,7 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
 
     // GARC file numbers for X/Y, from GARCReference.GARCReference_XY.
     private const int EncDataGarc = 12, TrDataGarc = 38, TrClassGarc = 39, TrPokeGarc = 40,
-        MoveGarc = 212, EggMoveGarc = 213, LevelUpGarc = 214,
+        MapGrGarc = 41, MapMatrixGarc = 42, MoveGarc = 212, EggMoveGarc = 213, LevelUpGarc = 214,
         EvolutionGarc = 215, MegaEvoGarc = 216, PersonalGarc = 218, ItemGarc = 220, GameTextGarc = 72;
 
     // Text table indexes inside the gametext GARC, from TextReference.GameText_XY.
@@ -350,7 +350,7 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
         // Only X/Y stores moves as loose files; Gen VII packs them into a mini archive.
         WriteGarc(MoveGarc, Repeat(moveCount, _ => new byte[Move6Size]));
         WriteGarc(ItemGarc, Repeat(itemCount, _ => new byte[ItemSize]));
-        WriteGarc(GameTextGarc + Language, BuildTextFiles(142,
+        var gameText = BuildTextFiles(142,
             (SpeciesNamesTable, "Especie", speciesCount),
             (MoveNamesTable, "Movimiento", moveCount),
             (ItemNamesTable, "Objeto", itemCount),
@@ -358,8 +358,12 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
             (20, "Clase", 6),
             (21, "Entrenador", 3),
             (47, "Naturaleza", 25),
-            (72, "Zona", 32)));
+            (72, "Zona", 32));
+        WriteGarc(GameTextGarc + Language, gameText);
+        WriteGarc(GameTextGarc + 2, gameText);
         WriteGarc(EncDataGarc, BuildOverworldFiles());
+        WriteGarc(MapGrGarc, Enumerable.Range(0, 12).Select(index => BuildGen6MapGrid(index)).ToArray());
+        WriteGarc(MapMatrixGarc, Enumerable.Range(0, 22).Select(index => BuildGen6MapMatrix(index)).ToArray());
         WriteGarc(TrClassGarc, Repeat(6, _ => new byte[4]));
         WriteGarc(TrDataGarc,
         [
@@ -435,6 +439,37 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
         }
 
         return files;
+    }
+
+    private static byte[] BuildGen6MapGrid(int seed)
+    {
+        const int width = 4;
+        const int height = 3;
+        var data = new byte[0x88 + (width * height * sizeof(uint))];
+        Encoding.ASCII.GetBytes("GR").CopyTo(data, 0);
+        BitConverter.GetBytes((ushort)6).CopyTo(data, 2);
+        data[4] = 0x80;
+        BitConverter.GetBytes((ushort)width).CopyTo(data, 0x80);
+        BitConverter.GetBytes((ushort)height).CopyTo(data, 0x82);
+        for (var index = 0; index < width * height; index++)
+            BitConverter.GetBytes((uint)(0x1000021 + seed + index)).CopyTo(data, 0x88 + (index * sizeof(uint)));
+        return data;
+    }
+
+    private static byte[] BuildGen6MapMatrix(int seed)
+    {
+        const int width = 2;
+        const int height = 1;
+        var data = new byte[0x18 + (width * height * sizeof(ushort))];
+        Encoding.ASCII.GetBytes("MM").CopyTo(data, 0);
+        BitConverter.GetBytes((ushort)2).CopyTo(data, 2);
+        BitConverter.GetBytes(0x10).CopyTo(data, 4);
+        BitConverter.GetBytes(data.Length).CopyTo(data, 0x0C);
+        BitConverter.GetBytes((ushort)width).CopyTo(data, 0x14);
+        BitConverter.GetBytes((ushort)height).CopyTo(data, 0x16);
+        BitConverter.GetBytes((ushort)(100 + seed)).CopyTo(data, 0x18);
+        BitConverter.GetBytes((ushort)(200 + seed)).CopyTo(data, 0x1A);
+        return data;
     }
 
     /// <summary>
@@ -542,7 +577,8 @@ public sealed class SyntheticOrasWorkspace : SyntheticWorkspace
         WriteGarc(191, [Learnset((1, 1))]);
         WriteGarc(192, [new byte[EvolutionSet6.SIZE]]);
         WriteGarc(189, [Mini.PackMini([new byte[0x22]], "WD")]);
-        WriteGarc(72, BuildTextFiles(142, (90, "Zona", 4)));
+        var gameText = BuildTextFiles(142, (90, "Zona", 4));
+        WriteGarc(72, gameText);
     }
 
     public void WriteOverworldFixture()
@@ -637,14 +673,16 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
         WriteGarc(MoveGarc, [Mini.PackMini(Repeat(moveCount, _ => new byte[Move7Size]), "WD")]);
         WriteGarc(ItemGarc, Repeat(itemCount, _ => new byte[ItemSize]));
 
-        WriteGarc(GameTextGarc + Language, BuildTextFiles(MoveNamesTable + 1,
+        var gameText = BuildTextFiles(MoveNamesTable + 1,
             (SpeciesNamesTable, "Especie", speciesCount),
             (MoveNamesTable, "Movimiento", moveCount),
             (ItemNamesTable, "Objeto", itemCount),
             (107, "Tipo", 18),
             (MetListTable, "Zona", 32),
             (TrainerNamesTable, "Entrenador", trainerCount),
-            (TrainerClassesTable, "Clase", TrainerClassCount)));
+            (TrainerClassesTable, "Clase", TrainerClassCount));
+        WriteGarc(GameTextGarc + Language, gameText);
+        WriteGarc(GameTextGarc + 2, gameText);
 
         WriteGarc(EncDataGarc, BuildEncounterFiles());
         WriteGarc(ZoneDataGarc, BuildZoneFiles());
@@ -822,10 +860,113 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
         {
             var tables = Repeat(TablesPerArea, _ => DayNightEntry());
             files[AreaFileNumber(area)] = Mini.PackMini(tables, "EA");
+            files[area * FilesPerArea] = Mini.PackMini(
+                [
+                    Mini.PackMini([Gen7PositionEntry(1, 10), Gen7PositionEntry(2, 20)], "EP"),
+                    Mini.PackMini([Gen7ModelEntry(1, 30)], "EM"),
+                    Mini.PackMini([Gen7EbEntry(1, 50)], "EB"),
+                    Mini.PackMini([Gen7EsEntry(1, 70)], "ES"),
+                    Mini.PackMini([Gen7EaEntry(1, 90)], "EA"),
+                    Mini.PackMini([Gen7EtEntry(1, 110)], "ET"),
+                ], "ED");
             files[(area * FilesPerArea) + 7] = Mini.PackMini([BuildScriptFixture()], "ZS");
             files[(area * FilesPerArea) + 8] = Mini.PackMini([BuildScriptFixture()], "ZI");
         }
         return files;
+    }
+
+    private static byte[] Gen7PositionEntry(int count, float baseX)
+    {
+        var entry = new byte[8 + (count * 0x3C)];
+        BitConverter.GetBytes(count).CopyTo(entry, 0);
+        for (var index = 0; index < count; index++)
+        {
+            var offset = 8 + (index * 0x3C);
+            BitConverter.GetBytes(baseX + index).CopyTo(entry, offset);
+            BitConverter.GetBytes(100f + index).CopyTo(entry, offset + 4);
+            BitConverter.GetBytes(200f + index).CopyTo(entry, offset + 8);
+        }
+        return entry;
+    }
+
+    private static byte[] Gen7ModelEntry(int count, float baseX)
+    {
+        const int recordSize = 0x78;
+        var entry = new byte[8 + (count * recordSize)];
+        BitConverter.GetBytes(count).CopyTo(entry, 0);
+        BitConverter.GetBytes(1).CopyTo(entry, 4); // stable primary EM record kind
+        for (var index = 0; index < count; index++)
+        {
+            var offset = 8 + (index * recordSize);
+            BitConverter.GetBytes(baseX + index).CopyTo(entry, offset);
+            BitConverter.GetBytes(300f + index).CopyTo(entry, offset + 4);
+            BitConverter.GetBytes(400f + index).CopyTo(entry, offset + 8);
+        }
+        return entry;
+    }
+
+    private static byte[] Gen7EbEntry(int count, float baseX)
+    {
+        const int recordSize = 0x3C;
+        var entry = new byte[8 + (count * recordSize) + 0x1C];
+        BitConverter.GetBytes(count).CopyTo(entry, 0);
+        BitConverter.GetBytes(2).CopyTo(entry, 4); // stable primary EB record kind
+        for (var index = 0; index < count; index++)
+        {
+            var offset = 8 + (index * recordSize);
+            BitConverter.GetBytes(baseX + index).CopyTo(entry, offset);
+            BitConverter.GetBytes(500f + index).CopyTo(entry, offset + 4);
+            BitConverter.GetBytes(600f + index).CopyTo(entry, offset + 8);
+        }
+        return entry;
+    }
+
+    private static byte[] Gen7EsEntry(int count, float baseX)
+    {
+        const int recordSize = 0x3C;
+        var entry = new byte[8 + (count * recordSize) + 0x14];
+        BitConverter.GetBytes(count).CopyTo(entry, 0);
+        BitConverter.GetBytes(4).CopyTo(entry, 4); // stable ES record kind
+        for (var index = 0; index < count; index++)
+        {
+            var offset = 8 + (index * recordSize);
+            BitConverter.GetBytes(baseX + index).CopyTo(entry, offset);
+            BitConverter.GetBytes(700f + index).CopyTo(entry, offset + 4);
+            BitConverter.GetBytes(800f + index).CopyTo(entry, offset + 8);
+        }
+        return entry;
+    }
+
+    private static byte[] Gen7EaEntry(int count, float baseX)
+    {
+        const int recordSize = 0x3C;
+        var entry = new byte[8 + (count * recordSize) + 0x20];
+        BitConverter.GetBytes(count).CopyTo(entry, 0);
+        BitConverter.GetBytes(5).CopyTo(entry, 4); // stable EA record kind
+        for (var index = 0; index < count; index++)
+        {
+            var offset = 8 + (index * recordSize);
+            BitConverter.GetBytes(baseX + index).CopyTo(entry, offset);
+            BitConverter.GetBytes(900f + index).CopyTo(entry, offset + 4);
+            BitConverter.GetBytes(1000f + index).CopyTo(entry, offset + 8);
+        }
+        return entry;
+    }
+
+    private static byte[] Gen7EtEntry(int count, float baseX)
+    {
+        const int recordSize = 0x54;
+        var entry = new byte[8 + (count * recordSize) + 0x18];
+        BitConverter.GetBytes(count).CopyTo(entry, 0);
+        BitConverter.GetBytes(7).CopyTo(entry, 4); // stable ET record kind
+        for (var index = 0; index < count; index++)
+        {
+            var offset = 8 + (index * recordSize);
+            BitConverter.GetBytes(baseX + index).CopyTo(entry, offset);
+            BitConverter.GetBytes(1100f + index).CopyTo(entry, offset + 4);
+            BitConverter.GetBytes(1200f + index).CopyTo(entry, offset + 8);
+        }
+        return entry;
     }
 
     /// <summary>One mini-archive entry: header, day table, night table.</summary>

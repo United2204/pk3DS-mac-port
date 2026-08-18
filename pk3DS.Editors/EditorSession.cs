@@ -15,6 +15,14 @@ namespace pk3DS.Editors;
 /// </summary>
 public static class EditorSession
 {
+    private const int CodeAlignment = 0x200;
+
+    /// <summary>
+    /// Language variant used by the supported Gen. VI/VII dumps for English names and text.
+    /// Variants 0 and 1 are Japanese in the X/Y and ORAS dumps tested with this port.
+    /// </summary>
+    internal const int DefaultLanguage = 2;
+
     /// <summary>
     /// GARCs that <see cref="GameConfig.Initialize"/> always reads, regardless of the editor.
     /// They must exist in the scratch RomFS even when the editor does not modify them.
@@ -45,7 +53,7 @@ public static class EditorSession
 
     internal static int NormalizeLanguage(int? language)
     {
-        var value = language ?? 1;
+        var value = language ?? DefaultLanguage;
         if (value is < 0 or > 11)
             throw new WorkspaceException("El idioma debe estar entre 0 y 11.");
         return value;
@@ -150,12 +158,13 @@ public static class EditorSession
         var titleId = ResolveTitleId(workspace, requestedTitleId);
         var languageId = NormalizeLanguage(language);
         var codePath = FindCodeBin(workspace);
+        var sourceCode = ReadCode(workspace);
         var config = OpenReadOnly(workspace, languageId);
         var scratch = Path.Combine(Path.GetTempPath(), $"pk3ds-{label}-{Guid.NewGuid():N}");
         try
         {
             Directory.CreateDirectory(scratch);
-            var edited = apply(workspace, config, File.ReadAllBytes(codePath));
+            var edited = apply(workspace, config, sourceCode);
             if (edited is null || edited.Length == 0)
                 throw new WorkspaceException("El editor no produjo un code.bin válido.");
             var codeName = Path.GetFileName(codePath);
@@ -189,10 +198,25 @@ public static class EditorSession
     private static string FindCodeBin(GameWorkspace workspace)
     {
         if (workspace.ExeFsPath is null)
-            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar este módulo.");
+            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin del dump para editar este módulo.");
         return Directory.EnumerateFiles(workspace.ExeFsPath)
             .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase))
             ?? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.");
+    }
+
+    /// <summary>
+    /// Reads code.bin in the format expected by the ExeFS editors. CXI extraction preserves the
+    /// original BLZ-compressed payload, so decode it in memory and leave the source workspace
+    /// untouched. Already decompressed files are returned as-is.
+    /// </summary>
+    internal static byte[] ReadCode(GameWorkspace workspace)
+    {
+        var code = File.ReadAllBytes(FindCodeBin(workspace));
+        if (BLZCoder.TryDecode(code, out var decoded))
+            code = decoded;
+        if (code.Length == 0 || code.Length % CodeAlignment != 0)
+            throw new WorkspaceException("El code.bin debe estar descomprimido y alineado a 0x200 bytes.");
+        return code;
     }
 
     private static ExportResult CreateLayeredFsArchive(

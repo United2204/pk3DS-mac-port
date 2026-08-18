@@ -77,7 +77,7 @@ async function load() {
 
 async function open() {
   try {
-    table = await post('/api/editors/tutors/table', { workspacePath: $('workspace').value, language: 1 });
+    table = await post('/api/editors/tutors/table', { workspacePath: $('workspace').value, language: 2 });
     original = structuredClone(table);
     render();
   } catch (error) { $('result').textContent = error.message; }
@@ -98,7 +98,7 @@ $('groups').oninput = event => {
 $('export').onclick = async () => {
   try {
     const output = await post('/api/workspace/pick-output');
-    const result = await post('/api/editors/tutors/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, groups: table.groups, language: 1 });
+    const result = await post('/api/editors/tutors/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, groups: table.groups, language: 2 });
     original = structuredClone(table);
     $('result').textContent = `Listo. ZIP: ${result.zipPath}`;
     ui();

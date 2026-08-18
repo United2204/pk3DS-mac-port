@@ -43,7 +43,7 @@ public class EncounterStatic7(byte[] data) : EncounterStatic
 
     public bool Shiny
     {
-        get => (Data[0x6] & 1) >> 1 == 1;
+        get => (Data[0x6] & 1) == 1;
         set => Data[0x6] = (byte)((Data[0x6] & ~1) | (value ? 1 : 0));
     }
 

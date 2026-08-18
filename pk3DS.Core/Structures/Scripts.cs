@@ -113,8 +113,11 @@ public static class Scripts
         int pos = 0;
         while (pos < data.Length)
         {
-            byte[] db = data.Skip(pos += 4).Take(4).ToArray();
+            byte[] db = data.Skip(pos).Take(4).ToArray();
+            pos += 4;
             byte[] cb = CompressBytes(db);
+            if (cb is null || cb.Length == 0)
+                return null;
             bw.Write(cb);
         }
         return mn.ToArray();
@@ -122,68 +125,39 @@ public static class Scripts
 
     internal static byte[] CompressBytes(byte[] db)
     {
-        short cmd = BitConverter.ToInt16(db, 0);
-        short val = BitConverter.ToInt16(db, 2);
+        if (db is null || db.Length < sizeof(uint))
+            return [];
 
-        byte[] cb = [];
-        bool sign4 = val < 0 && cmd < 0 && db[0] >= 0xC0; // 4 byte signed
-        bool sign3 = val < 0 && cmd < 0 && db[0] < 0xC0; // 3 byte signed
-        bool sign2 = val < 0 && cmd > 0; // 2 byte signed
-        bool liter = cmd is >= 0 and < 0x40; // Literal
-        bool manyb = cmd >= 0x40; // manybit
-
-        if (sign4)
+        // QuickDecompress reads a big-endian sequence of 7-bit groups. The first group is
+        // signed, which means its bit 6 is sign-extended before the remaining groups are
+        // appended. Searching the shortest valid representation handles every uint32 value,
+        // including negative script operands that the old command/operand split rejected.
+        var value = BitConverter.ToUInt32(db, 0);
+        for (var length = 1; length <= 5; length++)
         {
-            int dev = 0x40 + BitConverter.ToInt32(db, 0);
-            if (dev < 0) // BADLOGIC
-                return cb;
-            cb = [(byte)((dev & 0x3F) | 0x40)];
-        }
-        else if (sign3)
-        {
-            byte dev = (byte)(((db[1] << 1) + 0x40) | 0xC0 | db[0] >> 7);
-            byte low = db[0];
-            cb = [dev, low];
-        }
-        else if (sign2)
-        {
-            if (manyb)
+            var firstShift = 7 * (length - 1);
+            var first = (value >> firstShift) & 0x7F;
+            var candidate = (first & 0x40) != 0 ? 0xFFFFFF80u | first : first;
+            for (var index = 1; index < length; index++)
             {
-                byte dev = (byte)(((db[2] << 2) + 0x40) | 0xC0 | db[1] >> 7);
-                byte low1 = (byte)(0x80 | (db[0] >> 7) | (db[1] & 0x80));
-                byte low0 = (byte)(db[0] & 0x80);
-                cb = [low0, low1, dev];
+                var shift = 7 * (length - 1 - index);
+                candidate = (candidate << 7) | ((value >> shift) & 0x7F);
             }
-            else // Dunno if this ever naturally happens; the command reader may ignore db[1] if db[0] < 0x80... needs verification.
-            {
-                byte dev = (byte)(((db[1] << 2) + 0x40) | 0xC0 | db[0] >> 6);
-                byte low0 = (byte)(db[0] & 0x3F);
-                cb = [low0, dev];
-            }
-        }
-        else if (manyb)
-        {
-            ulong bitStorage = 0;
 
-            uint dv = BitConverter.ToUInt32(db, 0);
-            int ctr = 0;
-            while (dv != 0) // bits remaining
-            {
-                byte bits = (byte)((byte)dv & 0x7F); dv >>= 7; // Take off 7 bits at a time
-                bitStorage |= (byte)(bits << (ctr * 8)); // Write the 7 bits into storage
-                bitStorage |= (byte)(1 << (7 + (ctr++ * 8))); // continue reading flag
-            }
-            byte[] compressedBits = BitConverter.GetBytes(bitStorage);
+            if (candidate != value)
+                continue;
 
-            Array.Reverse(compressedBits);
-            // Trim off leading zero-bytes
-            cb = compressedBits.SkipWhile(v => v == 0).ToArray();
+            var compressed = new byte[length];
+            for (var index = 0; index < length; index++)
+            {
+                var shift = 7 * (length - 1 - index);
+                compressed[index] = (byte)(((value >> shift) & 0x7Fu) |
+                    (index + 1 < length ? 0x80u : 0u));
+            }
+            return compressed;
         }
-        else if (liter)
-        {
-            cb = [(byte)cmd];
-        }
-        return cb;
+
+        return [];
     }
 
     // General Utility

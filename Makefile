@@ -8,10 +8,16 @@ WEB      = pk3DS.Mac.Web/pk3DS.Mac.Web.csproj
 TESTS    = pk3DS.Editors.Tests/pk3DS.Editors.Tests.csproj
 CONFIG   = Debug
 
-.PHONY: build test run publish clean
+.PHONY: build frontend-build test run publish clean
+
+FRONTEND = pk3DS.Mac.Web/frontend
+
+frontend-build:
+	cd $(FRONTEND) && if [ ! -d node_modules ]; then npm install; fi && npm run build
 
 build:
-	dotnet build $(SOLUTION) -c $(CONFIG)
+	$(MAKE) frontend-build
+	dotnet build $(SOLUTION) -c $(CONFIG) -p:BuildInParallel=false
 
 test:
 	dotnet test $(TESTS) -c $(CONFIG)
@@ -19,10 +25,12 @@ test:
 # Serves on http://127.0.0.1:38473 and opens the default browser.
 # Set PK3DS_NO_BROWSER=1 to skip opening it.
 run:
-	dotnet run --project $(WEB) -c $(CONFIG)
+	$(MAKE) frontend-build
+	dotnet run --project $(WEB) -c $(CONFIG) -p:BuildInParallel=false
 
 publish:
-	dotnet publish $(WEB) -c Release -o publish
+	$(MAKE) frontend-build
+	dotnet publish $(WEB) -c Release -o publish -p:BuildInParallel=false
 
 clean:
 	dotnet clean $(SOLUTION) -c $(CONFIG)

@@ -25,7 +25,25 @@ function getEvolutionMode() {
   const selected = document.querySelector('[data-evolution] input:checked');
   return selected ? selected.closest('[data-evolution]').dataset.evolution : 'None';
 }
+function setGameSpecificState(id, enabled, message) {
+  const input = byId(id);
+  const card = input?.closest('.check-card');
+  if (!input || !card) return;
+  input.disabled = !enabled;
+  if (!enabled) input.checked = false;
+  card.classList.toggle('is-disabled', !enabled);
+  card.setAttribute('aria-disabled', String(!enabled));
+  card.title = enabled ? '' : message;
+}
+function updateGameSpecificOptions() {
+  const version = inspectedGame?.gameVersion;
+  const generation6 = ['XY', 'ORAS'].includes(version);
+  setGameSpecificState('move-tutors', version === 'ORAS', 'Solo OR/AS contiene estos tutores.');
+  setGameSpecificState('hm', generation6, 'Sol/Luna y Ultrasol/Ultraluna no tienen MO.');
+  setGameSpecificState('full-hm', generation6, 'Sol/Luna y Ultrasol/Ultraluna no tienen MO.');
+}
 function updateUi() {
+  updateGameSpecificOptions();
   setDependentState('stats', checked('stats'));
   setDependentState('types', checked('types'));
   setDependentState('egg-groups', checked('egg-groups'));
@@ -102,7 +120,7 @@ byId('randomize').addEventListener('click', async () => {
     const output = await post('/api/workspace/pick-output');
     setStatus(result, 'Generando archivos y empaquetando LayeredFS…');
     const data = await post('/api/jobs/randomize', {
-      workspacePath: workspace.value, outputDirectory: output.path, titleId: inspectedGame.titleId, language: 1,
+      workspacePath: workspace.value, outputDirectory: output.path, titleId: inspectedGame.titleId, language: 2,
       randomizeAbilities: checked('abilities'), randomizeHeldItems: checked('held-items'), randomizeLearnsets: checked('learnsets'),
       personal: { randomizeAbilities: checked('abilities'), allowWonderGuard: checked('wonder-guard'), randomizeHeldItems: checked('held-items'), randomizeCatchRate: checked('catch-rate'), randomizeTmCompatibility: checked('tm'), randomizeHmCompatibility: checked('hm'), randomizeTypeTutors: checked('type-tutors'), randomizeMoveTutors: checked('move-tutors'), randomizeStats: checked('stats'), shuffleStats: checked('shuffle-stats'), statsToRandomize: ['stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe'].map(checked), statDeviation: number('stat-deviation'), randomizeTypes: checked('types'), sameTypeChance: number('same-type'), randomizeEggGroups: checked('egg-groups'), sameEggGroupChance: number('same-egg'), removeEvYields: checked('no-evs'), setFastGrowth: checked('fast-growth'), baseExperiencePercent: checked('base-exp') ? number('base-exp-percent') : null, quickHatch: checked('quick-hatch'), setCatchRate: checked('fixed-catch-rate') ? number('fixed-catch-rate-value') : null, removeTutorCompatibility: checked('remove-tutors'), fullTmCompatibility: checked('full-tm'), fullHmCompatibility: checked('full-hm'), fullMoveTutorCompatibility: checked('full-tutor') },
       learnsets: { enabled: checked('learnsets'), expand: checked('expand'), moveCount: number('move-count'), spread: checked('spread'), maxLevel: number('max-level'), stab: checked('stab'), stabPercent: number('stab-percent'), orderByPower: checked('power-order'), fourMovesAtLevel1: checked('four-level-one'), excludeFixedDamage: checked('no-fixed') },

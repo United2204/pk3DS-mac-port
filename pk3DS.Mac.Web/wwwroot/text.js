@@ -41,7 +41,7 @@ async function loadWorkspace() {
   try {
     const [inspection, textCatalog] = await Promise.all([
       post('/api/workspace/inspect', { workspacePath: $('workspace').value }),
-      post('/api/editors/text/catalog', { workspacePath: $('workspace').value, kind: kind(), language: 1 }),
+      post('/api/editors/text/catalog', { workspacePath: $('workspace').value, kind: kind(), language: 2 }),
     ]);
     game = inspection; catalog = textCatalog.tables;
     const table = $('table'); table.replaceChildren();
@@ -55,7 +55,7 @@ async function loadWorkspace() {
 async function openTable() {
   const button = $('open-table'); button.disabled = true; status('export-status', 'Cargando las líneas de la tabla…');
   try {
-    const data = await post('/api/editors/text/table', { workspacePath: $('workspace').value, kind: kind(), tableIndex: Number($('table').value), language: 1 });
+    const data = await post('/api/editors/text/table', { workspacePath: $('workspace').value, kind: kind(), tableIndex: Number($('table').value), language: 2 });
     lines = [...data.lines]; originalLines = [...data.lines]; selectedLine = -1; $('line-filter').value = ''; $('line-filter').disabled = false; $('line-jump').disabled = false; $('line-value').value = ''; $('line-value').disabled = true; $('line-label').textContent = 'Selecciona una línea'; renderLines(); status('export-status', 'Tabla abierta. Selecciona una línea para editarla.'); updateExportState();
   } catch (error) { status('export-status', error.message, 'error'); }
   finally { button.disabled = false; }
@@ -70,7 +70,7 @@ $('line-jump').addEventListener('change', () => selectLine(Number($('line-jump')
 $('line-value').addEventListener('input', () => { if (selectedLine < 0) return; lines[selectedLine] = $('line-value').value; renderLines(); updateExportState(); });
 $('export').addEventListener('click', async () => {
   const button = $('export'); button.disabled = true; status('export-status', 'Elige una carpeta para guardar el LayeredFS…');
-  try { const output = await post('/api/workspace/pick-output'); status('export-status', 'Empaquetando la tabla modificada…'); const data = await post('/api/editors/text/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, kind: kind(), tableIndex: Number($('table').value), lines, language: 1 }); originalLines = [...lines]; renderLines(); status('export-status', `Listo. ZIP: ${data.zipPath}`, 'success'); }
+  try { const output = await post('/api/workspace/pick-output'); status('export-status', 'Empaquetando la tabla modificada…'); const data = await post('/api/editors/text/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, kind: kind(), tableIndex: Number($('table').value), lines, language: 2 }); originalLines = [...lines]; renderLines(); status('export-status', `Listo. ZIP: ${data.zipPath}`, 'success'); }
   catch (error) { status('export-status', error.message, 'error'); }
   finally { updateExportState(); }
 });

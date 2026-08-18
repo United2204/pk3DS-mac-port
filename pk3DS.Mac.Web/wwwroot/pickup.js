@@ -114,7 +114,7 @@ async function loadWorkspace() {
 
 async function openTable() {
   try {
-    const data = await post('/api/editors/pickup/table', { workspacePath: $('workspace').value, language: 1 });
+    const data = await post('/api/editors/pickup/table', { workspacePath: $('workspace').value, language: 2 });
     items = data.items;
     original = structuredClone(data.entries);
     render();
@@ -155,7 +155,7 @@ $('export').onclick = async () => {
       outputDirectory: output.path,
       titleId: game.titleId,
       entries: readEntries(),
-      language: 1,
+      language: 2,
     });
     original = readEntries();
     $('result').textContent = `Listo. ZIP: ${result.zipPath}`;

@@ -94,6 +94,16 @@ public static class Endpoints
 
         editors.MapPost("/owse/catalog", (OverworldCatalogRequest r) => Results.Ok(OverworldEditor.GetCatalog(r)));
         editors.MapPost("/owse/entry", (OverworldScriptEntryRequest r) => Results.Ok(OverworldEditor.GetEntry(r)));
+        editors.MapPost("/owse/gen6/zone", (OverworldGen6ZoneRequest r) => Results.Ok(OverworldEditor.GetGen6Zone(r)));
+        editors.MapPost("/owse/gen6/export", (OverworldGen6ExportRequest r) => Results.Ok(OverworldEditor.Export(r)));
+        editors.MapPost("/owse/gen6/script", (OverworldGen6ScriptExportRequest r) => Results.Ok(OverworldEditor.ExportScript(r)));
+        editors.MapPost("/owse/script/export", (OverworldScriptExportRequest r) => Results.Ok(OverworldEditor.ExportScript(r)));
+        editors.MapPost("/owse/gen7/zone", (OverworldGen7ZoneRequest r) => Results.Ok(OverworldEditor.GetGen7Zone(r)));
+        editors.MapPost("/owse/gen7/zone/export", (OverworldGen7ZoneExportRequest r) => Results.Ok(OverworldEditor.ExportGen7Zone(r)));
+        editors.MapPost("/owse/gen7/entities", (OverworldGen7EntityRequest r) => Results.Ok(OverworldEditor.GetGen7Entities(r)));
+        editors.MapPost("/owse/gen7/entities/export", (OverworldGen7EntityExportRequest r) => Results.Ok(OverworldEditor.ExportGen7Entities(r)));
+        editors.MapPost("/owse/gen6/map", (OverworldGen6MapRequest r) => Results.Ok(OverworldEditor.GetGen6Map(r)));
+        editors.MapPost("/owse/gen6/map/export", (OverworldGen6MapExportRequest r) => Results.Ok(OverworldEditor.ExportMap(r)));
 
         editors.MapPost("/static/catalog", (StaticCatalogRequest r) => Results.Ok(StaticEditor.GetCatalog(r)));
         editors.MapPost("/static/entry", (StaticEntryRequest r) => Results.Ok(StaticEditor.GetEntry(r)));

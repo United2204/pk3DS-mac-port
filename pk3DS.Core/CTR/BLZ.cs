@@ -46,6 +46,46 @@ public class BLZCoder
 
     private readonly ProgressBar pBar1;
 
+    /// <summary>
+    /// Tries to decode a BLZ-compressed buffer without touching the source file.
+    /// ExeFS code.bin is commonly stored in this format inside CXI dumps.
+    /// </summary>
+    public static bool TryDecode(byte[] data, out byte[] decoded)
+    {
+        decoded = [];
+        if (!LooksLikeCompressed(data))
+            return false;
+
+        try
+        {
+            var result = BLZ_Decode(data);
+            if (result is null || result.length <= data.Length)
+                return false;
+
+            decoded = new byte[result.length];
+            Array.Copy(result.buffer, decoded, result.length);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static bool LooksLikeCompressed(byte[] data)
+    {
+        if (data is null || data.Length < 8)
+            return false;
+
+        var headerLength = data[^5];
+        var encodedLength = (int)(BitConverter.ToUInt32(data, data.Length - 8) & 0x00FFFFFF);
+        var increaseLength = BitConverter.ToInt32(data, data.Length - 4);
+        return headerLength is >= 8 and <= 0xB
+            && encodedLength > headerLength
+            && encodedLength <= data.Length
+            && increaseLength > 0;
+    }
+
     private void InitProgress(int max)
     {
         if (pBar1.InvokeRequired)

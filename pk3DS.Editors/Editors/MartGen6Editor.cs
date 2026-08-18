@@ -40,7 +40,7 @@ public static class MartGen6Editor
         EnsureSupported(config);
         var regular = Read(ReadCode(workspace), config);
         return new MartTableResponse(config.Version.ToString(), regular, [], Catalogs.Items(config),
-            "Gen. VI modifica las tiendas normales en code.bin. La salida es un parche ExeFS para Luma.");
+            "Gen. VI modifica las tiendas normales en code.bin. Si está BLZ comprimido, se normaliza en memoria; la salida es un parche ExeFS para Luma.");
     }
 
     public static ExportResult Export(MartExportRequest request) =>
@@ -126,13 +126,7 @@ public static class MartGen6Editor
     }
 
     private static byte[] ReadCode(GameWorkspace workspace)
-    {
-        if (workspace.ExeFsPath is null)
-            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar tiendas Gen. VI.");
-        var path = Directory.EnumerateFiles(workspace.ExeFsPath)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase));
-        return path is null ? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.") : File.ReadAllBytes(path);
-    }
+        => EditorSession.ReadCode(workspace);
 
     private static void EnsureSupported(GameConfig config)
     {

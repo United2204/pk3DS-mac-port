@@ -60,7 +60,7 @@ async function load() {
   ui();
 }
 async function open() {
-  try { table = await post('/api/editors/marts/table', { workspacePath: $('workspace').value, language: 1 }); original = structuredClone(table); render(); }
+  try { table = await post('/api/editors/marts/table', { workspacePath: $('workspace').value, language: 2 }); original = structuredClone(table); render(); }
   catch (error) { $('result').textContent = error.message; }
 }
 $('browse').onclick = async () => { try { $('workspace').value = (await post('/api/workspace/pick')).path; await load(); } catch (error) { $('status').textContent = error.message; } };
@@ -72,7 +72,7 @@ function update(event) {
 }
 $('editor').oninput = update; $('editor').onchange = update;
 $('export').onclick = async () => {
-  try { const output = await post('/api/workspace/pick-output'); const result = await post('/api/editors/marts/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, regular: table.regular, battlePoints: table.battlePoints, language: 1 }); original = structuredClone(table); $('result').textContent = `Listo. ZIP: ${result.zipPath}`; ui(); }
+  try { const output = await post('/api/workspace/pick-output'); const result = await post('/api/editors/marts/export', { workspacePath: $('workspace').value, outputDirectory: output.path, titleId: game.titleId, regular: table.regular, battlePoints: table.battlePoints, language: 2 }); original = structuredClone(table); $('result').textContent = `Listo. ZIP: ${result.zipPath}`; ui(); }
   catch (error) { $('result').textContent = error.message; }
 };
 ui();

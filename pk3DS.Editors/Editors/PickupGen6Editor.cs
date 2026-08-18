@@ -21,7 +21,7 @@ public static class PickupGen6Editor
         var code = ReadCode(workspace);
         var (common, rare) = ReadLists(config, code);
         return new PickupGen6TableResponse(config.Version.ToString(), common, rare, Catalogs.Items(config),
-            "El code.bin debe estar descomprimido. La salida es un parche ExeFS para Luma.");
+            "La aplicación normaliza automáticamente code.bin BLZ cuando el dump lo conserva comprimido. La salida es un parche ExeFS para Luma.");
     }
 
     public static ExportResult Export(PickupGen6ExportRequest request) =>
@@ -70,13 +70,7 @@ public static class PickupGen6Editor
     }
 
     private static byte[] ReadCode(GameWorkspace workspace)
-    {
-        if (workspace.ExeFsPath is null)
-            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin descomprimido para editar Pickup.");
-        var path = Directory.EnumerateFiles(workspace.ExeFsPath)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase));
-        return path is null ? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.") : File.ReadAllBytes(path);
-    }
+        => EditorSession.ReadCode(workspace);
 
     private static void EnsureSupported(GameConfig config)
     {

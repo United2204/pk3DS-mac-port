@@ -76,8 +76,9 @@ carpeta de salida separada, y `ProjectTools.CreateRedirectPatch` genera el `.cod
 `a0/` del parche de redirección sin tocar el origen. La operación usa el empaquetador legacy bajo un
 lock porque `RomFS.BuildRomFS` mantiene estado estático; nunca debe escribir dentro de `RomFS` o
 `ExeFS` de origen. `CreateRedirectPatch` no debe presentarse como creador de `.cia`: todavía no
-existe un ensamblador local de TMD/ticket/certificados y firma interna; `RebuildCia` solo puede
-usar un `makerom` externo indicado por el usuario o colocado junto a la aplicación. `ProjectTools.PackGarc` debe copiar
+existe un ensamblador local de TMD/ticket/certificados y firma interna; `RebuildCia` usa primero el
+`makerom` macOS arm64 incluido y acepta un ejecutable externo indicado por el usuario como reemplazo.
+`ProjectTools.PackGarc` debe copiar
 la carpeta de entrada a una staging antes de llamar a `GARC.PackGARC`, porque el empaquetador legacy
 puede comprimir y renombrar entradas `dec_` durante el proceso. `ProjectTools.PackDarc` y
 `UnpackDarc` admiten solamente la estructura DARC de una capa; el núcleo heredado usa offsets
