@@ -22,8 +22,9 @@ build:
 test:
 	dotnet test $(TESTS) -c $(CONFIG)
 
-# Serves on http://127.0.0.1:38473 and opens the default browser.
-# Set PK3DS_NO_BROWSER=1 to skip opening it.
+# Serves on http://127.0.0.1:38473 when available and opens the default browser.
+# If that port is busy, the host chooses a nearby free port. Set PK3DS_NO_BROWSER=1 to skip
+# opening the browser or PK3DS_PORT to choose an explicit local port.
 run:
 	$(MAKE) frontend-build
 	dotnet run --project $(WEB) -c $(CONFIG) -p:BuildInParallel=false

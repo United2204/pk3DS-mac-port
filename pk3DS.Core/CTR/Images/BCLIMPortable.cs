@@ -55,13 +55,36 @@ public sealed class BCLIMPortable
 
     public uint[] GetPixels()
     {
-        var orienter = new XLIMOrienter(Width, Height, Header.Orientation);
+        return DecodePixels(PixelData, Width, Height, Format, Header.Orientation);
+    }
+
+    /// <summary>Returns cropped RGBA bytes in normal row-major image order.</summary>
+    public byte[] GetRgbaData(bool crop = true)
+    {
+        return DecodeRgba(PixelData, Width, Height, Format, Header.Orientation, crop);
+    }
+
+    /// <summary>
+    /// Decodes a tiled XLIM payload. BFLIM uses the same pixel ordering as BCLIM but does not
+    /// use the Gen VI palette wrapper, so callers can disable that special case.
+    /// </summary>
+    internal static uint[] DecodePixels(
+        byte[] pixelData,
+        int width,
+        int height,
+        XLIMEncoding format,
+        XLIMOrientation orientation,
+        bool allowPalette = true)
+    {
+        ArgumentNullException.ThrowIfNull(pixelData);
+        var orienter = new XLIMOrienter(width, height, orientation);
         var expected = checked((int)((long)orienter.Width * orienter.Height));
-        if (Format == XLIMEncoding.RGB5A1 && PixelData.Length >= 4 && BitConverter.ToUInt16(PixelData, 0) == 2)
-            return GetPalettePixels(expected);
-        if (Format is XLIMEncoding.ETC1 or XLIMEncoding.ETC1A4)
+        if (allowPalette && format == XLIMEncoding.RGB5A1 && pixelData.Length >= 4
+            && BitConverter.ToUInt16(pixelData, 0) == 2)
+            return GetPalettePixels(pixelData, expected);
+        if (format is XLIMEncoding.ETC1 or XLIMEncoding.ETC1A4)
         {
-            var rgba = ETC1Portable.Decode(PixelData, Width, Height, Format);
+            var rgba = ETC1Portable.Decode(pixelData, width, height, format);
             var etcPixels = new uint[expected];
             for (uint index = 0; index < etcPixels.Length; index++)
             {
@@ -75,19 +98,25 @@ public sealed class BCLIMPortable
             return etcPixels;
         }
 
-        var pixels = PixelConverter.GetPixels(PixelData, Format).Take(expected).ToArray();
+        var pixels = PixelConverter.GetPixels(pixelData, format).Take(expected).ToArray();
         if (pixels.Length != expected)
-            throw new InvalidDataException("El payload BCLIM no contiene suficientes píxeles.");
+            throw new InvalidDataException("El payload XLIM no contiene suficientes píxeles.");
         return pixels;
     }
 
-    /// <summary>Returns cropped RGBA bytes in normal row-major image order.</summary>
-    public byte[] GetRgbaData(bool crop = true)
+    internal static byte[] DecodeRgba(
+        byte[] pixelData,
+        int width,
+        int height,
+        XLIMEncoding format,
+        XLIMOrientation orientation,
+        bool crop = true,
+        bool allowPalette = true)
     {
-        var orienter = new XLIMOrienter(Width, Height, Header.Orientation);
-        var outputWidth = crop ? Width : checked((int)orienter.Width);
-        var outputHeight = crop ? Height : checked((int)orienter.Height);
-        var pixels = GetPixels();
+        var orienter = new XLIMOrienter(width, height, orientation);
+        var outputWidth = crop ? width : checked((int)orienter.Width);
+        var outputHeight = crop ? height : checked((int)orienter.Height);
+        var pixels = DecodePixels(pixelData, width, height, format, orientation, allowPalette);
         var rgba = new byte[checked(outputWidth * outputHeight * 4)];
 
         for (uint index = 0; index < pixels.Length; index++)
@@ -117,7 +146,7 @@ public sealed class BCLIMPortable
         if (rgba.Length != expected)
             throw new ArgumentException("RGBA data length does not match the BCLIM dimensions.", nameof(rgba));
         if (format is XLIMEncoding.ETC1 or XLIMEncoding.ETC1A4)
-            throw new FormatException($"El formato BCLIM {format} todavía no tiene codificador portable.");
+            return BuildBclim(ETC1Portable.Encode(rgba, width, height, format), width, height, format);
 
         var orienter = new XLIMOrienter(width, height, XLIMOrientation.None);
         var payloadPixels = checked((long)orienter.Width * orienter.Height);
@@ -155,6 +184,11 @@ public sealed class BCLIMPortable
         if (!perfect)
             Array.Resize(ref pixelData, NextPowerOfTwo(pixelData.Length));
 
+        return BuildBclim(pixelData, width, height, format);
+    }
+
+    private static byte[] BuildBclim(byte[] pixelData, int width, int height, XLIMEncoding format)
+    {
         using var output = new MemoryStream();
         using (var writer = new BinaryWriter(output, Encoding.UTF8, leaveOpen: true))
         {
@@ -175,9 +209,9 @@ public sealed class BCLIMPortable
         return output.ToArray();
     }
 
-    private uint[] GetPalettePixels(int expected)
+    private static uint[] GetPalettePixels(byte[] pixelData, int expected)
     {
-        using var stream = new MemoryStream(PixelData, writable: false);
+        using var stream = new MemoryStream(pixelData, writable: false);
         using var reader = new BinaryReader(stream);
         if (reader.ReadUInt16() != 2)
             throw new InvalidDataException("La paleta BCLIM no tiene el marcador esperado.");

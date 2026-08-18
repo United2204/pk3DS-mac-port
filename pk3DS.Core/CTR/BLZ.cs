@@ -72,6 +72,37 @@ public class BLZCoder
         }
     }
 
+    /// <summary>Decodes a BLZ-compressed buffer without touching the source file.</summary>
+    public static byte[] Decode(byte[] data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (!LooksLikeCompressed(data))
+            throw new InvalidDataException("El archivo no parece estar comprimido con BLZ.");
+
+        var result = BLZ_Decode(data);
+        if (result is null || result.length <= 0)
+            throw new InvalidDataException("El archivo BLZ está incompleto o no es válido.");
+        var decoded = new byte[result.length];
+        Array.Copy(result.buffer, decoded, result.length);
+        return decoded;
+    }
+
+    /// <summary>Encodes a buffer as BLZ without modifying a file on disk.</summary>
+    public static byte[] Encode(byte[] data, bool best = false, bool arm9 = false)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.Length > RAW_MAXIM)
+            throw new InputTooLargeException();
+
+        var coder = new BLZCoder(arm9);
+        var result = coder.BLZ_Encode(data, best ? BLZ_BEST : BLZ_NORMAL);
+        if (result is null || result.length <= 0)
+            throw new InvalidDataException("No pude generar un archivo BLZ válido.");
+        var encoded = new byte[result.length];
+        Array.Copy(result.buffer, encoded, result.length);
+        return encoded;
+    }
+
     private static bool LooksLikeCompressed(byte[] data)
     {
         if (data is null || data.Length < 8)
@@ -102,6 +133,12 @@ public class BLZCoder
             pBar1.Invoke((MethodInvoker)delegate { pBar1.Value = pos; });
         }
         else { pBar1.Value = pos; }
+    }
+
+    private BLZCoder(bool arm9)
+    {
+        this.arm9 = arm9;
+        pBar1 = new ProgressBar();
     }
 
     public BLZCoder(string[] args, ProgressBar pBar = null)

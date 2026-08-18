@@ -23,6 +23,19 @@ import "./styles.css";
 
 const WORKSPACE_KEY = "pk3ds:workspace:v2";
 const FRAME_STATE_PREFIX = "pk3ds:frame:v1:";
+const LANGUAGE_KEY = "pk3ds:language:v1";
+const languageOptions = [
+  { value: 0, label: "Japonés · katakana" },
+  { value: 1, label: "Japonés · kanji" },
+  { value: 2, label: "English" },
+  { value: 3, label: "Français" },
+  { value: 4, label: "Italiano" },
+  { value: 5, label: "Deutsch" },
+  { value: 6, label: "Español" },
+  { value: 7, label: "한국어" },
+  { value: 8, label: "中文 · simplificado" },
+  { value: 9, label: "中文 · tradicional" },
+];
 
 const editorPages = [
   { id: "personal", label: "Personal Stats", legacy: "personal.html", group: "RomFS", description: "Habilidades, tipos, estadísticas y compatibilidades." },
@@ -53,13 +66,18 @@ const editorPages = [
 ];
 
 const projectTools = [
-  { id: "extract", label: "Extraer juego", section: "extract", eyebrow: "ENTRADA", description: "Convertí un CXI o 3DS en un workspace editable." },
+  { id: "extract", label: "Extraer juego", section: "extract", eyebrow: "ENTRADA", description: "Convertí un CXI, 3DS o CIA desencriptado en un workspace editable." },
   { id: "inspect", label: "Validar workspace", section: "inspect", eyebrow: "DIAGNÓSTICO", description: "Comprobá RomFS, ExeFS, exheader y módulos disponibles." },
   { id: "build", label: "Construir archivos", section: "build", eyebrow: "SALIDA", description: "Generá romfs.bin y exefs.bin sin tocar el origen." },
   { id: "rebuild", label: "Reconstruir ROM 3DS", section: "rebuild-rom", eyebrow: "EMPAQUETADO", description: "Armá una ROM recortada o con padding de tarjeta." },
+  { id: "crr", label: "Verificar CRO / CRR", section: "rebuild-crr", eyebrow: "CRO / CRR", description: "Recalculá hashes y static.crr como parche LayeredFS." },
   { id: "cia", label: "Crear un CIA", section: "rebuild-cia", eyebrow: "EMPAQUETADO", description: "Convertí una ROM mediante makerom externo." },
   { id: "patch", label: "Crear parche LayeredFS", section: "patch", eyebrow: "PARCHE", description: "Prepará el contenido redirigido para Luma." },
-  { id: "archives", label: "GARC / DARC / SARC / FARC", section: "garc", eyebrow: "FORMATOS", description: "Desempaquetá y empaquetá archivos internos." },
+  { id: "archives", label: "GAR / GARC / Mini / ALYT / Shuffle ARC / DARC / SARC / FARC", section: "garc", eyebrow: "FORMATOS", description: "Desempaquetá y empaquetá archivos internos." },
+  { id: "images", label: "Convertir imágenes", section: "images", eyebrow: "IMÁGENES", description: "Convertí PNG, BCLIM y BFLIM sin modificar el original." },
+  { id: "smdh", label: "Icono SMDH", section: "smdh", eyebrow: "ICONO", description: "Inspeccioná, editá y exportá icon.bin." },
+  { id: "lz11", label: "Comprimir / descomprimir LZ11", section: "lz11", eyebrow: "COMPRESIÓN", description: "Procesá archivos LZ11 sin sobrescribir la entrada." },
+  { id: "blz", label: "Comprimir / descomprimir BLZ", section: "blz", eyebrow: "COMPRESIÓN", description: "Procesá code.bin y otros archivos BLZ sin sobrescribirlos." },
   { id: "titlescreen", games: ["XY", "ORAS"], label: "Pantalla de título", section: "titlescreen", eyebrow: "RECURSOS", description: "Inventariá, previsualizá y reemplazá imágenes." },
 ];
 
@@ -99,13 +117,35 @@ function readJson(key, fallback) {
   }
 }
 
+async function readApiResponse(response) {
+  const raw = await response.text();
+  let body = {};
+  if (raw.trim()) {
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      body = { message: raw.trim() };
+    }
+  }
+  if (!response.ok) {
+    throw new Error(body.error || body.detail || body.title || body.message || `El servidor rechazó la operación (${response.status}).`);
+  }
+  if (!raw.trim()) throw new Error("El servidor no devolvió una respuesta válida. Reiniciá la aplicación y volvé a intentar.");
+  return body;
+}
+
 const defaultWorkspace = {
   path: "",
   gameVersion: "",
   titleId: "",
   isComplete: false,
   hasExeFs: false,
+  hasSmdh: false,
   hasExheader: false,
+  codeBinReady: false,
+  codeBinCompressed: false,
+  codeBinBytes: null,
+  diagnostics: [],
   modules: [],
   status: "Seleccioná una carpeta extraída para comenzar.",
   inspectedAt: null,
@@ -120,10 +160,25 @@ function WorkspaceProvider({ children }) {
       ? { ...saved, status: `RomFS válida: ${saved.gameVersion}.` }
       : saved;
   });
+  const [language, setLanguage] = useState(() => {
+    const raw = localStorage.getItem(LANGUAGE_KEY);
+    const value = raw === null ? 2 : Number(raw);
+    return Number.isInteger(value) && value >= 0 && value <= 9 ? value : 2;
+  });
+  const autoInspectPath = useRef(null);
 
   useEffect(() => {
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify(workspace));
   }, [workspace]);
+
+  useEffect(() => {
+    localStorage.setItem(LANGUAGE_KEY, String(language));
+  }, [language]);
+
+  useEffect(() => {
+    if (workspace.isComplete && ["XY", "ORAS"].includes(workspace.gameVersion) && language > 7)
+      setLanguage(2);
+  }, [language, workspace.gameVersion, workspace.isComplete]);
 
   const setPath = useCallback((path) => {
     setWorkspace((current) => ({
@@ -133,7 +188,12 @@ function WorkspaceProvider({ children }) {
       titleId: "",
       isComplete: false,
       hasExeFs: false,
+      hasSmdh: false,
       hasExheader: false,
+      codeBinReady: false,
+      codeBinCompressed: false,
+      codeBinBytes: null,
+      diagnostics: [],
       modules: [],
       inspectedAt: null,
       status: path ? "Listo para validar." : defaultWorkspace.status,
@@ -153,25 +213,39 @@ function WorkspaceProvider({ children }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspacePath: workspace.path.trim() }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.message || body.title || "No se pudo validar el workspace.");
+      const body = await readApiResponse(response);
       setWorkspace((current) => ({
         ...current,
         gameVersion: body.gameVersion || "",
         titleId: body.titleId || "",
         isComplete: Boolean(body.isComplete),
         hasExeFs: Boolean(body.exeFsPath),
+        hasSmdh: Boolean(body.smdhReady),
         hasExheader: Boolean(body.exheaderPath),
+        codeBinReady: Boolean(body.codeBinReady),
+        codeBinCompressed: Boolean(body.codeBinCompressed),
+        codeBinBytes: body.codeBinBytes ?? null,
+        diagnostics: Array.isArray(body.diagnostics) ? body.diagnostics : [],
         modules: Array.isArray(body.modules) ? body.modules : [],
         status: body.isComplete ? `RomFS válida: ${body.gameVersion}.` : "La RomFS no es válida.",
         inspectedAt: new Date().toISOString(),
       }));
       return true;
     } catch (error) {
-      setWorkspace((current) => ({ ...current, gameVersion: "", titleId: "", isComplete: false, hasExeFs: false, hasExheader: false, modules: [], status: error.message }));
+      setWorkspace((current) => ({ ...current, gameVersion: "", titleId: "", isComplete: false, hasExeFs: false, hasSmdh: false, hasExheader: false, codeBinReady: false, codeBinCompressed: false, codeBinBytes: null, diagnostics: [], modules: [], status: error.message }));
       return false;
     }
   }, [workspace.path]);
+
+  useEffect(() => {
+    // A persisted session keeps the form state, but module availability must be
+    // refreshed against the current files after restarting the host. This avoids
+    // reopening an editor based on stale code.bin/CRO/GARC information.
+    if (!workspace.isComplete || !workspace.path || autoInspectPath.current === workspace.path)
+      return;
+    autoInspectPath.current = workspace.path;
+    void inspect();
+  }, [inspect, workspace.isComplete, workspace.path]);
 
   const pickFolder = useCallback(async () => {
     try {
@@ -189,12 +263,11 @@ function WorkspaceProvider({ children }) {
   }, [workspace.modules]);
 
   const moduleAvailable = useCallback((moduleId) => {
-    if (!workspace.isComplete) return false;
-    if (!moduleId || workspace.modules.length === 0) return true;
+    if (!workspace.isComplete || !moduleId || workspace.modules.length === 0) return false;
     return Boolean(moduleInfo(moduleId)?.sourceAvailable);
   }, [moduleInfo, workspace.isComplete, workspace.modules.length]);
 
-  const value = useMemo(() => ({ workspace, setPath, inspect, pickFolder, moduleInfo, moduleAvailable }), [workspace, setPath, inspect, pickFolder, moduleInfo, moduleAvailable]);
+  const value = useMemo(() => ({ workspace, setPath, inspect, pickFolder, moduleInfo, moduleAvailable, language, setLanguage }), [workspace, setPath, inspect, pickFolder, moduleInfo, moduleAvailable, language]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
@@ -295,8 +368,12 @@ function AppShell() {
 }
 
 function WorkspaceCard({ compact = false, global = false }) {
-  const { workspace, setPath, inspect, pickFolder } = useWorkspace();
+  const { workspace, setPath, inspect, pickFolder, language, setLanguage } = useWorkspace();
   const [busy, setBusy] = useState(false);
+  const availableLanguages = workspace.isComplete && ["XY", "ORAS"].includes(workspace.gameVersion)
+    ? languageOptions.filter((option) => option.value <= 7)
+    : languageOptions;
+  const selectedLanguage = availableLanguages.some((option) => option.value === language) ? language : 2;
 
   const handleInspect = async () => {
     setBusy(true);
@@ -308,9 +385,10 @@ function WorkspaceCard({ compact = false, global = false }) {
     <section className={`workspace-card ${compact ? "is-compact" : ""} ${global ? "is-global" : ""}`}>
       <div className="card-heading"><div><p className="kicker">WORKSPACE ACTIVO</p><h2>{global ? "Juego cargado para toda la sesión" : compact ? "Juego seleccionado" : "Abrí tu juego extraído"}</h2></div><span className={`status-chip ${workspace.isComplete ? "is-ready" : ""}`}>{workspace.isComplete ? "RomFS válida" : "Pendiente"}</span></div>
       <p className="muted">{workspace.isComplete ? "Este workspace se comparte entre todas las funciones de la sesión." : "Cargá aquí la carpeta extraída. Las funciones se habilitan según la validez y los archivos disponibles."}</p>
-      <div className="workspace-input"><span aria-hidden="true">⌁</span><input value={workspace.path} onChange={(event) => setPath(event.target.value)} placeholder="/Users/.../X-extracted" spellCheck="false" /><button className="button secondary" type="button" onClick={pickFolder}>Examinar…</button><button className="button primary" type="button" onClick={handleInspect} disabled={busy}>{busy ? "Validando…" : "Cargar"}</button></div>
+      <div className="workspace-input"><span aria-hidden="true">⌁</span><input aria-label="Carpeta del workspace" value={workspace.path} onChange={(event) => setPath(event.target.value)} placeholder="/Users/.../X-extracted" spellCheck="false" /><button className="button secondary" type="button" onClick={pickFolder}>Examinar…</button><button className="button primary" type="button" onClick={handleInspect} disabled={busy}>{busy ? "Validando…" : "Cargar"}</button></div>
+      {global && <div className="workspace-preferences"><label htmlFor="workspace-language">Idioma de datos</label><select id="workspace-language" value={selectedLanguage} onChange={(event) => setLanguage(Number(event.target.value))}>{availableLanguages.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><small>Se usa al abrir o recargar los catálogos de los editores.</small></div>}
       <div className={`workspace-status ${workspace.isComplete ? "is-ready" : ""}`} role="status"><span aria-hidden="true">{workspace.isComplete ? "✓" : "i"}</span>{workspace.status}</div>
-      {workspace.isComplete && <div className="workspace-meta"><span><b>Juego</b>{workspace.gameVersion}</span><span><b>RomFS</b>Detectada</span><span><b>ExeFS</b>{workspace.hasExeFs ? "Detectado" : "No detectado"}</span><span><b>exheader</b>{workspace.hasExheader ? "Detectado" : "No detectado"}</span><span><b>Title ID</b><code>{workspace.titleId || "No detectado"}</code></span><span><b>Última validación</b>{workspace.inspectedAt ? new Date(workspace.inspectedAt).toLocaleString("es-UY") : "Ahora"}</span></div>}
+      {workspace.isComplete && <div className="workspace-meta"><span><b>Juego</b>{workspace.gameVersion}</span><span><b>RomFS</b>Detectada</span><span><b>ExeFS</b>{workspace.hasExeFs ? "Detectado" : "No detectado"}</span><span><b>icon.bin</b>{workspace.hasSmdh ? "SMDH válido" : "No detectado"}</span><span><b>code.bin</b>{workspace.codeBinReady ? (workspace.codeBinCompressed ? "BLZ · listo" : "Listo") : "No utilizable"}</span><span><b>exheader</b>{workspace.hasExheader ? "Detectado" : "No detectado"}</span><span><b>Title ID</b><code>{workspace.titleId || "No detectado"}</code></span><span><b>Última validación</b>{workspace.inspectedAt ? new Date(workspace.inspectedAt).toLocaleString("es-UY") : "Ahora"}</span></div>}
     </section>
   );
 }
@@ -336,7 +414,7 @@ function Dashboard() {
 
 function ProjectPage() {
   const { workspace } = useWorkspace();
-  const standaloneTools = new Set(["extract", "inspect", "archives"]);
+  const standaloneTools = new Set(["extract", "inspect", "archives", "images", "lz11", "blz"]);
   const visibleTools = workspace.isComplete
     ? projectTools.filter((tool) => !tool.games || tool.games.includes(workspace.gameVersion))
     : projectTools;
@@ -348,6 +426,8 @@ function ProjectPage() {
         const available = projectToolAvailable(tool, workspace, standaloneTools);
         const disabledReason = !workspace.isComplete
           ? "Cargá y validá el workspace para habilitarla."
+          : tool.id === "smdh"
+            ? "Requiere ExeFS con icon.bin SMDH válido."
           : tool.id === "patch"
             ? "Requiere ExeFS con code.bin descomprimido."
             : tool.id === "rebuild" || tool.id === "cia"
@@ -363,11 +443,12 @@ function ProjectPage() {
   );
 }
 
-function projectToolAvailable(tool, workspace, standaloneTools = new Set(["extract", "inspect", "archives"])) {
+function projectToolAvailable(tool, workspace, standaloneTools = new Set(["extract", "inspect", "archives", "images", "lz11", "blz"])) {
   if (standaloneTools.has(tool.id)) return true;
   if (!workspace.isComplete) return false;
+  if (tool.id === "smdh") return workspace.hasSmdh;
   if (tool.id === "rebuild" || tool.id === "cia") return workspace.hasExeFs && workspace.hasExheader;
-  if (tool.id === "patch") return workspace.hasExeFs;
+  if (tool.id === "patch") return workspace.codeBinReady;
   return true;
 }
 
@@ -377,7 +458,7 @@ function ProjectToolsPage() {
   const selected = projectTools.find((tool) => tool.id === focus) || projectTools[0];
   const { workspace } = useWorkspace();
   const frameRef = useRef(null);
-  const requiresWorkspace = !["extract", "archives"].includes(selected.id);
+  const requiresWorkspace = !["extract", "archives", "images", "lz11", "blz"].includes(selected.id);
   const visibleTools = workspace.isComplete
     ? projectTools.filter((tool) => !tool.games || tool.games.includes(workspace.gameVersion))
     : projectTools;
@@ -392,9 +473,13 @@ function ProjectToolsPage() {
       inspect: ["inspect"],
       build: ["inspect", "build"],
       rebuild: ["inspect", "rebuild-rom"],
+      crr: ["inspect", "rebuild-crr"],
       cia: ["inspect", "rebuild-cia"],
       patch: ["inspect", "patch"],
       archives: ["garc", "darc", "sarc", "farc"],
+      images: ["images"],
+      lz11: ["lz11"],
+      blz: ["blz"],
       titlescreen: ["inspect", "titlescreen"],
     }[selected.id] || [selected.section];
     const configure = () => {
@@ -428,7 +513,7 @@ function ProjectToolsPage() {
   return (
     <div className="page tools-page">
       <div className="page-toolbar"><div><Link className="back-link" to="/project">← Herramientas de proyecto</Link><h1>{selected.label}</h1><p>{selected.id === "inspect" ? "La validación se realiza desde el workspace común de la aplicación." : "Usá el workspace común; esta herramienta conserva los formularios de la versión Windows."}</p></div><span className="status-chip">Vista enfocada</span></div>
-      <div className="tools-layout"><ProjectToolRail selected={selected} visibleTools={visibleTools} workspace={workspace} setSearchParams={setSearchParams} />{selectedIsUnavailable ? <UnavailableTool tool={selected} workspace={workspace} /> : selected.id === "inspect" ? <WorkspaceSummary /> : <div className="legacy-host"><LegacyView externalRef={frameRef} src="/legacy/project.html?v=2" title="Herramientas de proyecto" stateKey="project" requireWorkspace={requiresWorkspace} autoLoadButtonId="inspect-action" workspacePanelSelector="#inspect" hideWorkspacePanel={requiresWorkspace} /></div>}</div>
+      <div className="tools-layout"><ProjectToolRail selected={selected} visibleTools={visibleTools} workspace={workspace} setSearchParams={setSearchParams} />{selectedIsUnavailable ? <UnavailableTool tool={selected} workspace={workspace} /> : selected.id === "inspect" ? <WorkspaceSummary /> : <div className="legacy-host"><LegacyView externalRef={frameRef} src="/legacy/project.html?v=4" title="Herramientas de proyecto" stateKey="project" requireWorkspace={requiresWorkspace} autoLoadButtonId="inspect-action" workspacePanelSelector="#inspect" hideWorkspacePanel={requiresWorkspace} /></div>}</div>
     </div>
   );
 }
@@ -443,8 +528,10 @@ function ProjectToolRail({ selected, visibleTools, workspace, setSearchParams })
 function UnavailableTool({ tool, workspace }) {
   const reason = tool.games && workspace.isComplete && !tool.games.includes(workspace.gameVersion)
     ? `Esta herramienta solo corresponde a ${tool.games.join(" y ")}.`
-    : tool.id === "patch"
-      ? "Esta herramienta requiere un ExeFS con code.bin descomprimido."
+      : tool.id === "smdh"
+      ? "Esta herramienta requiere un icon.bin SMDH válido dentro de ExeFS."
+      : tool.id === "patch"
+      ? "Esta herramienta requiere un code.bin válido y alineado; si está comprimido con BLZ se decodifica automáticamente."
       : "Esta herramienta requiere ExeFS y exheader.bin en el workspace.";
   return <section className="workspace-gate"><span>—</span><h2>{tool.label} no disponible</h2><p>{reason}</p></section>;
 }
@@ -452,18 +539,24 @@ function UnavailableTool({ tool, workspace }) {
 function WorkspaceSummary() {
   const { workspace } = useWorkspace();
   const modules = workspace.modules || [];
-  return <section className="workspace-summary"><div className="card-heading"><div><p className="kicker">VALIDACIÓN CENTRAL</p><h2>{workspace.isComplete ? `${workspace.gameVersion} disponible` : "Workspace pendiente"}</h2></div><span className={`status-chip ${workspace.isComplete ? "is-ready" : ""}`}>{workspace.isComplete ? "RomFS válida" : "Requiere carga"}</span></div><p className="muted">La RomFS se detectó correctamente. ExeFS: <b>{workspace.hasExeFs ? "disponible" : "no detectado"}</b>; exheader: <b>{workspace.hasExheader ? "disponible" : "no detectado"}</b>. Las funciones se habilitan según esos componentes.</p>{workspace.isComplete ? <div className="module-grid">{modules.map((module) => <div className={`module-status ${module.sourceAvailable ? "is-ready" : "is-disabled"}`} key={module.id}><b>{module.name}</b><small>{module.sourceAvailable ? "Disponible" : module.requirement}</small></div>)}</div> : <div className="workspace-gate-inline"><span>↑</span><p>Usá el selector común de arriba y presioná <b>Cargar</b> para validar el workspace.</p></div>}</section>;
+  const diagnostics = workspace.diagnostics || [];
+  const summary = workspace.isComplete
+    ? "La RomFS se detectó correctamente."
+    : workspace.path
+      ? "La carpeta todavía no fue validada como una RomFS compatible."
+      : "Todavía no hay un workspace seleccionado.";
+  return <section className="workspace-summary"><div className="card-heading"><div><p className="kicker">VALIDACIÓN CENTRAL</p><h2>{workspace.isComplete ? `${workspace.gameVersion} disponible` : "Workspace pendiente"}</h2></div><span className={`status-chip ${workspace.isComplete ? "is-ready" : ""}`}>{workspace.isComplete ? "RomFS válida" : "Requiere carga"}</span></div><p className="muted">{summary} ExeFS: <b>{workspace.hasExeFs ? "detectado" : "no detectado"}</b>; icon.bin: <b>{workspace.hasSmdh ? "SMDH válido" : "no detectado"}</b>; code.bin: <b>{workspace.codeBinReady ? (workspace.codeBinCompressed ? "válido y comprimido" : "válido") : "no utilizable"}</b>; exheader: <b>{workspace.hasExheader ? "disponible" : "no detectado"}</b>. Las funciones se habilitan según esos componentes.</p>{workspace.isComplete ? <><div className="diagnostic-list">{diagnostics.map((diagnostic) => <div className={`diagnostic diagnostic-${diagnostic.severity}`} key={`${diagnostic.code}-${diagnostic.message}`}><span aria-hidden="true">{diagnostic.severity === "error" ? "!" : diagnostic.severity === "warning" ? "·" : diagnostic.severity === "success" ? "✓" : "i"}</span><p>{diagnostic.message}</p></div>)}</div><div className="module-grid">{modules.map((module) => <div className={`module-status ${module.sourceAvailable ? "is-ready" : "is-disabled"}`} key={module.id}><b>{module.name}</b><small>{module.sourceAvailable ? "Disponible" : module.requirement}</small></div>)}</div></> : <div className="workspace-gate-inline"><span>↑</span><p>Usá el selector común de arriba y presioná <b>Cargar</b> para validar el workspace.</p></div>}</section>;
 }
 
 function RandomizerPage() {
-  return <div className="page randomizer-page"><div className="page-intro"><p className="eyebrow">RANDOMIZADOR</p><h1>Personalizá tu juego</h1><p>Las opciones se habilitan después de validar el workspace común. El flujo y los nombres conservan la lógica de pk3DS para Windows.</p></div><LegacyView src="/legacy/index.html?v=2" title="Randomizador" stateKey="randomizer" requireWorkspace autoLoadButtonId="inspect" workspacePanelSelector="#game" hideWorkspacePanel /></div>;
+  return <div className="page randomizer-page"><div className="page-intro"><p className="eyebrow">RANDOMIZADOR</p><h1>Personalizá tu juego</h1><p>Las opciones se habilitan después de validar el workspace común. El flujo y los nombres conservan la lógica de pk3DS para Windows, incluyendo encuentros y equipos de entrenadores.</p></div><LegacyView src="/legacy/index.html?v=2" title="Randomizador" stateKey="randomizer" requireWorkspace autoLoadButtonId="inspect" workspacePanelSelector="#game" hideWorkspacePanel /></div>;
 }
 
 function CategoryPage() {
   const { group } = useParams();
   const { workspace, moduleAvailable, moduleInfo } = useWorkspace();
   const allPages = editorPages.filter((page) => page.group === group);
-  const pages = workspace.isComplete ? allPages.filter((page) => moduleAvailable(page.availabilityId || page.id)) : allPages;
+  const pages = allPages;
   const title = group === "CRO" ? "CRO y salida" : group;
   return <div className="page"><div className="category-title"><h1>{title}</h1></div><div className="editor-grid">{pages.map((page) => {
     const moduleId = page.availabilityId || page.id;
@@ -481,7 +574,7 @@ function EditorPage() {
   const page = editorPages.find((item) => item.id === id);
   if (!page) return <NotFound />;
   const groupLabel = page.group === "CRO" ? "CRO / Salida" : page.group;
-  return <div className="page editor-page"><div className="page-toolbar"><div><Link className="back-link" to={`/category/${page.group}`}>← {groupLabel}</Link><h1>{page.label}</h1><p>{page.description} La sesión se conserva al navegar a otro módulo.</p></div><span className="status-chip">Editor</span></div><LegacyView src={`/legacy/${page.legacy}?v=3`} title={page.label} stateKey={page.id} requireWorkspace moduleId={page.availabilityId || page.id} hideWorkspacePanel /></div>;
+  return <div className="page editor-page"><div className="page-toolbar"><div><Link className="back-link" to={`/category/${page.group}`}>← {groupLabel}</Link><h1>{page.label}</h1><p>{page.description} La sesión se conserva al navegar a otro módulo.</p></div><span className="status-chip">Editor</span></div><LegacyView src={`/legacy/${page.legacy}?v=4`} title={page.label} stateKey={page.id} requireWorkspace moduleId={page.availabilityId || page.id} hideWorkspacePanel /></div>;
 }
 
 function LegacyView({ src, title, stateKey = src, externalRef, requireWorkspace = false, moduleId, hideWorkspacePanel = false, workspacePanelSelector = ".editor-main > section:has(.path-input)", autoLoadButtonId = "load" }) {
@@ -489,14 +582,41 @@ function LegacyView({ src, title, stateKey = src, externalRef, requireWorkspace 
   const frameRef = externalRef || localFrameRef;
   const loadedFrameRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
-  const { workspace, moduleAvailable, moduleInfo } = useWorkspace();
-  const storageKey = `${FRAME_STATE_PREFIX}${stateKey}`;
+  const { workspace, moduleAvailable, moduleInfo, language } = useWorkspace();
+  const workspaceStateKey = workspace.path ? encodeURIComponent(workspace.path) : "unloaded";
+  const storageKey = `${FRAME_STATE_PREFIX}${workspaceStateKey}:${stateKey}`;
   const canOpen = !requireWorkspace || moduleAvailable(moduleId);
   const availability = moduleInfo(moduleId);
+
+  const installLanguageBridge = useCallback(() => {
+    const view = frameRef.current?.contentWindow;
+    if (!view) return;
+    view.__pk3dsLanguage = language;
+    if (view.__pk3dsLanguageBridge) return;
+    try {
+      const nativeFetch = view.fetch.bind(view);
+      view.fetch = (input, init = {}) => {
+        if (typeof init.body !== "string")
+          return nativeFetch(input, init);
+        try {
+          const payload = JSON.parse(init.body);
+          if (!payload || typeof payload !== "object" || !Object.prototype.hasOwnProperty.call(payload, "language"))
+            return nativeFetch(input, init);
+          return nativeFetch(input, { ...init, body: JSON.stringify({ ...payload, language: view.__pk3dsLanguage ?? 2 }) });
+        } catch {
+          return nativeFetch(input, init);
+        }
+      };
+      view.__pk3dsLanguageBridge = true;
+    } catch {
+      // A legacy frame may expose a read-only fetch property; its own default remains valid.
+    }
+  }, [frameRef, language]);
 
   const restore = useCallback(() => {
     const doc = frameRef.current?.contentDocument;
     if (!doc) return;
+    installLanguageBridge();
     const styleId = "pk3ds-react-embed-style";
     if (!doc.getElementById(styleId)) {
       const style = doc.createElement("style");
@@ -518,7 +638,7 @@ function LegacyView({ src, title, stateKey = src, externalRef, requireWorkspace 
       // A corrupt draft should never prevent opening the editor.
     }
     setLoaded(true);
-  }, [frameRef, hideWorkspacePanel, storageKey, workspacePanelSelector]);
+  }, [frameRef, hideWorkspacePanel, installLanguageBridge, storageKey, workspacePanelSelector]);
 
   const loadFrame = useCallback(() => {
     const frame = frameRef.current;
@@ -555,6 +675,10 @@ function LegacyView({ src, title, stateKey = src, externalRef, requireWorkspace 
       window.setTimeout(() => loadButton.click(), 0);
     }
   }, [autoLoadButtonId, frameRef, requireWorkspace, restore, storageKey, workspace.isComplete, workspace.path]);
+
+  useEffect(() => {
+    installLanguageBridge();
+  }, [installLanguageBridge, loaded]);
 
   useEffect(() => {
     if (!canOpen) {

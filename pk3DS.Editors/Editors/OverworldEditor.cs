@@ -29,24 +29,47 @@ public static class OverworldEditor
     private const int Gen6WarpSize = 0x18;
     private const int Gen6TriggerSize = 0x18;
     private const int Gen6MapPropertyOffset = 0x88;
-    private const int Gen6MapMatrixDimensionsOffset = 0x14;
+    private const int Gen6MapMatrixDimensionsOffset = 0x04;
+    private const int Gen6MapMatrixValuesOffset = 0x08;
+    private const int Gen6MapMatrixRawDimensionsOffset = 0x14;
+    private const int Gen6MapMatrixRawValuesOffset = 0x18;
+    private const int Gen6MapPreviewMaxPixels = 2_000_000;
+    private const int Gen6MapPreviewColorShift = 0;
     private const int Gen7EntityPositionOffset = 0x08;
     private const int Gen7EntityRecordSize = 0x3C;
     private const int Gen7EmPositionOffset = 0x08;
     private const int Gen7EmRecordSize = 0x78;
     private const int Gen7EmRecordKind = 1;
+    private const int Gen7EiPositionOffset = 0x08;
+    private const int Gen7EiRecordSize = 0x5C;
+    private const int Gen7EiRecordKind = 10;
+    private const int Gen7PrPositionOffset = 0x08;
+    private const int Gen7PrKind203 = 203;
+    private const int Gen7PrKind204 = 204;
     private const int Gen7EbPositionOffset = 0x08;
     private const int Gen7EbRecordSize = 0x3C;
     private const int Gen7EbRecordKind = 2;
     private const int Gen7EsPositionOffset = 0x08;
-    private const int Gen7EsRecordSize = 0x3C;
+    // ES type 4 has a shorter retail record than EP/EB/EA. The four-byte kind
+    // marker repeats at 0x04 + (index * 0x38), with XYZ beginning at 0x08.
+    private const int Gen7EsRecordSize = 0x38;
     private const int Gen7EsRecordKind = 4;
     private const int Gen7EaPositionOffset = 0x08;
     private const int Gen7EaRecordSize = 0x3C;
     private const int Gen7EaRecordKind = 5;
+    private const int Gen7EaKind6PayloadPositionOffset = 0x08;
+    private const int Gen7EaKind6PayloadRecordSize = 0x30;
+    private const int Gen7EaKind6FirstDescriptorSize = 0x18;
+    private const int Gen7EaKind6DescriptorSize = 0x1C;
+    private const int Gen7EaKind6RecordKind = 6;
     private const int Gen7EtPositionOffset = 0x08;
     private const int Gen7EtRecordSize = 0x54;
     private const int Gen7EtRecordKind = 7;
+    private const int Gen7EtKind9PointHeaderSize = 0x08;
+    private const int Gen7EtKind9PointSize = 0x0C;
+    private const int Gen7EtKind9FirstDescriptorSize = 0x14;
+    private const int Gen7EtKind9DescriptorSize = 0x18;
+    private const int Gen7EtKind9RecordKind = 9;
     private const int ScriptHeaderSize = 0x1C;
     private const int MaxDecompressedScriptBytes = 16 * 1024 * 1024;
 
@@ -214,15 +237,26 @@ public static class OverworldEditor
         var (data, offset) = RequireGen7ZoneData(config, request.ZoneIndex);
         var locations = config.GetText(TextName.metlist_000000);
         var parentMap = BitConverter.ToInt32(data, offset + 0x1C);
+        var (worldIndex, areaIndex) = ReadGen7ZoneMapping(config, request.ZoneIndex);
         return new OverworldGen7ZoneResponse(
             config.Version.ToString(), request.ZoneIndex, GetGen7ZoneLocation(request.ZoneIndex, parentMap, locations),
-            parentMap, data.Length);
+            parentMap, data.Length, worldIndex, areaIndex);
     }
 
-    /// <summary>Exports only the understood Gen. VII parent-map field to a LayeredFS patch.</summary>
-    public static ExportResult ExportGen7Zone(OverworldGen7ZoneExportRequest request) =>
-        EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId,
-            request.Language, "owse-gen7-zone", ["zonedata"], config =>
+    /// <summary>
+    /// Exports the understood Gen. VII zone routing fields to a LayeredFS patch. ParentMap lives
+    /// in zonedata; AreaIndex lives in the selected world's WD mapping table. All other bytes are
+    /// preserved.
+    /// </summary>
+    public static ExportResult ExportGen7Zone(OverworldGen7ZoneExportRequest request)
+    {
+        // ParentMap only needs zonedata. Keep the legacy partial-workspace flow working, and
+        // require the additional tables only when the caller asks to reroute encounters.
+        var extraGarcs = request.AreaIndex is null
+            ? new[] { "zonedata" }
+            : new[] { "zonedata", "worlddata", "encdata" };
+        return EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId,
+            request.Language, "owse-gen7-zone", extraGarcs, config =>
             {
                 Guard.Gen7(config, "metadatos de zona");
                 var (data, offset) = RequireGen7ZoneData(config, request.ZoneIndex);
@@ -231,11 +265,25 @@ public static class OverworldEditor
                     throw new WorkspaceException($"El mapa padre debe estar entre 0 y {locations.Length - 1}.");
 
                 BitConverter.GetBytes(request.ParentMap).CopyTo(data, offset + 0x1C);
-                var garc = config.GetlzGARCData("zonedata");
-                garc[0] = data;
-                garc.Save();
-                return [config.GetGARCFileName("zonedata")];
+                var zoneGarc = config.GetlzGARCData("zonedata");
+                zoneGarc[0] = data;
+                zoneGarc.Save();
+
+                if (request.AreaIndex is null)
+                    return [config.GetGARCFileName("zonedata")];
+
+                var encounterData = config.GetlzGARCData("encdata");
+                var areaCount = encounterData.FileCount / FilesPerWorld;
+                if (request.AreaIndex < 0 || request.AreaIndex >= areaCount)
+                    throw new WorkspaceException($"El área de encuentros debe estar entre 0 y {Math.Max(0, areaCount - 1)}.");
+
+                var worldData = config.GetlzGARCData("worlddata");
+                var worldIndex = ReadGen7WorldIndex(zoneGarc.Files, request.ZoneIndex);
+                ApplyGen7AreaIndex(worldData, worldIndex, request.ZoneIndex, request.AreaIndex.Value);
+                worldData.Save();
+                return [config.GetGARCFileName("zonedata"), config.GetGARCFileName("worlddata")];
             });
+    }
 
     /// <summary>
     /// Reads the confirmed position vectors from the fixed-size records in the Gen. VII ED
@@ -250,12 +298,15 @@ public static class OverworldEditor
         var blocks = ReadGen7EntityBlocks(encounterData.Files, request.WorldIndex, ref diagnostics) ?? [];
         var positions = ReadGen7EntityPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
         var emPositions = ReadGen7EmPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
+        var eiPositions = ReadGen7EiPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
+        var prPositions = ReadGen7PrPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
         var ebPositions = ReadGen7EbPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
         var esPositions = ReadGen7EsPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
         var eaPositions = ReadGen7EaPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
         var etPositions = ReadGen7EtPositions(encounterData.Files, request.WorldIndex, ref diagnostics);
         return new OverworldGen7EntityResponse(
-            config.Version.ToString(), request.WorldIndex, positions, emPositions, ebPositions, esPositions, eaPositions, etPositions, blocks, diagnostics);
+            config.Version.ToString(), request.WorldIndex, positions, emPositions, ebPositions, esPositions, eaPositions, etPositions, blocks,
+            diagnostics, eiPositions, prPositions);
     }
 
     /// <summary>Exports only confirmed Gen. VII ED position vectors while preserving all other bytes.</summary>
@@ -290,6 +341,12 @@ public static class OverworldEditor
                     ApplyGen7EmPositions(emEntries, request.EmPositions);
                     ed[emIndex] = Mini.PackMini(emEntries, "EM");
                 }
+
+                if (request.EiPositions is not null)
+                    ApplyGen7EiPositions(ed, request.EiPositions);
+
+                if (request.PrPositions is not null)
+                    ApplyGen7PrPositions(ed, request.PrPositions);
 
                 if (request.EbPositions is null)
                 {
@@ -332,7 +389,109 @@ public static class OverworldEditor
                 return [config.GetGARCFileName("encdata")];
             });
 
-    /// <summary>Reads the Gen. VI movement/property grid referenced by a zone.</summary>
+    /// <summary>
+    /// Exports the decompressed ED container and every nested block/entry exactly as read. This
+    /// is intentionally diagnostic-only: it makes unsupported Gen. VII variants available for
+    /// inspection without guessing their record layout or changing the source workspace.
+    /// </summary>
+    public static OverworldGen7EntityRawExportResponse ExportGen7EntityRaw(OverworldGen7EntityRawExportRequest request)
+    {
+        var (workspace, config) = EditorSession.OpenReadOnly(request.WorkspacePath, request.Language);
+        Guard.Gen7(config, "entidades del mundo");
+        var encounterData = config.GetlzGARCData("encdata");
+        var fileIndex = RequireGen7WorldFileIndex(encounterData.FileCount, request.WorldIndex);
+        var ed = encounterData[fileIndex] ?? [];
+        if (ed.Length == 0)
+            throw new WorkspaceException("La zona Gen. VII no contiene datos ED para exportar.");
+
+        byte[][] blocks;
+        try
+        {
+            blocks = ReadMini(ed, Gen7EntityIdentifier);
+        }
+        catch (WorkspaceException exception)
+        {
+            throw new WorkspaceException($"El bloque ED no se pudo exportar: {exception.Message}");
+        }
+
+        var output = ResolveRawEntityOutputDirectory(workspace, request.OutputDirectory, request.WorldIndex);
+        var files = new List<OverworldGen7EntityRawFile>();
+        var diagnostics = (string?)null;
+
+        const string edName = "ed.bin";
+        File.WriteAllBytes(Path.Combine(output, edName), ed);
+        files.Add(new OverworldGen7EntityRawFile(edName, Gen7EntityIdentifier, null, null, ed.Length));
+
+        var manifestBlocks = new List<object>(blocks.Length);
+        for (var blockIndex = 0; blockIndex < blocks.Length; blockIndex++)
+        {
+            var block = blocks[blockIndex];
+            var identifier = block.Length >= 2
+                ? new string([(char)block[0], (char)block[1]])
+                : "??";
+            var blockName = $"ed-{blockIndex:D3}.bin";
+            File.WriteAllBytes(Path.Combine(output, blockName), block);
+            files.Add(new OverworldGen7EntityRawFile(blockName, identifier, blockIndex, null, block.Length));
+
+            var entryFiles = new List<OverworldGen7EntityRawFile>();
+            try
+            {
+                var entries = ReadMini(block, identifier);
+                for (var entryIndex = 0; entryIndex < entries.Length; entryIndex++)
+                {
+                    var entryName = $"ed-{blockIndex:D3}-entry-{entryIndex:D3}.bin";
+                    var entry = entries[entryIndex];
+                    File.WriteAllBytes(Path.Combine(output, entryName), entry);
+                    var file = new OverworldGen7EntityRawFile(entryName, identifier, blockIndex, entryIndex, entry.Length);
+                    files.Add(file);
+                    entryFiles.Add(file);
+                }
+            }
+            catch (WorkspaceException exception)
+            {
+                diagnostics = AppendError(diagnostics,
+                    $"El bloque {identifier} no se pudo detallar; se exportó intacto: {exception.Message}");
+            }
+
+            manifestBlocks.Add(new
+            {
+                blockIndex,
+                identifier,
+                bytes = block.Length,
+                entries = entryFiles,
+            });
+        }
+
+        var manifest = new
+        {
+            format = "pk3DS OWSE Gen VII raw ED",
+            gameVersion = config.Version.ToString(),
+            worldIndex = request.WorldIndex,
+            source = new
+            {
+                garc = config.GetGARCFileName("encdata"),
+                fileIndex,
+                note = "Contenido descomprimido leído desde encdata; no es un parche LayeredFS.",
+            },
+            blocks = manifestBlocks,
+            files,
+            diagnostics,
+        };
+        var manifestName = "manifest.json";
+        File.WriteAllText(Path.Combine(output, manifestName),
+            System.Text.Json.JsonSerializer.Serialize(manifest,
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                }));
+
+        return new OverworldGen7EntityRawExportResponse(
+            config.Version.ToString(), request.WorldIndex, fileIndex, config.GetGARCFileName("encdata"),
+            output, Path.Combine(output, manifestName), files.ToArray(), files.Sum(file => (long)file.Bytes), diagnostics);
+    }
+
+    /// <summary>Reads the Gen. VI movement/property grid and map matrix referenced by a zone.</summary>
     public static OverworldGen6MapResponse GetGen6Map(OverworldGen6MapRequest request)
     {
         var (_, config) = EditorSession.OpenReadOnly(request.WorkspacePath, request.Language);
@@ -340,34 +499,67 @@ public static class OverworldEditor
         var zone = GetGen6Zone(config, request.ZoneIndex, out _);
         var metadata = ReadGen6ZoneMetadata(zone[0])
             ?? throw new WorkspaceException("La zona Gen. VI no expone metadatos de mapa.");
-        var map = ReadGen6Map(config.GetlzGARCData("mapGR"), metadata.MapArea);
+        var mapGr = config.GetlzGARCData("mapGR");
+        var map = ReadGen6Map(mapGr, metadata.MapArea);
         var matrix = ReadGen6MapMatrix(config.GetlzGARCData("mapMatrix"), metadata.MapMatrix);
+        var preview = BuildGen6MapPreview(mapGr, matrix);
         return new OverworldGen6MapResponse(
             config.Version.ToString(), request.ZoneIndex, metadata.MapArea, metadata.MapMatrix,
             map.Width, map.Height, map.Properties, matrix.Width, matrix.Height, matrix.Values,
-            matrix.Diagnostics);
+            JoinDiagnostics(map.Diagnostics, matrix.Diagnostics), preview);
     }
 
-    /// <summary>Exports only the understood Gen. VI map-property grid to a LayeredFS patch.</summary>
+    /// <summary>Exports the understood Gen. VI map-property grid and/or matrix entries to a LayeredFS patch.</summary>
     public static ExportResult ExportMap(OverworldGen6MapExportRequest request) =>
         EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId,
-            request.Language, "owse-gen6-map", ["encdata", "mapGR"], config =>
+            request.Language, "owse-gen6-map", ["encdata", "mapGR", "mapMatrix"], config =>
             {
                 Guard.Gen6(config);
+                if (request.Properties is null && request.MatrixValues is null)
+                    throw new WorkspaceException("Indicá cambios para la grilla GR o la matriz MM.");
+
                 var zone = GetGen6Zone(config, request.ZoneIndex, out _);
                 var metadata = ReadGen6ZoneMetadata(zone[0])
                     ?? throw new WorkspaceException("La zona Gen. VI no expone metadatos de mapa.");
-                var mapGarc = config.GetlzGARCData("mapGR");
-                var map = ReadGen6Map(mapGarc, metadata.MapArea);
-                if (request.Properties is null || request.Properties.Length != map.Properties.Length)
-                    throw new WorkspaceException($"La grilla del mapa debe conservar {map.Properties.Length} celdas.");
+                var changed = new List<string>();
 
-                var raw = mapGarc[metadata.MapArea];
-                for (var index = 0; index < request.Properties.Length; index++)
-                    BitConverter.GetBytes(request.Properties[index]).CopyTo(raw, Gen6MapPropertyOffset + (index * sizeof(uint)));
-                mapGarc[metadata.MapArea] = raw;
-                mapGarc.Save();
-                return [config.GetGARCFileName("mapGR")];
+                if (request.Properties is not null)
+                {
+                    var mapGarc = config.GetlzGARCData("mapGR");
+                    var map = ReadGen6Map(mapGarc, metadata.MapArea);
+                    if (map.Properties.Length == 0)
+                        throw new WorkspaceException(map.Diagnostics ?? "La grilla GR no expone propiedades editables.");
+                    if (request.Properties.Length != map.Properties.Length)
+                        throw new WorkspaceException($"La grilla del mapa debe conservar {map.Properties.Length} celdas.");
+
+                    var raw = mapGarc[metadata.MapArea];
+                    for (var index = 0; index < request.Properties.Length; index++)
+                        BitConverter.GetBytes(request.Properties[index]).CopyTo(raw, Gen6MapPropertyOffset + (index * sizeof(uint)));
+                    mapGarc[metadata.MapArea] = raw;
+                    mapGarc.Save();
+                    changed.Add(config.GetGARCFileName("mapGR"));
+                }
+
+                if (request.MatrixValues is not null)
+                {
+                    var matrixGarc = config.GetlzGARCData("mapMatrix");
+                    var matrix = ReadGen6MapMatrix(matrixGarc, metadata.MapMatrix);
+                    if (matrix.FirstEntry is null)
+                        throw new WorkspaceException(matrix.Diagnostics ?? "La matriz MM no se puede editar.");
+                    if (request.MatrixValues.Length != matrix.Values.Length)
+                        throw new WorkspaceException($"La matriz MM debe conservar {matrix.Values.Length} celdas interpretadas.");
+
+                    for (var index = 0; index < request.MatrixValues.Length; index++)
+                        BitConverter.GetBytes(request.MatrixValues[index]).CopyTo(
+                            matrix.FirstEntry, matrix.ValuesOffset + (index * sizeof(ushort)));
+                    matrixGarc[metadata.MapMatrix] = matrix.Entries is null
+                        ? matrix.FirstEntry
+                        : Mini.PackMini(matrix.Entries, "MM");
+                    matrixGarc.Save();
+                    changed.Add(config.GetGARCFileName("mapMatrix"));
+                }
+
+                return changed;
             });
 
     private static OverworldCatalogResponse GetGen6Catalog(GameConfig config)
@@ -459,10 +651,16 @@ public static class OverworldEditor
         if (mapArea < 0 || mapArea >= garc.FileCount)
             throw new WorkspaceException($"El área de mapa {mapArea} no existe en mapGR.");
         var data = garc[mapArea];
-        if (data is null || data.Length < Gen6MapPropertyOffset)
+        if (data is null || data.Length < 4)
             throw new WorkspaceException($"El área de mapa {mapArea} no contiene una cabecera GR completa.");
         if (data[0] != 'G' || data[1] != 'R')
             throw new WorkspaceException($"El área de mapa {mapArea} no tiene formato GR.");
+
+        if (TryReadGen6MapTile(data, out _, out _))
+            return new(0, 0, [], $"El área GR {mapArea} es un contenedor Mini; sus propiedades de movimiento no se editan como grilla plana.");
+
+        if (data.Length < Gen6MapPropertyOffset)
+            throw new WorkspaceException($"El área de mapa {mapArea} no contiene una cabecera GR completa.");
 
         var width = BitConverter.ToUInt16(data, 0x80);
         var height = BitConverter.ToUInt16(data, 0x82);
@@ -474,36 +672,216 @@ public static class OverworldEditor
         var cellCount = checked((int)count);
         var properties = new uint[cellCount];
         Buffer.BlockCopy(data, Gen6MapPropertyOffset, properties, 0, checked(cellCount * sizeof(uint)));
-        return new Gen6MapGrid(width, height, properties);
+        return new Gen6MapGrid(width, height, properties, null);
     }
 
     private static Gen6MapMatrix ReadGen6MapMatrix(LazyGARCFile garc, int mapMatrix)
     {
         if (mapMatrix < 0 || mapMatrix >= garc.FileCount)
-            return new(0, 0, [], $"La matriz {mapMatrix} no existe en mapMatrix.");
+            return InvalidGen6MapMatrix($"La matriz {mapMatrix} no existe en mapMatrix.");
         var data = garc[mapMatrix];
-        if (data is null || data.Length < Gen6MapMatrixDimensionsOffset + 4 ||
+        if (data is null || data.Length < 4 ||
             data[0] != 'M' || data[1] != 'M')
-            return new(0, 0, [], $"La entrada {mapMatrix} no tiene formato MM reconocible.");
+            return InvalidGen6MapMatrix($"La entrada {mapMatrix} no tiene formato MM reconocible.");
 
-        var width = BitConverter.ToUInt16(data, Gen6MapMatrixDimensionsOffset);
-        var height = BitConverter.ToUInt16(data, Gen6MapMatrixDimensionsOffset + 2);
+        byte[][]? entries = null;
+        try
+        {
+            entries = Mini.UnpackMini(data, "MM");
+        }
+        catch
+        {
+            // A few Gen. VI fixtures use the legacy flat MM layout. Fall through to it
+            // before reporting a malformed matrix.
+        }
+
+        if (entries is { Length: > 0 } && TryReadMatrixDimensions(
+                entries[0], Gen6MapMatrixDimensionsOffset, out var width, out var height))
+            return BuildGen6MapMatrix(width, height, entries[0], Gen6MapMatrixValuesOffset, entries);
+
+        if (!TryReadMatrixDimensions(data, Gen6MapMatrixRawDimensionsOffset, out width, out height))
+            return InvalidGen6MapMatrix($"La entrada {mapMatrix} no contiene un encabezado MM reconocible.");
+
+        return BuildGen6MapMatrix(width, height, data, Gen6MapMatrixRawValuesOffset, null);
+    }
+
+    private static Gen6MapMatrix BuildGen6MapMatrix(
+        int width, int height, byte[] firstEntry, int valuesOffset, byte[][]? entries)
+    {
         var count = checked((long)width * height);
         if (width == 0 || height == 0 || count > 1_000_000)
-            return new(0, 0, [], $"La matriz {mapMatrix} tiene dimensiones inválidas.");
+            return InvalidGen6MapMatrix("La matriz MM tiene dimensiones inválidas.");
 
-        var available = Math.Max(0, (data.Length - 0x18) / sizeof(ushort));
+        var available = Math.Max(0, (firstEntry.Length - valuesOffset) / sizeof(ushort));
         var valueCount = checked((int)Math.Min(count, available));
         var values = new ushort[valueCount];
         for (var index = 0; index < values.Length; index++)
-            values[index] = BitConverter.ToUInt16(data, 0x18 + (index * sizeof(ushort)));
+            values[index] = BitConverter.ToUInt16(firstEntry, valuesOffset + (index * sizeof(ushort)));
         var diagnostics = values.Length == count ? null :
             $"La matriz expone {values.Length} de {count} celdas en su sección inicial; se conserva el resto sin interpretar.";
-        return new(width, height, values, diagnostics);
+        return new(width, height, values, diagnostics, entries, firstEntry, valuesOffset);
     }
 
-    private sealed record Gen6MapGrid(int Width, int Height, uint[] Properties);
-    private sealed record Gen6MapMatrix(int Width, int Height, ushort[] Values, string? Diagnostics);
+    private static bool TryReadMatrixDimensions(byte[] data, int offset, out int width, out int height)
+    {
+        width = height = 0;
+        if (data is null || offset < 0 || offset + 4 > data.Length)
+            return false;
+        width = BitConverter.ToUInt16(data, offset);
+        height = BitConverter.ToUInt16(data, offset + 2);
+        return width > 0 && height > 0 && (long)width * height <= 1_000_000;
+    }
+
+    private static Gen6MapMatrix InvalidGen6MapMatrix(string diagnostics) =>
+        new(0, 0, [], diagnostics, null, null, 0);
+
+    private sealed record Gen6MapGrid(int Width, int Height, uint[] Properties, string? Diagnostics);
+    private sealed record Gen6MapMatrix(
+        int Width, int Height, ushort[] Values, string? Diagnostics,
+        byte[][]? Entries, byte[]? FirstEntry, int ValuesOffset);
+
+    private sealed record Gen6MapTile(int Width, int Height, uint[] Tiles);
+
+    private static string? JoinDiagnostics(params string?[] diagnostics)
+    {
+        var messages = diagnostics.Where(message => !string.IsNullOrWhiteSpace(message)).Distinct().ToArray();
+        return messages.Length == 0 ? null : string.Join(" ", messages);
+    }
+
+    private static OverworldGen6MapPreview? BuildGen6MapPreview(
+        LazyGARCFile mapGr, Gen6MapMatrix matrix)
+    {
+        if (matrix.Width <= 0 || matrix.Height <= 0 || matrix.Values.Length == 0)
+            return null;
+
+        var tiles = new Gen6MapTile?[matrix.Values.Length];
+        var diagnostics = new List<string>();
+        var tileWidth = 0;
+        var tileHeight = 0;
+        for (var index = 0; index < matrix.Values.Length; index++)
+        {
+            var entryIndex = matrix.Values[index];
+            if (entryIndex == ushort.MaxValue)
+                continue;
+            if (entryIndex >= mapGr.FileCount)
+            {
+                diagnostics.Add($"MM {entryIndex} no existe en mapGR.");
+                continue;
+            }
+
+            var packed = mapGr[entryIndex];
+            if (!TryReadGen6MapTile(packed, out var tile, out var diagnostic))
+            {
+                diagnostics.Add($"GR {entryIndex}: {diagnostic}");
+                continue;
+            }
+
+            if (tileWidth == 0)
+            {
+                tileWidth = tile.Width;
+                tileHeight = tile.Height;
+            }
+            else if (tile.Width != tileWidth || tile.Height != tileHeight)
+            {
+                diagnostics.Add($"GR {entryIndex} tiene dimensiones {tile.Width}x{tile.Height}; se esperaba {tileWidth}x{tileHeight}.");
+                continue;
+            }
+
+            tiles[index] = tile;
+        }
+
+        if (tileWidth == 0 || tileHeight == 0)
+            return new(null, 0, 0, diagnostics.Count == 0
+                ? "No se encontraron entradas GR visualizables en la matriz MM."
+                : string.Join(" ", diagnostics.Distinct()));
+
+        var width = checked(matrix.Width * tileWidth);
+        var height = checked(matrix.Height * tileHeight);
+        if ((long)width * height > Gen6MapPreviewMaxPixels)
+            return new(null, 0, 0,
+                $"La previsualización ocuparía {width}x{height} píxeles y se omitió por seguridad.");
+
+        var rgba = new byte[checked(width * height * 4)];
+        for (var pixel = 0; pixel < width * height; pixel++)
+        {
+            rgba[(pixel * 4) + 0] = 16;
+            rgba[(pixel * 4) + 1] = 23;
+            rgba[(pixel * 4) + 2] = 29;
+            rgba[(pixel * 4) + 3] = 255;
+        }
+
+        for (var index = 0; index < tiles.Length; index++)
+        {
+            var tile = tiles[index];
+            if (tile is null)
+                continue;
+
+            var originX = (index % matrix.Width) * tileWidth;
+            var originY = (index / matrix.Width) * tileHeight;
+            for (var tileIndex = 0; tileIndex < tile.Tiles.Length; tileIndex++)
+            {
+                var colorValue = tile.Tiles[tileIndex] == 0x01000021
+                    ? 0xFF000000u
+                    : LCRNG32.Advance(tile.Tiles[tileIndex], Gen6MapPreviewColorShift) | 0xFF000000u;
+                var x = originX + (tileIndex % tileWidth);
+                var y = originY + (tileIndex / tileWidth);
+                var pixel = ((y * width) + x) * 4;
+                rgba[pixel + 0] = (byte)(colorValue >> 16);
+                rgba[pixel + 1] = (byte)(colorValue >> 8);
+                rgba[pixel + 2] = (byte)colorValue;
+                rgba[pixel + 3] = (byte)(colorValue >> 24);
+            }
+        }
+
+        var diagnosticText = diagnostics.Count == 0
+            ? null
+            : $"Previsualización parcial: {string.Join(" ", diagnostics.Distinct())}";
+        return new(
+            Convert.ToBase64String(PortablePng.EncodeRgba(rgba, width, height)),
+            width, height, diagnosticText);
+    }
+
+    private static bool TryReadGen6MapTile(
+        byte[] packed, out Gen6MapTile tile, out string diagnostic)
+    {
+        tile = null!;
+        diagnostic = "no es un contenedor Mini GR.";
+        byte[][]? entries;
+        try
+        {
+            entries = Mini.UnpackMini(packed, "GR");
+        }
+        catch (Exception exception)
+        {
+            diagnostic = exception.Message;
+            return false;
+        }
+
+        if (entries is null || entries.Length == 0 || entries[0] is null)
+            return false;
+        var data = entries[0];
+        if (data.Length < 4)
+        {
+            diagnostic = "la entrada visual está truncada.";
+            return false;
+        }
+
+        var width = BitConverter.ToUInt16(data, 0);
+        var height = BitConverter.ToUInt16(data, 2);
+        var count = (long)width * height;
+        if (width == 0 || height == 0 || count > 40_000 || 4 + (count * sizeof(uint)) > data.Length)
+        {
+            diagnostic = "la entrada visual tiene dimensiones inválidas.";
+            return false;
+        }
+
+        var values = new uint[(int)count];
+        for (var index = 0; index < values.Length; index++)
+            values[index] = BitConverter.ToUInt32(data, 4 + (index * sizeof(uint)));
+        tile = new(width, height, values);
+        diagnostic = string.Empty;
+        return true;
+    }
 
     private static void AddGen6Group(
         ICollection<OverworldScriptGroupSummary> groups, byte[][] zone, string locationName,
@@ -642,9 +1020,37 @@ public static class OverworldEditor
     {
         if (data is null || data.Length < 0x20)
             return null;
+        var movementFlags = data.Length >= 0x24 ? BitConverter.ToUInt32(data, 0x20) : 0u;
+        var cameraFlags = data.Length >= 0x2A ? BitConverter.ToUInt32(data, 0x26) : 0u;
         return new OverworldGen6ZoneMetadata(
             ReadU16(data, 0x02), ReadU16(data, 0x04), ReadU16(data, 0x06),
-            ReadU16(data, 0x18), ReadU16(data, 0x1C) & 0x3FF, ReadU16(data, 0x1E) & 0x1F);
+            ReadU16(data, 0x18), ReadU16(data, 0x1C) & 0x3FF, ReadU16(data, 0x1E) & 0x1F,
+            MapType: data[0], MapMove: data[1],
+            BgmSpring: data.Length >= 0x0C ? ReadU32(data, 0x08) : null,
+            BgmSummer: data.Length >= 0x10 ? ReadU32(data, 0x0C) : null,
+            BgmAutumn: data.Length >= 0x14 ? ReadU32(data, 0x10) : null,
+            BgmWinter: data.Length >= 0x18 ? ReadU32(data, 0x14) : null,
+            TownMapGroup: data.Length >= 0x1C ? ReadU16(data, 0x1A) : null,
+            OlValue: ReadU16(data, 0x1C) >> 10,
+            SkyBoxEnabled: (data[0x1E] & 0x20) != 0,
+            RollerSkateEnabled: (data[0x1E] & 0x40) != 0,
+            BattleBackground: (ReadU16(data, 0x1E) >> 7) & 0x7F,
+            MapChange: (int)(movementFlags & 0x1F),
+            BicycleEnabled: (movementFlags & (1u << 10)) != 0,
+            RunEnabled: (movementFlags & (1u << 11)) != 0,
+            EscapeRopeEnabled: (movementFlags & (1u << 12)) != 0,
+            FlyEnabled: (movementFlags & (1u << 13)) != 0,
+            BgmEnabled: (movementFlags & (1u << 14)) != 0,
+            UnknownFlag: (movementFlags & (1u << 15)) != 0,
+            Camera1: data.Length >= 0x24 ? ReadU16(data, 0x22) : null,
+            Camera2: data.Length >= 0x26 ? ReadU16(data, 0x24) : null,
+            CameraFlags: data.Length >= 0x2A ? cameraFlags : null,
+            StartX: data.Length >= 0x30 ? ReadI16(data, 0x2C) / 18f : null,
+            StartY: data.Length >= 0x34 ? ReadI16(data, 0x30) / 18f : null,
+            StartZ: data.Length >= 0x30 ? ReadI16(data, 0x2E) : null,
+            EndX: data.Length >= 0x34 ? ReadI16(data, 0x32) / 18f : null,
+            EndY: data.Length >= 0x38 ? ReadI16(data, 0x36) / 18f : null,
+            EndZ: data.Length >= 0x36 ? ReadI16(data, 0x34) : null);
     }
 
     private static void ApplyZoneMetadata(byte[] data, OverworldGen6ZoneMetadata? metadata)
@@ -666,6 +1072,72 @@ public static class OverworldEditor
         BitConverter.GetBytes((ushort)((parent & ~0x3FF) | metadata.ParentMap)).CopyTo(data, 0x1C);
         var weather = ReadU16(data, 0x1E);
         BitConverter.GetBytes((ushort)((weather & ~0x1F) | metadata.Weather)).CopyTo(data, 0x1E);
+
+        if (metadata.MapType is { } mapType)
+            WriteByte(data, 0x00, mapType, "tipo de mapa");
+        if (metadata.MapMove is { } mapMove)
+            WriteByte(data, 0x01, mapMove, "movimiento de mapa");
+        if (metadata.BgmSpring is { } bgmSpring)
+            WriteU32(data, 0x08, bgmSpring, "BGM de primavera");
+        if (metadata.BgmSummer is { } bgmSummer)
+            WriteU32(data, 0x0C, bgmSummer, "BGM de verano");
+        if (metadata.BgmAutumn is { } bgmAutumn)
+            WriteU32(data, 0x10, bgmAutumn, "BGM de otoño");
+        if (metadata.BgmWinter is { } bgmWinter)
+            WriteU32(data, 0x14, bgmWinter, "BGM de invierno");
+        if (metadata.TownMapGroup is { } townMapGroup)
+            WriteU16(data, 0x1A, townMapGroup, "grupo de town map");
+
+        var packedFlags = ReadU16(data, 0x1C);
+        if (metadata.OlValue is { } olValue)
+        {
+            if (olValue is < 0 or > 0x3F)
+                throw new WorkspaceException("El valor OL debe estar entre 0 y 63.");
+            packedFlags = (packedFlags & 0x03FF) | (olValue << 10);
+            BitConverter.GetBytes((ushort)packedFlags).CopyTo(data, 0x1C);
+        }
+
+        var zoneFlags = (ushort)ReadU16(data, 0x1E);
+        SetFlag(ref zoneFlags, 5, metadata.SkyBoxEnabled);
+        SetFlag(ref zoneFlags, 6, metadata.RollerSkateEnabled);
+        if (metadata.BattleBackground is { } battleBackground)
+        {
+            if (battleBackground is < 0 or > 0x7F)
+                throw new WorkspaceException("El fondo de batalla debe estar entre 0 y 127.");
+            zoneFlags = (ushort)((zoneFlags & ~0x3F80) | (battleBackground << 7));
+        }
+        BitConverter.GetBytes(zoneFlags).CopyTo(data, 0x1E);
+
+        var movementFlags = data.Length >= 0x24 ? ReadU32(data, 0x20) : 0u;
+        if (metadata.MapChange is { } mapChange)
+        {
+            if (mapChange is < 0 or > 0x1F)
+                throw new WorkspaceException("El cambio de mapa debe estar entre 0 y 31.");
+            movementFlags = (movementFlags & ~0x1Fu) | (uint)mapChange;
+        }
+        SetFlag(ref movementFlags, 10, metadata.BicycleEnabled);
+        SetFlag(ref movementFlags, 11, metadata.RunEnabled);
+        SetFlag(ref movementFlags, 12, metadata.EscapeRopeEnabled);
+        SetFlag(ref movementFlags, 13, metadata.FlyEnabled);
+        SetFlag(ref movementFlags, 14, metadata.BgmEnabled);
+        SetFlag(ref movementFlags, 15, metadata.UnknownFlag);
+        if (data.Length >= 0x24)
+            WriteU32(data, 0x20, movementFlags, "flags de movimiento");
+
+        if (metadata.Camera1 is { } camera1)
+            WriteU16(data, 0x22, camera1, "cámara 1");
+        if (metadata.Camera2 is { } camera2)
+            WriteU16(data, 0x24, camera2, "cámara 2");
+        if (metadata.CameraFlags is { } cameraFlags)
+            WriteU32(data, 0x26, cameraFlags, "flags de cámara");
+        WriteScaledCoordinate(data, 0x2C, metadata.StartX, "X inicial");
+        if (metadata.StartZ is { } startZ)
+            WriteI16(data, 0x2E, startZ, "Z inicial");
+        WriteScaledCoordinate(data, 0x30, metadata.StartY, "Y inicial");
+        WriteScaledCoordinate(data, 0x32, metadata.EndX, "X final");
+        if (metadata.EndZ is { } endZ)
+            WriteI16(data, 0x34, endZ, "Z final");
+        WriteScaledCoordinate(data, 0x36, metadata.EndY, "Y final");
     }
 
     private static void ApplyNpcs(byte[] data, Gen6Entities entities, OverworldNpcEntry[]? entries)
@@ -736,6 +1208,14 @@ public static class OverworldEditor
 
     private static int ReadU16(byte[] data, int offset) => BitConverter.ToUInt16(data, offset);
     private static int ReadI16(byte[] data, int offset) => BitConverter.ToInt16(data, offset);
+    private static uint ReadU32(byte[] data, int offset) => BitConverter.ToUInt32(data, offset);
+
+    private static void WriteByte(byte[] data, int offset, int value, string label)
+    {
+        if (value is < 0 or > byte.MaxValue)
+            throw new WorkspaceException($"El valor de {label} debe estar entre 0 y 255.");
+        data[offset] = (byte)value;
+    }
 
     private static void WriteU16(byte[] data, int offset, int value, string label)
     {
@@ -749,6 +1229,41 @@ public static class OverworldEditor
         if (value is < short.MinValue or > short.MaxValue)
             throw new WorkspaceException($"El valor de {label} debe estar entre -32768 y 32767.");
         BitConverter.GetBytes((short)value).CopyTo(data, offset);
+    }
+
+    private static void WriteU32(byte[] data, int offset, uint value, string label)
+    {
+        if (offset < 0 || offset + sizeof(uint) > data.Length)
+            throw new WorkspaceException($"El campo de {label} sale del bloque de zona.");
+        BitConverter.GetBytes(value).CopyTo(data, offset);
+    }
+
+    private static void SetFlag(ref ushort value, int bit, bool? state)
+    {
+        if (state is null)
+            return;
+        var mask = (ushort)(1 << bit);
+        value = state.Value ? (ushort)(value | mask) : (ushort)(value & ~mask);
+    }
+
+    private static void SetFlag(ref uint value, int bit, bool? state)
+    {
+        if (state is null)
+            return;
+        var mask = 1u << bit;
+        value = state.Value ? value | mask : value & ~mask;
+    }
+
+    private static void WriteScaledCoordinate(byte[] data, int offset, float? value, string label)
+    {
+        if (value is null)
+            return;
+        if (!float.IsFinite(value.Value))
+            throw new WorkspaceException($"La coordenada {label} debe ser finita.");
+        var scaled = MathF.Truncate(value.Value * 18f);
+        if (scaled < short.MinValue || scaled > short.MaxValue)
+            throw new WorkspaceException($"La coordenada {label} sale del rango del formato.");
+        WriteI16(data, offset, (int)scaled, label);
     }
 
     private sealed record Gen6Entities(
@@ -928,13 +1443,7 @@ public static class OverworldEditor
                 try
                 {
                     entries = ReadMini(block, identifier)
-                        .Select((entry, entryIndex) => new OverworldGen7EntityEntrySummary(
-                            entryIndex,
-                            entry.Length,
-                            entry.Length >= sizeof(int) ? BitConverter.ToInt32(entry, 0) : null,
-                            identifier == "EP" || entry.Length < (2 * sizeof(int))
-                                ? null
-                                : BitConverter.ToInt32(entry, sizeof(int))))
+                        .Select((entry, entryIndex) => DescribeGen7EntityEntry(identifier, entry, entryIndex))
                         .ToArray();
                 }
                 catch (WorkspaceException exception)
@@ -945,10 +1454,156 @@ public static class OverworldEditor
             }
 
             summaries.Add(new OverworldGen7EntityBlockSummary(
-                identifier, block.Length, entryCount, isMiniArchive, entries));
+                identifier, block.Length, entryCount, isMiniArchive, entries, blockIndex));
         }
 
         return summaries.ToArray();
+    }
+
+    private static OverworldGen7EntityEntrySummary DescribeGen7EntityEntry(
+        string identifier, byte[] entry, int entryIndex)
+    {
+        var recordCount = entry.Length >= sizeof(int) ? BitConverter.ToInt32(entry, 0) : (int?)null;
+        var recordKind = identifier == "EP" || entry.Length < (2 * sizeof(int))
+            ? (int?)null
+            : BitConverter.ToInt32(entry, sizeof(int));
+
+        var (schema, stride, positionOffset) = GetGen7EntitySchema(identifier, recordKind, entry, recordCount);
+        return new OverworldGen7EntityEntrySummary(
+            entryIndex, entry.Length, recordCount, recordKind, HexPreview(entry),
+            schema, stride, positionOffset);
+    }
+
+    private static (string? Schema, int? RecordStride, int? PositionOffset) GetGen7EntitySchema(
+        string identifier, int? recordKind, byte[] entry, int? recordCount)
+    {
+        if (entry.Length == 0)
+            return ("vacía", null, null);
+
+        if (identifier == "EP")
+            return HasRecordRange(entry, recordCount, Gen7EntityPositionOffset, Gen7EntityRecordSize)
+                ? ("EP primaria", Gen7EntityRecordSize, Gen7EntityPositionOffset)
+                : ("EP: cabecera o stride no confirmado", null, null);
+
+        if (identifier == "EM" && recordKind == Gen7EmRecordKind)
+            return HasRecordRange(entry, recordCount, Gen7EmPositionOffset, Gen7EmRecordSize)
+                ? ("EM principal", Gen7EmRecordSize, Gen7EmPositionOffset)
+                : ("EM tipo 1: rango no confirmado", null, null);
+
+        if (identifier == "EM" && recordKind == 3)
+            return ("EM tipo 3: tabla anidada variable no confirmada", null, null);
+
+        if (identifier == "EI" && recordKind == Gen7EiRecordKind)
+            return HasGen7EiRecordRange(entry, recordCount)
+                ? ("EI tipo 10", Gen7EiRecordSize, Gen7EiPositionOffset)
+                : ("EI tipo 10: rango no confirmado", null, null);
+
+        if (identifier == "EB" && recordKind == Gen7EbRecordKind)
+            return HasRecordRange(entry, recordCount, Gen7EbPositionOffset, Gen7EbRecordSize)
+                ? ("EB tipo 2", Gen7EbRecordSize, Gen7EbPositionOffset)
+                : ("EB tipo 2: rango no confirmado", null, null);
+
+        if (identifier == "ES" && recordKind == Gen7EsRecordKind)
+            return HasRecordRange(entry, recordCount, Gen7EsPositionOffset, Gen7EsRecordSize)
+                ? ("ES tipo 4", Gen7EsRecordSize, Gen7EsPositionOffset)
+                : ("ES tipo 4: rango no confirmado", null, null);
+
+        if (identifier == "ES")
+            return ("ES: variante corta o tipo no confirmado", null, null);
+
+        if (identifier == "EA" && recordKind == Gen7EaRecordKind)
+            return HasRecordRange(entry, recordCount, Gen7EaPositionOffset, Gen7EaRecordSize)
+                ? ("EA tipo 5", Gen7EaRecordSize, Gen7EaPositionOffset)
+                : ("EA tipo 5: rango no confirmado", null, null);
+
+        if (identifier == "EA" && recordKind == Gen7EaKind6RecordKind)
+            return recordCount is not null && TryGetGen7EaKind6PayloadOffsets(entry, recordCount.Value, out _)
+                ? ("EA tipo 6", Gen7EaKind6PayloadRecordSize, Gen7EaKind6PayloadPositionOffset)
+                : ("EA tipo 6: rango no confirmado", null, null);
+
+        if (identifier == "ET" && recordKind == Gen7EtRecordKind)
+            return HasRecordRange(entry, recordCount, Gen7EtPositionOffset, Gen7EtRecordSize)
+                ? ("ET tipo 7", Gen7EtRecordSize, Gen7EtPositionOffset)
+                : ("ET tipo 7: rango no confirmado", null, null);
+
+        if (identifier == "ET" && recordKind == 9)
+            return recordCount is not null &&
+                   TryGetGen7EtKind9PositionOffsets(entry, recordCount.Value, out _)
+                ? ("ET tipo 9 (tabla de puntos)", Gen7EtKind9PointSize, Gen7EtKind9PointHeaderSize)
+                : ("ET tipo 9: esquema variable no confirmado", null, null);
+
+        if (identifier == "PR" && recordKind is Gen7PrKind203 or Gen7PrKind204)
+            return recordCount == 1 && entry.Length >= Gen7PrPositionOffset + (sizeof(float) * 3)
+                ? ($"PR tipo {recordKind}", null, Gen7PrPositionOffset)
+                : ($"PR tipo {recordKind}: rango no confirmado", null, null);
+
+        if (identifier == "FS" && recordKind == 12)
+            return ("FS tipo 12: estructura interna variable no confirmada", null, null);
+
+        if (identifier == "FS" && recordKind == 13)
+            return ("FS tipo 13: estructura variable no confirmada", null, null);
+
+        return ($"{identifier} tipo {recordKind?.ToString() ?? "desconocido"}: sin esquema confirmado", null, null);
+    }
+
+    private static bool HasRecordRange(byte[] entry, int? recordCount, int positionOffset, int recordStride)
+    {
+        if (recordCount is null or <= 0 or > 4096)
+            return false;
+        return (long)positionOffset + (recordCount.Value * recordStride) <= entry.Length;
+    }
+
+    private static bool HasGen7EiRecordRange(byte[] entry, int? recordCount)
+    {
+        if (recordCount is null or <= 0 or > 4096)
+            return false;
+
+        var recordsEnd = 4L + (recordCount.Value * Gen7EiRecordSize);
+        if (recordsEnd > entry.Length)
+            return false;
+
+        // The retail entry stores the kind marker in the first record. Subsequent records
+        // continue at the same stride but their first field is payload data, not another kind.
+        return BitConverter.ToInt32(entry, sizeof(int)) == Gen7EiRecordKind;
+    }
+
+    private static string? HexPreview(byte[] data)
+    {
+        if (data is null || data.Length == 0)
+            return null;
+
+        var length = Math.Min(data.Length, 32);
+        var preview = Convert.ToHexString(data, 0, length);
+        return string.Join(' ', Enumerable.Range(0, (length + 1) / 2)
+            .Select(index => preview.Substring(index * 2, 2)))
+            + (data.Length > length ? " …" : string.Empty);
+    }
+
+    private static string ResolveRawEntityOutputDirectory(GameWorkspace workspace, string? requested, int worldIndex)
+    {
+        var baseDirectory = string.IsNullOrWhiteSpace(requested)
+            ? Path.Combine(workspace.RootPath, "owse-gen7-ed-export")
+            : Path.GetFullPath(requested.Trim());
+        if (File.Exists(baseDirectory))
+            throw new WorkspaceException("La salida del diagnóstico ED ya existe como archivo.");
+        if (IsInside(baseDirectory, workspace.RomFsPath)
+            || (workspace.ExeFsPath is not null && IsInside(baseDirectory, workspace.ExeFsPath)))
+            throw new WorkspaceException("La exportación ED no puede guardarse dentro del RomFS ni del ExeFS de origen.");
+
+        Directory.CreateDirectory(baseDirectory);
+        var name = $"world-{worldIndex:D3}-{DateTime.Now:yyyyMMdd-HHmmss}";
+        var output = Path.Combine(baseDirectory, name);
+        if (Directory.Exists(output))
+            output = Path.Combine(baseDirectory, $"{name}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(output);
+        return output;
+    }
+
+    private static bool IsInside(string candidate, string source)
+    {
+        var root = Path.GetFullPath(source).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var path = Path.GetFullPath(candidate).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return path.StartsWith(root, StringComparison.Ordinal);
     }
 
     private static OverworldGen7PositionEntry[] ReadGen7EntityPositions(
@@ -1166,6 +1821,270 @@ public static class OverworldEditor
     }
 
     /// <summary>
+    /// Reads the confirmed EI type-10 records. Real UM entries use a four-byte count followed by
+    /// fixed 0x5C-byte records; the first record carries kind 10 and every position vector starts
+    /// at record offset 0x04 (entry offset 0x08). All trailing bytes remain untouched by export.
+    /// </summary>
+    private static OverworldGen7EiPositionEntry[] ReadGen7EiPositions(
+        byte[][] encounterFiles, int worldIndex, ref string? diagnostics)
+    {
+        var fileIndex = (long)worldIndex * FilesPerWorld + Gen7EntityOffset;
+        if (worldIndex < 0 || fileIndex < 0 || fileIndex >= encounterFiles.Length)
+            return [];
+
+        var data = encounterFiles[(int)fileIndex] ?? [];
+        if (data.Length == 0)
+            return [];
+
+        byte[][] blocks;
+        try
+        {
+            blocks = ReadMini(data, Gen7EntityIdentifier);
+        }
+        catch (WorkspaceException exception)
+        {
+            diagnostics = AppendError(diagnostics, $"El bloque ED no se pudo leer: {exception.Message}");
+            return [];
+        }
+
+        var positions = new List<OverworldGen7EiPositionEntry>();
+        for (var blockIndex = 0; blockIndex < blocks.Length; blockIndex++)
+        {
+            if (!HasIdentifier(blocks[blockIndex], "EI"))
+                continue;
+
+            byte[][] entries;
+            try
+            {
+                entries = ReadMini(blocks[blockIndex], "EI");
+            }
+            catch (WorkspaceException exception)
+            {
+                diagnostics = AppendError(diagnostics,
+                    $"El bloque EI {blockIndex} no se pudo leer: {exception.Message}");
+                continue;
+            }
+
+            for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
+            {
+                var entry = entries[containerEntry];
+                if (entry.Length < sizeof(int))
+                    continue;
+
+                var recordCount = BitConverter.ToInt32(entry, 0);
+                if (recordCount <= 0)
+                    continue;
+
+                if (!HasGen7EiRecordRange(entry, recordCount))
+                {
+                    diagnostics = AppendError(diagnostics,
+                        $"El contenedor EI {blockIndex}/{containerEntry} declara registros fuera de rango.");
+                    continue;
+                }
+
+                for (var recordIndex = 0; recordIndex < recordCount; recordIndex++)
+                {
+                    var offset = 4 + (recordIndex * Gen7EiRecordSize) + Gen7EiPositionOffset - 4;
+                    positions.Add(new OverworldGen7EiPositionEntry(
+                        blockIndex, containerEntry, recordIndex,
+                        BitConverter.ToSingle(entry, offset),
+                        BitConverter.ToSingle(entry, offset + 4),
+                        BitConverter.ToSingle(entry, offset + 8)));
+                }
+            }
+        }
+        return positions.ToArray();
+    }
+
+    private static void ApplyGen7EiPositions(byte[][] blocks, OverworldGen7EiPositionEntry[] positions)
+    {
+        var expected = ReadGen7EiPositionsFromBlocks(blocks);
+        if (positions.Length != expected.Count)
+            throw new WorkspaceException($"La cantidad de posiciones EI debe conservarse en {expected.Count} registros.");
+
+        var expectedKeys = expected
+            .Select(position => (position.BlockEntry, position.ContainerEntry, position.RecordIndex))
+            .ToHashSet();
+        var requestedKeys = new HashSet<(int BlockEntry, int ContainerEntry, int RecordIndex)>();
+        foreach (var position in positions)
+        {
+            var key = (position.BlockEntry, position.ContainerEntry, position.RecordIndex);
+            if (!expectedKeys.Contains(key) || !requestedKeys.Add(key))
+                throw new WorkspaceException("La lista de posiciones EI no coincide con los registros originales.");
+            ValidateGen7Coordinates(position.X, position.Y, position.Z, "EI");
+        }
+
+        foreach (var blockIndex in positions.Select(position => position.BlockEntry).Distinct())
+        {
+            var entries = ReadMini(blocks[blockIndex], "EI");
+            foreach (var position in positions.Where(position => position.BlockEntry == blockIndex))
+            {
+                var entry = entries[position.ContainerEntry];
+                var offset = 4 + (position.RecordIndex * Gen7EiRecordSize) + Gen7EiPositionOffset - 4;
+                BitConverter.GetBytes(position.X).CopyTo(entry, offset);
+                BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
+                BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
+            }
+            blocks[blockIndex] = Mini.PackMini(entries, "EI");
+        }
+    }
+
+    private static List<OverworldGen7EiPositionEntry> ReadGen7EiPositionsFromBlocks(byte[][] blocks)
+    {
+        var positions = new List<OverworldGen7EiPositionEntry>();
+        for (var blockIndex = 0; blockIndex < blocks.Length; blockIndex++)
+        {
+            if (!HasIdentifier(blocks[blockIndex], "EI"))
+                continue;
+            var entries = ReadMini(blocks[blockIndex], "EI");
+            for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
+            {
+                var entry = entries[containerEntry];
+                if (entry.Length < sizeof(int))
+                    continue;
+
+                var recordCount = BitConverter.ToInt32(entry, 0);
+                if (recordCount <= 0 || !HasGen7EiRecordRange(entry, recordCount))
+                    continue;
+
+                for (var recordIndex = 0; recordIndex < recordCount; recordIndex++)
+                    positions.Add(new OverworldGen7EiPositionEntry(blockIndex, containerEntry, recordIndex, 0, 0, 0));
+            }
+        }
+        return positions;
+    }
+
+    /// <summary>
+    /// Reads the confirmed PR variants whose first record is a single XYZ vector. Types 203 and
+    /// 204 keep variable payloads after that vector, so export changes only the twelve bytes at
+    /// 0x08 and leaves the rest of each entry untouched. PR type 364 remains diagnostic-only.
+    /// </summary>
+    private static OverworldGen7PrPositionEntry[] ReadGen7PrPositions(
+        byte[][] encounterFiles, int worldIndex, ref string? diagnostics)
+    {
+        var fileIndex = (long)worldIndex * FilesPerWorld + Gen7EntityOffset;
+        if (worldIndex < 0 || fileIndex < 0 || fileIndex >= encounterFiles.Length)
+            return [];
+
+        var data = encounterFiles[(int)fileIndex] ?? [];
+        if (data.Length == 0)
+            return [];
+
+        byte[][] blocks;
+        try
+        {
+            blocks = ReadMini(data, Gen7EntityIdentifier);
+        }
+        catch (WorkspaceException exception)
+        {
+            diagnostics = AppendError(diagnostics, $"El bloque ED no se pudo leer: {exception.Message}");
+            return [];
+        }
+
+        var positions = new List<OverworldGen7PrPositionEntry>();
+        for (var blockIndex = 0; blockIndex < blocks.Length; blockIndex++)
+        {
+            if (!HasIdentifier(blocks[blockIndex], "PR"))
+                continue;
+
+            byte[][] entries;
+            try
+            {
+                entries = ReadMini(blocks[blockIndex], "PR");
+            }
+            catch (WorkspaceException exception)
+            {
+                diagnostics = AppendError(diagnostics,
+                    $"El bloque PR {blockIndex} no se pudo leer: {exception.Message}");
+                continue;
+            }
+
+            for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
+            {
+                var entry = entries[containerEntry];
+                if (!TryGetGen7PrFixedPosition(entry, out _, out var x, out var y, out var z))
+                    continue;
+
+                positions.Add(new OverworldGen7PrPositionEntry(
+                    blockIndex, containerEntry, 0, x, y, z));
+            }
+        }
+        return positions.ToArray();
+    }
+
+    private static void ApplyGen7PrPositions(byte[][] blocks, OverworldGen7PrPositionEntry[] positions)
+    {
+        var expected = ReadGen7PrPositionsFromBlocks(blocks);
+        if (positions.Length != expected.Count)
+            throw new WorkspaceException($"La cantidad de posiciones PR debe conservarse en {expected.Count} registros.");
+
+        var expectedKeys = expected
+            .Select(position => (position.BlockEntry, position.ContainerEntry, position.RecordIndex))
+            .ToHashSet();
+        var requestedKeys = new HashSet<(int BlockEntry, int ContainerEntry, int RecordIndex)>();
+        foreach (var position in positions)
+        {
+            var key = (position.BlockEntry, position.ContainerEntry, position.RecordIndex);
+            if (!expectedKeys.Contains(key) || !requestedKeys.Add(key))
+                throw new WorkspaceException("La lista de posiciones PR no coincide con los registros originales.");
+            ValidateGen7Coordinates(position.X, position.Y, position.Z, "PR");
+        }
+
+        foreach (var blockIndex in positions.Select(position => position.BlockEntry).Distinct())
+        {
+            var entries = ReadMini(blocks[blockIndex], "PR");
+            foreach (var position in positions.Where(position => position.BlockEntry == blockIndex))
+            {
+                var entry = entries[position.ContainerEntry];
+                if (!TryGetGen7PrFixedPosition(entry, out _, out _, out _, out _))
+                    throw new WorkspaceException("La entrada PR dejó de tener una variante fija válida.");
+
+                BitConverter.GetBytes(position.X).CopyTo(entry, Gen7PrPositionOffset);
+                BitConverter.GetBytes(position.Y).CopyTo(entry, Gen7PrPositionOffset + sizeof(float));
+                BitConverter.GetBytes(position.Z).CopyTo(entry, Gen7PrPositionOffset + (sizeof(float) * 2));
+            }
+            blocks[blockIndex] = Mini.PackMini(entries, "PR");
+        }
+    }
+
+    private static List<OverworldGen7PrPositionEntry> ReadGen7PrPositionsFromBlocks(byte[][] blocks)
+    {
+        var positions = new List<OverworldGen7PrPositionEntry>();
+        for (var blockIndex = 0; blockIndex < blocks.Length; blockIndex++)
+        {
+            if (!HasIdentifier(blocks[blockIndex], "PR"))
+                continue;
+            var entries = ReadMini(blocks[blockIndex], "PR");
+            for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
+            {
+                if (!TryGetGen7PrFixedPosition(entries[containerEntry], out _, out _, out _, out _))
+                    continue;
+                positions.Add(new OverworldGen7PrPositionEntry(blockIndex, containerEntry, 0, 0, 0, 0));
+            }
+        }
+        return positions;
+    }
+
+    private static bool TryGetGen7PrFixedPosition(
+        byte[] entry, out int kind, out float x, out float y, out float z)
+    {
+        kind = 0;
+        x = y = z = 0;
+        if (entry is null || entry.Length < Gen7PrPositionOffset + (sizeof(float) * 3))
+            return false;
+
+        var recordCount = BitConverter.ToInt32(entry, 0);
+        kind = BitConverter.ToInt32(entry, sizeof(int));
+        if (recordCount != 1 || kind is not (Gen7PrKind203 or Gen7PrKind204))
+            return false;
+
+        x = BitConverter.ToSingle(entry, Gen7PrPositionOffset);
+        y = BitConverter.ToSingle(entry, Gen7PrPositionOffset + sizeof(float));
+        z = BitConverter.ToSingle(entry, Gen7PrPositionOffset + (sizeof(float) * 2));
+        return float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z);
+    }
+
+    /// <summary>
     /// Reads the stable primary EB records. EB can appear more than once in ED; only child
     /// entries tagged with kind 2 and the fixed 0x3C-byte record stride are exposed. Trailing
     /// payloads and all other EB variants remain untouched.
@@ -1318,7 +2237,7 @@ public static class OverworldEditor
 
     /// <summary>
     /// Reads the stable ES type-4 records. Shorter ES variants are deliberately skipped because
-    /// they do not contain the complete 0x3C-byte record stride.
+    /// they do not contain the complete 0x38-byte retail record stride.
     /// </summary>
     private static OverworldGen7EsPositionEntry[] ReadGen7EsPositions(
         byte[][] encounterFiles, int worldIndex, ref string? diagnostics)
@@ -1449,8 +2368,9 @@ public static class OverworldEditor
     }
 
     /// <summary>
-    /// Reads the stable EA type-5 records. The type-6 EA variant combines references with
-    /// nested records and remains diagnostic-only until its complete schema is confirmed.
+    /// Reads the stable EA type-5 records and the type-6 descriptor/payload records. Type 6 has
+    /// a variable descriptor table followed by one 0x30-byte payload per descriptor; only the
+    /// confirmed XYZ vector in each payload is exposed.
     /// </summary>
     private static OverworldGen7EaPositionEntry[] ReadGen7EaPositions(
         byte[][] encounterFiles, int worldIndex, ref string? diagnostics)
@@ -1495,15 +2415,31 @@ public static class OverworldEditor
             for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
             {
                 var entry = entries[containerEntry];
-                if (!TryGetGen7EaRecordCount(entry, out var recordCount) || recordCount <= 0)
+                if (!TryGetGen7EaRecordShape(entry, out var recordCount, out var recordKind) || recordCount <= 0)
                     continue;
-                if (recordCount > 4096 ||
-                    (long)Gen7EaPositionOffset + (recordCount * Gen7EaRecordSize) > entry.Length)
-                    continue;
+                int[] offsets;
+                if (recordKind == Gen7EaKind6RecordKind)
+                {
+                    if (!TryGetGen7EaKind6PayloadOffsets(entry, recordCount, out var payloadOffsets))
+                        continue;
+                    offsets = payloadOffsets
+                        .Select(offset => offset + Gen7EaKind6PayloadPositionOffset)
+                        .ToArray();
+                }
+                else
+                {
+                    if (recordCount > 4096 ||
+                        (long)Gen7EaPositionOffset + (recordCount * Gen7EaRecordSize) > entry.Length ||
+                        (long)Gen7EaPositionOffset + ((recordCount - 1) * Gen7EaRecordSize) + (3 * sizeof(float)) > entry.Length)
+                        continue;
+                    offsets = Enumerable.Range(0, recordCount)
+                        .Select(index => Gen7EaPositionOffset + (index * Gen7EaRecordSize))
+                        .ToArray();
+                }
 
                 for (var recordIndex = 0; recordIndex < recordCount; recordIndex++)
                 {
-                    var offset = Gen7EaPositionOffset + (recordIndex * Gen7EaRecordSize);
+                    var offset = offsets[recordIndex];
                     positions.Add(new OverworldGen7EaPositionEntry(
                         blockIndex, containerEntry, recordIndex,
                         BitConverter.ToSingle(entry, offset),
@@ -1539,7 +2475,10 @@ public static class OverworldEditor
             foreach (var position in positions.Where(position => position.BlockEntry == blockIndex))
             {
                 var entry = entries[position.ContainerEntry];
-                var offset = Gen7EaPositionOffset + (position.RecordIndex * Gen7EaRecordSize);
+                var recordKind = BitConverter.ToInt32(entry, sizeof(int));
+                var offset = recordKind == Gen7EaKind6RecordKind
+                    ? GetGen7EaKind6PayloadPositionOffset(entry, position.RecordIndex)
+                    : Gen7EaPositionOffset + (position.RecordIndex * Gen7EaRecordSize);
                 BitConverter.GetBytes(position.X).CopyTo(entry, offset);
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
@@ -1559,9 +2498,15 @@ public static class OverworldEditor
             for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
             {
                 var entry = entries[containerEntry];
-                if (!TryGetGen7EaRecordCount(entry, out var recordCount) || recordCount <= 0 ||
-                    recordCount > 4096 ||
-                    (long)Gen7EaPositionOffset + (recordCount * Gen7EaRecordSize) > entry.Length)
+                if (!TryGetGen7EaRecordShape(entry, out var recordCount, out var recordKind) || recordCount <= 0)
+                    continue;
+                if (recordKind == Gen7EaKind6RecordKind)
+                {
+                    if (!TryGetGen7EaKind6PayloadOffsets(entry, recordCount, out _))
+                        continue;
+                }
+                else if (recordCount > 4096 ||
+                         (long)Gen7EaPositionOffset + (recordCount * Gen7EaRecordSize) > entry.Length)
                     continue;
                 for (var recordIndex = 0; recordIndex < recordCount; recordIndex++)
                     positions.Add(new OverworldGen7EaPositionEntry(blockIndex, containerEntry, recordIndex, 0, 0, 0));
@@ -1570,17 +2515,72 @@ public static class OverworldEditor
         return positions;
     }
 
-    private static bool TryGetGen7EaRecordCount(byte[] entry, out int recordCount)
+    private static bool TryGetGen7EaRecordShape(byte[] entry, out int recordCount, out int recordKind)
     {
         recordCount = 0;
-        if (entry is null || entry.Length < Gen7EaPositionOffset ||
-            BitConverter.ToInt32(entry, sizeof(int)) != Gen7EaRecordKind)
+        recordKind = 0;
+        if (entry is null || entry.Length < Gen7EaPositionOffset + sizeof(int))
             return false;
         recordCount = BitConverter.ToInt32(entry, 0);
+        recordKind = BitConverter.ToInt32(entry, sizeof(int));
+        if (recordKind is not (Gen7EaRecordKind or Gen7EaKind6RecordKind))
+            return false;
         return true;
     }
 
-    /// <summary>Reads the stable ET type-7 position records; ET type 9 remains diagnostic-only.</summary>
+    private static bool TryGetGen7EaKind6PayloadOffsets(byte[] entry, int recordCount, out int[] offsets)
+    {
+        offsets = [];
+        if (recordCount <= 0 || recordCount > 4096)
+            return false;
+
+        // The first descriptor is 0x18 bytes; every following descriptor is 0x1C.
+        // Each descriptor ends in an absolute offset to a 0x30-byte payload.
+        var tableEnd = checked(sizeof(int) * 2L + Gen7EaKind6FirstDescriptorSize
+            + ((recordCount - 1L) * Gen7EaKind6DescriptorSize));
+        if (tableEnd > entry.Length)
+            return false;
+
+        var payloadOffsets = new int[recordCount];
+        for (var index = 0; index < recordCount; index++)
+        {
+            var descriptorOffset = index == 0
+                ? sizeof(int) * 2
+                : checked(sizeof(int) * 2 + Gen7EaKind6FirstDescriptorSize
+                    + ((index - 1) * Gen7EaKind6DescriptorSize));
+            var pointerOffset = checked(descriptorOffset
+                + (index == 0 ? Gen7EaKind6FirstDescriptorSize : Gen7EaKind6DescriptorSize)
+                - sizeof(int));
+            var payloadOffset = BitConverter.ToInt32(entry, pointerOffset);
+            if (payloadOffset < tableEnd ||
+                (long)payloadOffset + Gen7EaKind6PayloadRecordSize > entry.Length)
+                return false;
+            payloadOffsets[index] = payloadOffset;
+        }
+
+        var ranges = payloadOffsets
+            .Select(offset => (Start: offset, End: offset + Gen7EaKind6PayloadRecordSize))
+            .OrderBy(range => range.Start)
+            .ToArray();
+        for (var index = 1; index < ranges.Length; index++)
+        {
+            if (ranges[index].Start < ranges[index - 1].End)
+                return false;
+        }
+
+        offsets = payloadOffsets;
+        return true;
+    }
+
+    private static int GetGen7EaKind6PayloadPositionOffset(byte[] entry, int recordIndex)
+    {
+        if (!TryGetGen7EaKind6PayloadOffsets(entry, BitConverter.ToInt32(entry, 0), out var offsets) ||
+            recordIndex < 0 || recordIndex >= offsets.Length)
+            throw new WorkspaceException("La tabla EA tipo 6 no contiene un payload de posición válido.");
+        return checked(offsets[recordIndex] + Gen7EaKind6PayloadPositionOffset);
+    }
+
+    /// <summary>Reads the fixed ET type-7 records and the point tables used by ET type 9.</summary>
     private static OverworldGen7EtPositionEntry[] ReadGen7EtPositions(
         byte[][] encounterFiles, int worldIndex, ref string? diagnostics)
     {
@@ -1624,7 +2624,28 @@ public static class OverworldEditor
             for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
             {
                 var entry = entries[containerEntry];
-                if (!TryGetGen7EtRecordCount(entry, out var recordCount) || recordCount <= 0)
+                if (entry.Length < 2 * sizeof(int))
+                    continue;
+
+                var recordKind = BitConverter.ToInt32(entry, sizeof(int));
+                var recordCount = BitConverter.ToInt32(entry, 0);
+                if (recordKind == Gen7EtKind9RecordKind)
+                {
+                    if (!TryGetGen7EtKind9PositionOffsets(entry, recordCount, out var pointOffsets))
+                        continue;
+                    for (var recordIndex = 0; recordIndex < pointOffsets.Length; recordIndex++)
+                    {
+                        var offset = pointOffsets[recordIndex];
+                        positions.Add(new OverworldGen7EtPositionEntry(
+                            blockIndex, containerEntry, recordIndex,
+                            BitConverter.ToSingle(entry, offset),
+                            BitConverter.ToSingle(entry, offset + 4),
+                            BitConverter.ToSingle(entry, offset + 8)));
+                    }
+                    continue;
+                }
+
+                if (!TryGetGen7EtRecordCount(entry, out recordCount) || recordCount <= 0)
                     continue;
                 if (recordCount > 4096 ||
                     (long)Gen7EtPositionOffset + (recordCount * Gen7EtRecordSize) > entry.Length)
@@ -1668,7 +2689,10 @@ public static class OverworldEditor
             foreach (var position in positions.Where(position => position.BlockEntry == blockIndex))
             {
                 var entry = entries[position.ContainerEntry];
-                var offset = Gen7EtPositionOffset + (position.RecordIndex * Gen7EtRecordSize);
+                var recordKind = BitConverter.ToInt32(entry, sizeof(int));
+                var offset = recordKind == Gen7EtKind9RecordKind
+                    ? GetGen7EtKind9PositionOffset(entry, position.RecordIndex)
+                    : Gen7EtPositionOffset + (position.RecordIndex * Gen7EtRecordSize);
                 BitConverter.GetBytes(position.X).CopyTo(entry, offset);
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
@@ -1688,7 +2712,22 @@ public static class OverworldEditor
             for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
             {
                 var entry = entries[containerEntry];
-                if (!TryGetGen7EtRecordCount(entry, out var recordCount) || recordCount <= 0 ||
+                if (entry.Length < 2 * sizeof(int))
+                    continue;
+
+                var recordKind = BitConverter.ToInt32(entry, sizeof(int));
+                var recordCount = BitConverter.ToInt32(entry, 0);
+                if (recordKind == Gen7EtKind9RecordKind)
+                {
+                    if (!TryGetGen7EtKind9PositionOffsets(entry, recordCount, out var pointOffsets))
+                        continue;
+                    for (var recordIndex = 0; recordIndex < pointOffsets.Length; recordIndex++)
+                        positions.Add(new OverworldGen7EtPositionEntry(
+                            blockIndex, containerEntry, recordIndex, 0, 0, 0));
+                    continue;
+                }
+
+                if (!TryGetGen7EtRecordCount(entry, out recordCount) || recordCount <= 0 ||
                     recordCount > 4096 ||
                     (long)Gen7EtPositionOffset + (recordCount * Gen7EtRecordSize) > entry.Length)
                     continue;
@@ -1697,6 +2736,80 @@ public static class OverworldEditor
             }
         }
         return positions;
+    }
+
+    /// <summary>
+    /// ET type 9 stores a variable descriptor table followed by one or more point tables. The
+    /// first descriptor is 0x14 bytes; subsequent descriptors carry their kind marker and are
+    /// 0x18 bytes. Descriptor offsets are absolute and point tables start with two uint32 values
+    /// followed by XYZ float triples. The second descriptor pointer is intentionally validated
+    /// as well: it prevents mistaking arbitrary type-9 data for an editable point table.
+    /// </summary>
+    private static bool TryGetGen7EtKind9PositionOffsets(
+        byte[] entry, int descriptorCount, out int[] offsets)
+    {
+        offsets = [];
+        if (entry is null || descriptorCount <= 0 || descriptorCount > 4096)
+            return false;
+
+        var tableEnd = checked(2L * sizeof(int) + Gen7EtKind9FirstDescriptorSize
+            + ((descriptorCount - 1L) * Gen7EtKind9DescriptorSize));
+        if (tableEnd > entry.Length)
+            return false;
+
+        var positionOffsets = new List<int>();
+        var ranges = new List<(int Start, int End)>();
+        for (var descriptorIndex = 0; descriptorIndex < descriptorCount; descriptorIndex++)
+        {
+            var descriptorOffset = descriptorIndex == 0
+                ? 2 * sizeof(int)
+                : checked(2 * sizeof(int) + Gen7EtKind9FirstDescriptorSize
+                    + ((descriptorIndex - 1) * Gen7EtKind9DescriptorSize));
+            if (descriptorIndex > 0 &&
+                BitConverter.ToInt32(entry, descriptorOffset) != Gen7EtKind9RecordKind)
+                return false;
+
+            var dataPointerOffset = descriptorOffset + (descriptorIndex == 0 ? 0 : sizeof(int));
+            var tailPointerOffset = descriptorOffset + (descriptorIndex == 0 ? 8 : 12);
+            var dataOffset = BitConverter.ToInt32(entry, dataPointerOffset);
+            var tailOffset = BitConverter.ToInt32(entry, tailPointerOffset);
+            if (dataOffset < tableEnd || dataOffset < 0 ||
+                (long)dataOffset + Gen7EtKind9PointHeaderSize > entry.Length ||
+                tailOffset < dataOffset || tailOffset < 0 || tailOffset > entry.Length)
+                return false;
+
+            var pointCountWord = BitConverter.ToUInt32(entry, dataOffset);
+            var pointCount = (int)(pointCountWord & ushort.MaxValue);
+            if (pointCount > 4096)
+                return false;
+
+            var pointStart = checked(dataOffset + Gen7EtKind9PointHeaderSize);
+            var pointEnd = checked((long)pointStart + (pointCount * Gen7EtKind9PointSize));
+            if (pointEnd > entry.Length || pointEnd > tailOffset)
+                return false;
+
+            ranges.Add((dataOffset, checked((int)pointEnd)));
+            for (var pointIndex = 0; pointIndex < pointCount; pointIndex++)
+                positionOffsets.Add(checked(pointStart + (pointIndex * Gen7EtKind9PointSize)));
+        }
+
+        var orderedRanges = ranges.OrderBy(range => range.Start).ToArray();
+        for (var index = 1; index < orderedRanges.Length; index++)
+        {
+            if (orderedRanges[index].Start < orderedRanges[index - 1].End)
+                return false;
+        }
+
+        offsets = positionOffsets.ToArray();
+        return true;
+    }
+
+    private static int GetGen7EtKind9PositionOffset(byte[] entry, int recordIndex)
+    {
+        if (!TryGetGen7EtKind9PositionOffsets(entry, BitConverter.ToInt32(entry, 0), out var offsets) ||
+            recordIndex < 0 || recordIndex >= offsets.Length)
+            throw new WorkspaceException("La tabla ET tipo 9 no contiene un punto de posición válido.");
+        return offsets[recordIndex];
     }
 
     private static bool TryGetGen7EtRecordCount(byte[] entry, out int recordCount)
@@ -1770,6 +2883,80 @@ public static class OverworldEditor
         if (zoneIndex < 0 || data is null || offset < 0 || offset + ZoneData7.SIZE > data.Length)
             throw new WorkspaceException("La tabla zonedata Gen. VII no alcanza la zona indicada.");
         return (data, checked((int)offset));
+    }
+
+    private static (int WorldIndex, int AreaIndex) ReadGen7ZoneMapping(GameConfig config, int zoneIndex)
+    {
+        try
+        {
+            var zoneData = config.GetlzGARCData("zonedata");
+            var worldIndex = ReadGen7WorldIndex(zoneData.Files, zoneIndex);
+            var worldData = config.GetlzGARCData("worlddata");
+            var areaIndex = ReadGen7AreaIndex(worldData, worldIndex, zoneIndex);
+            return (worldIndex, areaIndex);
+        }
+        catch (WorkspaceException)
+        {
+            // ParentMap remains useful even when an experimental dump lacks a complete
+            // worlddata mapping table.
+            return (-1, -1);
+        }
+    }
+
+    private static int ReadGen7WorldIndex(byte[][] zoneFiles, int zoneIndex)
+    {
+        if (zoneFiles.Length < 2)
+            throw new WorkspaceException("El zonedata Gen. VII no contiene la tabla zona→mundo.");
+        var mapping = zoneFiles[1] ?? [];
+        var offset = checked(zoneIndex * sizeof(ushort));
+        if (zoneIndex < 0 || offset < 0 || offset + sizeof(ushort) > mapping.Length)
+            throw new WorkspaceException("La tabla zona→mundo no alcanza la zona indicada.");
+        return BitConverter.ToUInt16(mapping, offset);
+    }
+
+    private static int ReadGen7AreaIndex(LazyGARCFile worldData, int worldIndex, int zoneIndex)
+    {
+        if (worldIndex < 0 || worldIndex >= worldData.FileCount)
+            throw new WorkspaceException("El worlddata Gen. VII no contiene el mundo indicado.");
+        var worlds = ReadMini(worldData[worldIndex], "WD");
+        if (worlds.Length == 0)
+            throw new WorkspaceException("El mundo Gen. VII no contiene su tabla de áreas.");
+        var world = worlds[0];
+        if (world.Length < 0x0C)
+            throw new WorkspaceException("La tabla WD Gen. VII es demasiado pequeña.");
+        var mappingOffset = BitConverter.ToInt32(world, 0x08);
+        if (mappingOffset < 0x0C || mappingOffset > world.Length || ((world.Length - mappingOffset) % 4) != 0)
+            throw new WorkspaceException("La tabla WD Gen. VII tiene un offset de áreas inválido.");
+        for (var offset = mappingOffset; offset + 4 <= world.Length; offset += 4)
+        {
+            if (BitConverter.ToUInt16(world, offset) == zoneIndex)
+                return BitConverter.ToUInt16(world, offset + 2);
+        }
+        throw new WorkspaceException("El mundo Gen. VII no tiene una entrada para la zona indicada.");
+    }
+
+    private static void ApplyGen7AreaIndex(LazyGARCFile worldData, int worldIndex, int zoneIndex, int areaIndex)
+    {
+        if (worldIndex < 0 || worldIndex >= worldData.FileCount)
+            throw new WorkspaceException("El worlddata Gen. VII no contiene el mundo indicado.");
+        var worlds = ReadMini(worldData[worldIndex], "WD");
+        if (worlds.Length == 0)
+            throw new WorkspaceException("El mundo Gen. VII no contiene su tabla de áreas.");
+        var world = worlds[0];
+        if (world.Length < 0x0C)
+            throw new WorkspaceException("La tabla WD Gen. VII es demasiado pequeña.");
+        var mappingOffset = BitConverter.ToInt32(world, 0x08);
+        if (mappingOffset < 0x0C || mappingOffset > world.Length || ((world.Length - mappingOffset) % 4) != 0)
+            throw new WorkspaceException("La tabla WD Gen. VII tiene un offset de áreas inválido.");
+        for (var offset = mappingOffset; offset + 4 <= world.Length; offset += 4)
+        {
+            if (BitConverter.ToUInt16(world, offset) != zoneIndex)
+                continue;
+            BitConverter.GetBytes((ushort)areaIndex).CopyTo(world, offset + 2);
+            worldData[worldIndex] = Mini.PackMini(worlds, "WD");
+            return;
+        }
+        throw new WorkspaceException("El mundo Gen. VII no tiene una entrada para la zona indicada.");
     }
 
     private static string GetGen7ZoneLocation(int zoneIndex, int parentMap, string[] locations) =>

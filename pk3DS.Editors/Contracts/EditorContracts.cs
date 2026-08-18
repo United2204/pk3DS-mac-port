@@ -67,10 +67,12 @@ public sealed record OverworldScriptGroupSummary(string Id, string Name, int Wor
 public sealed record OverworldCatalogResponse(string GameVersion, OverworldScriptGroupSummary[] Groups);
 public sealed record OverworldScriptEntryRequest(string WorkspacePath, string Group, int WorldIndex, int ScriptIndex, int? Language = null);
 public sealed record OverworldGen7EntityEntrySummary(
-    int EntryIndex, int Bytes, int? RecordCount = null, int? RecordKind = null);
+    int EntryIndex, int Bytes, int? RecordCount = null, int? RecordKind = null,
+    string? PreviewHex = null, string? Schema = null, int? RecordStride = null,
+    int? PositionOffset = null);
 public sealed record OverworldGen7EntityBlockSummary(
     string Identifier, int Bytes, int EntryCount, bool IsMiniArchive,
-    OverworldGen7EntityEntrySummary[]? Entries = null);
+    OverworldGen7EntityEntrySummary[]? Entries = null, int? BlockIndex = null);
 public sealed record OverworldZoneSummary(
     int ZoneIndex, int ZoneDataBytes, int ZoneFileCount, int? ParentMap = null,
     int? MapArea = null, int? MapMatrix = null, int? TextFile = null, int? ScriptFile = null,
@@ -91,7 +93,18 @@ public sealed record OverworldNpcEntry(
     int X, int Y, int MovePermissions, int MovePermissions2);
 public sealed record OverworldWarpEntry(int DestinationMap, int DestinationTileIndex, int X, int Y);
 public sealed record OverworldTriggerEntry(int Script, int Constant, int Type, int Flags, int X, int Y, int Width, int Height);
-public sealed record OverworldGen6ZoneMetadata(int MapArea, int MapMatrix, int TextFile, int ScriptFile, int ParentMap, int Weather);
+public sealed record OverworldGen6ZoneMetadata(
+    int MapArea, int MapMatrix, int TextFile, int ScriptFile, int ParentMap, int Weather,
+    int? MapType = null, int? MapMove = null,
+    uint? BgmSpring = null, uint? BgmSummer = null, uint? BgmAutumn = null, uint? BgmWinter = null,
+    int? TownMapGroup = null, int? OlValue = null,
+    bool? SkyBoxEnabled = null, bool? RollerSkateEnabled = null,
+    int? BattleBackground = null, int? MapChange = null,
+    bool? BicycleEnabled = null, bool? RunEnabled = null, bool? EscapeRopeEnabled = null,
+    bool? FlyEnabled = null, bool? BgmEnabled = null, bool? UnknownFlag = null,
+    int? Camera1 = null, int? Camera2 = null, uint? CameraFlags = null,
+    float? StartX = null, float? StartY = null, int? StartZ = null,
+    float? EndX = null, float? EndY = null, int? EndZ = null);
 public sealed record OverworldGen6ZoneResponse(
     string GameVersion, int ZoneIndex, string LocationName, OverworldZoneSummary Summary,
     OverworldFurnitureEntry[] Furniture, OverworldNpcEntry[] Npcs, OverworldWarpEntry[] Warps,
@@ -110,37 +123,52 @@ public sealed record OverworldScriptExportRequest(
     int ScriptIndex, uint[]? Instructions, int? Language = null);
 public sealed record OverworldGen7ZoneRequest(string WorkspacePath, int ZoneIndex, int? Language = null);
 public sealed record OverworldGen7ZoneResponse(
-    string GameVersion, int ZoneIndex, string LocationName, int ParentMap, int ZoneDataBytes);
+    string GameVersion, int ZoneIndex, string LocationName, int ParentMap, int ZoneDataBytes,
+    int WorldIndex = -1, int AreaIndex = -1);
 public sealed record OverworldGen7ZoneExportRequest(
     string WorkspacePath, string? OutputDirectory, string? TitleId, int ZoneIndex, int ParentMap,
-    int? Language = null);
+    int? AreaIndex = null, int? Language = null);
 public sealed record OverworldGen7PositionEntry(int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EmPositionEntry(int ContainerEntry, int RecordIndex, float X, float Y, float Z);
+public sealed record OverworldGen7EiPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EbPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EsPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EaPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EtPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
+public sealed record OverworldGen7PrPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EntityRequest(string WorkspacePath, int WorldIndex, int? Language = null);
 public sealed record OverworldGen7EntityResponse(
     string GameVersion, int WorldIndex, OverworldGen7PositionEntry[] Positions,
     OverworldGen7EmPositionEntry[] EmPositions, OverworldGen7EbPositionEntry[] EbPositions,
     OverworldGen7EsPositionEntry[] EsPositions, OverworldGen7EaPositionEntry[] EaPositions,
     OverworldGen7EtPositionEntry[] EtPositions, OverworldGen7EntityBlockSummary[] Blocks,
-    string? Diagnostics = null);
+    string? Diagnostics = null, OverworldGen7EiPositionEntry[]? EiPositions = null,
+    OverworldGen7PrPositionEntry[]? PrPositions = null);
 public sealed record OverworldGen7EntityExportRequest(
     string WorkspacePath, string? OutputDirectory, string? TitleId, int WorldIndex,
     OverworldGen7PositionEntry[]? Positions, OverworldGen7EmPositionEntry[]? EmPositions = null,
     OverworldGen7EbPositionEntry[]? EbPositions = null, OverworldGen7EsPositionEntry[]? EsPositions = null,
     OverworldGen7EaPositionEntry[]? EaPositions = null, OverworldGen7EtPositionEntry[]? EtPositions = null,
-    int? Language = null);
+    int? Language = null, OverworldGen7EiPositionEntry[]? EiPositions = null,
+    OverworldGen7PrPositionEntry[]? PrPositions = null);
+public sealed record OverworldGen7EntityRawExportRequest(
+    string WorkspacePath, string? OutputDirectory, int WorldIndex, int? Language = null);
+public sealed record OverworldGen7EntityRawFile(
+    string RelativePath, string Identifier, int? BlockIndex, int? EntryIndex, int Bytes);
+public sealed record OverworldGen7EntityRawExportResponse(
+    string GameVersion, int WorldIndex, int SourceFileIndex, string SourceGarc,
+    string OutputDirectory, string ManifestFile, OverworldGen7EntityRawFile[] Files,
+    long TotalBytes, string? Diagnostics = null);
 public sealed record OverworldGen6MapRequest(string WorkspacePath, int ZoneIndex, int? Language = null);
+public sealed record OverworldGen6MapPreview(
+    string? PngBase64, int Width, int Height, string? Diagnostics = null);
 public sealed record OverworldGen6MapResponse(
     string GameVersion, int ZoneIndex, int MapArea, int MapMatrix, int Width, int Height,
     uint[] Properties, int MatrixWidth, int MatrixHeight, ushort[] MatrixValues,
-    string? Diagnostics = null);
+    string? Diagnostics = null, OverworldGen6MapPreview? Preview = null);
 public sealed record OverworldGen6MapExportRequest(
     string WorkspacePath, string? OutputDirectory, string? TitleId, int ZoneIndex,
-    uint[]? Properties, int? Language = null);
+    uint[]? Properties, ushort[]? MatrixValues = null, int? Language = null);
 
 // Wild encounters, Gen VI -----------------------------------------------------
 public sealed record WildGen6CatalogRequest(string WorkspacePath, int? Language = null);

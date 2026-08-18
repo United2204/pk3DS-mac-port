@@ -128,6 +128,52 @@ public sealed class SARC : IDisposable
     public byte[] GetData(SFATEntry entry) => GetData(entry.FileDataStart, entry.FileDataLength);
 
     /// <summary>
+    /// Validates the SARC header, tables, name references and data ranges before an archive is
+    /// consumed by a tool. The reader keeps this separate from construction so callers that only
+    /// need to inspect the signature can still open an unknown file and decide how to handle it.
+    /// </summary>
+    public void ValidateStructure()
+    {
+        if (!SigMatches || SFAT is null || SFNT is null)
+            throw new InvalidDataException("El archivo no contiene una estructura SARC completa.");
+        if (HeaderSize < 0x14)
+            throw new InvalidDataException("La cabecera SARC es demasiado pequeña.");
+        if (Endianness != 0xFEFF)
+            throw new InvalidDataException("El SARC usa un orden de bytes no compatible.");
+        if (FileSize < DataOffset || FileSize > stream.Length)
+            throw new InvalidDataException("El tamaño declarado del SARC sale de los límites del archivo.");
+        if (!SFAT.SigMatches || SFAT.HeaderSize < 0x0C || SFAT.Entries is null
+            || SFAT.EntryCount != SFAT.Entries.Count)
+        {
+            throw new InvalidDataException("La tabla SFAT del SARC es inválida.");
+        }
+        if (!SFNT.SigMatches || SFNT.HeaderSize < 0x08)
+            throw new InvalidDataException("La tabla SFNT del SARC es inválida.");
+
+        var stringTableStart = (long)SFNT.StringOffset;
+        if (stringTableStart < 0 || stringTableStart > stream.Length || stringTableStart > DataOffset)
+            throw new InvalidDataException("La tabla de nombres SFNT del SARC sale de los límites.");
+
+        foreach (var entry in SFAT.Entries)
+        {
+            if (entry.FileDataStart < 0 || entry.FileDataEnd < entry.FileDataStart)
+                throw new InvalidDataException("Una entrada SFAT del SARC tiene un rango de datos inválido.");
+
+            var absoluteStart = checked((long)DataOffset + entry.FileDataStart);
+            var absoluteEnd = checked((long)DataOffset + entry.FileDataEnd);
+            if (absoluteStart < DataOffset || absoluteEnd < absoluteStart
+                || absoluteEnd > FileSize || absoluteEnd > stream.Length)
+            {
+                throw new InvalidDataException("Una entrada SFAT del SARC apunta fuera del bloque de datos.");
+            }
+
+            // Resolve every name now so malformed offsets are rejected before any output file is
+            // created by a caller. The returned path is validated by the higher-level tool.
+            _ = GetFileName(entry);
+        }
+    }
+
+    /// <summary>
     /// Overwrites the entry data, assuming the size is the exact same.
     /// </summary>
     /// <param name="entry">File entry to overwrite</param>
@@ -183,8 +229,14 @@ public sealed class SARC : IDisposable
 
     private string GetFileName(int offset)
     {
-        stream.Seek(SFNT.StringOffset, SeekOrigin.Begin);
-        stream.Seek((offset & 0x00FFFFFF) * 4, SeekOrigin.Current);
+        if (offset < 0)
+            throw new InvalidDataException("Una entrada SFAT del SARC tiene un offset de nombre negativo.");
+
+        var nameOffset = checked((long)SFNT.StringOffset + ((long)(offset & 0x00FFFFFF) * 4));
+        if (nameOffset < SFNT.StringOffset || nameOffset >= stream.Length || nameOffset >= DataOffset)
+            throw new InvalidDataException("Una entrada SFAT del SARC apunta fuera de la tabla de nombres.");
+
+        stream.Seek(nameOffset, SeekOrigin.Begin);
         var bytes = new List<byte>();
         int value;
         while ((value = stream.ReadByte()) > 0)

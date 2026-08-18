@@ -128,6 +128,9 @@ public abstract class SyntheticWorkspace : IDisposable
             BitConverter.GetBytes((ushort)((index + 1) % 10)).CopyTo(data, tableOffset + (index * sizeof(ushort)));
         Directory.CreateDirectory(ExeFs);
         File.WriteAllBytes(Path.Combine(ExeFs, "code.bin"), data);
+        var smdh = SMDHPortable.CreateBlank();
+        smdh.AppInfo[0] = new SMDHApplicationInfo("Fixture game", "Synthetic pk3DS workspace", "pk3DS tests");
+        File.WriteAllBytes(Path.Combine(ExeFs, "icon.bin"), smdh.Write());
     }
 
     protected void AddCodeTable(int tableOffset, byte[] signature, int rawSlotCount)
@@ -441,6 +444,29 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
         return files;
     }
 
+    /// <summary>Replaces the OWSE-only encdata with two real X/Y wild encounter tables.</summary>
+    public void WriteWildFixture()
+    {
+        var master = new byte[0x70];
+        var files = new[] { master, BuildGen6EncounterFile(1), BuildGen6EncounterFile(2) };
+        WriteGarc(EncDataGarc, files);
+    }
+
+    private static byte[] BuildGen6EncounterFile(int seed)
+    {
+        const int dataOffset = 0x20;
+        var data = new byte[dataOffset + (WildGen6Editor.GetSlotCount(oras: false) * 4)];
+        BitConverter.GetBytes(0x10).CopyTo(data, 0x10);
+        for (var index = 0; index < WildGen6Editor.GetSlotCount(oras: false); index++)
+        {
+            var at = dataOffset + (index * 4);
+            BitConverter.GetBytes((ushort)(((index + seed) % 8) + 1)).CopyTo(data, at);
+            data[at + 2] = (byte)(5 + (index % 3));
+            data[at + 3] = (byte)(10 + (index % 5));
+        }
+        return data;
+    }
+
     private static byte[] BuildGen6MapGrid(int seed)
     {
         const int width = 4;
@@ -690,7 +716,7 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
 
         WriteGarc(TrClassGarc, Repeat(TrainerClassCount, _ => new byte[4]));
         WriteGarc(TrDataGarc, Repeat(trainerCount, _ => TrainerRecord(pokemonPerTrainer)));
-        WriteGarc(TrPokeGarc, Repeat(trainerCount, _ => new byte[TrainerPokemonSize * pokemonPerTrainer]));
+        WriteGarc(TrPokeGarc, Enumerable.Range(0, trainerCount).Select(index => TrainerTeam7(index, pokemonPerTrainer)).ToArray());
         WriteGarc(EncounterStaticGarc, BuildStaticFiles());
         WriteMaison(MaisonPkNormalGarc, MaisonTrNormalGarc, [0, 1]);
         WriteMaison(MaisonPkSpecialGarc, MaisonTrSpecialGarc, [1, 0]);
@@ -819,6 +845,19 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
         return data;
     }
 
+    private byte[] TrainerTeam7(int trainerIndex, int pokemonCount)
+    {
+        var data = new byte[TrainerPokemonSize * pokemonCount];
+        for (var index = 0; index < pokemonCount; index++)
+        {
+            var offset = index * TrainerPokemonSize;
+            data[offset + 0xE] = (byte)(20 + index);
+            BitConverter.GetBytes((ushort)(((trainerIndex + index) % (SpeciesCount - 1)) + 1)).CopyTo(data, offset + 0x10);
+            BitConverter.GetBytes((ushort)(((index + 1) % Math.Max(1, MoveCount)))).CopyTo(data, offset + 0x18);
+        }
+        return data;
+    }
+
     /// <summary>
     /// The static encounter GARC keeps gifts in file 0, fixed encounters in file 1 and trades in
     /// file 4; the files between them are unused by the editor but must exist.
@@ -867,6 +906,7 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
                     Mini.PackMini([Gen7EbEntry(1, 50)], "EB"),
                     Mini.PackMini([Gen7EsEntry(1, 70)], "ES"),
                     Mini.PackMini([Gen7EaEntry(1, 90)], "EA"),
+                    Mini.PackMini([Gen7EaKind6Entry(1, 95)], "EA"),
                     Mini.PackMini([Gen7EtEntry(1, 110)], "ET"),
                 ], "ED");
             files[(area * FilesPerArea) + 7] = Mini.PackMini([BuildScriptFixture()], "ZS");
@@ -923,7 +963,7 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
 
     private static byte[] Gen7EsEntry(int count, float baseX)
     {
-        const int recordSize = 0x3C;
+        const int recordSize = 0x38;
         var entry = new byte[8 + (count * recordSize) + 0x14];
         BitConverter.GetBytes(count).CopyTo(entry, 0);
         BitConverter.GetBytes(4).CopyTo(entry, 4); // stable ES record kind
@@ -953,6 +993,31 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
         return entry;
     }
 
+    private static byte[] Gen7EaKind6Entry(int count, float baseX)
+    {
+        const int descriptorSize = 0x1C;
+        const int payloadSize = 0x30;
+        var payloadStart = 0x20 + ((count - 1) * descriptorSize);
+        var entry = new byte[payloadStart + (count * payloadSize) + 0x08];
+        BitConverter.GetBytes(count).CopyTo(entry, 0);
+        BitConverter.GetBytes(6).CopyTo(entry, 4); // confirmed EA type-6 position record
+        for (var index = 0; index < count; index++)
+        {
+            var descriptorOffset = index == 0
+                ? 0x08
+                : 0x20 + ((index - 1) * descriptorSize);
+            var pointerOffset = descriptorOffset + (index == 0 ? 0x14 : 0x18);
+            var payloadOffset = payloadStart + (index * payloadSize);
+            BitConverter.GetBytes(payloadOffset).CopyTo(entry, pointerOffset);
+            BitConverter.GetBytes(1u).CopyTo(entry, payloadOffset);
+            BitConverter.GetBytes(1u).CopyTo(entry, payloadOffset + 4);
+            BitConverter.GetBytes(baseX + index).CopyTo(entry, payloadOffset + 8);
+            BitConverter.GetBytes(950f + index).CopyTo(entry, payloadOffset + 12);
+            BitConverter.GetBytes(1050f + index).CopyTo(entry, payloadOffset + 16);
+        }
+        return entry;
+    }
+
     private static byte[] Gen7EtEntry(int count, float baseX)
     {
         const int recordSize = 0x54;
@@ -967,6 +1032,52 @@ public sealed class SyntheticSunMoonWorkspace : SyntheticWorkspace
             BitConverter.GetBytes(1200f + index).CopyTo(entry, offset + 8);
         }
         return entry;
+    }
+
+    private static byte[] Gen7EtKind9Entry()
+    {
+        const int descriptorCount = 2;
+        const int firstDescriptorSize = 0x14;
+        const int descriptorSize = 0x18;
+        const int pointHeaderSize = 0x08;
+        const int pointSize = 0x0C;
+        var tableEnd = 8 + firstDescriptorSize + ((descriptorCount - 1) * descriptorSize);
+        var firstDataOffset = tableEnd;
+        var firstPointCount = 2;
+        var secondDataOffset = firstDataOffset + pointHeaderSize + (firstPointCount * pointSize);
+        var secondPointCount = 3;
+        var secondTailOffset = secondDataOffset + pointHeaderSize + (secondPointCount * pointSize);
+        var entry = new byte[secondTailOffset + 0x20];
+        BitConverter.GetBytes(descriptorCount).CopyTo(entry, 0);
+        BitConverter.GetBytes(9).CopyTo(entry, 4);
+
+        BitConverter.GetBytes(firstDataOffset).CopyTo(entry, 8);
+        BitConverter.GetBytes(1f).CopyTo(entry, 12);
+        BitConverter.GetBytes(secondDataOffset).CopyTo(entry, 16);
+
+        BitConverter.GetBytes(9).CopyTo(entry, 0x1C);
+        BitConverter.GetBytes(secondDataOffset).CopyTo(entry, 0x20);
+        BitConverter.GetBytes(2f).CopyTo(entry, 0x24);
+        BitConverter.GetBytes(secondTailOffset).CopyTo(entry, 0x28);
+
+        BitConverter.GetBytes(firstPointCount | 0x10000).CopyTo(entry, firstDataOffset);
+        WriteEtKind9Points(entry, firstDataOffset + pointHeaderSize, [70f, 71f]);
+        BitConverter.GetBytes(secondPointCount).CopyTo(entry, secondDataOffset);
+        WriteEtKind9Points(entry, secondDataOffset + pointHeaderSize, [80f, 81f, 82f]);
+
+        for (var index = secondTailOffset; index < entry.Length; index++)
+            entry[index] = (byte)(0xD0 + (index - secondTailOffset));
+        return entry;
+    }
+
+    private static void WriteEtKind9Points(byte[] entry, int offset, float[] baseXs)
+    {
+        for (var index = 0; index < baseXs.Length; index++)
+        {
+            BitConverter.GetBytes(baseXs[index]).CopyTo(entry, offset + (index * 0x0C));
+            BitConverter.GetBytes(700f + index).CopyTo(entry, offset + (index * 0x0C) + 4);
+            BitConverter.GetBytes(800f + index).CopyTo(entry, offset + (index * 0x0C) + 8);
+        }
     }
 
     /// <summary>One mini-archive entry: header, day table, night table.</summary>

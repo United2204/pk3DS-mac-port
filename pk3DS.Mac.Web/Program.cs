@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Extensions.FileProviders;
 using pk3DS.Editors;
 using pk3DS.Mac.Web;
@@ -8,7 +10,7 @@ builder.Services.AddSingleton<IFolderPicker, MacFolderPicker>();
 builder.Services.AddSingleton<IFilePicker, MacFilePicker>();
 
 var app = builder.Build();
-const string address = "http://127.0.0.1:38473";
+var address = GetLocalAddress();
 
 // Every editor failure is translated here, so the endpoints below carry no error handling.
 app.UseMiddleware<WorkspaceExceptionMiddleware>();
@@ -69,3 +71,31 @@ app.Lifetime.ApplicationStarted.Register(() =>
 
 app.Logger.LogInformation("pk3DS Mac Web listo en {Address}", address);
 app.Run(address);
+
+static string GetLocalAddress()
+{
+    const int defaultPort = 38473;
+    var configured = Environment.GetEnvironmentVariable("PK3DS_PORT");
+    if (int.TryParse(configured, out var configuredPort) && configuredPort is >= 1024 and <= 65535)
+        return $"http://127.0.0.1:{configuredPort}";
+
+    var port = Enumerable.Range(defaultPort, 20).FirstOrDefault(IsPortAvailable);
+    if (port == 0)
+        throw new InvalidOperationException($"No hay un puerto local libre entre {defaultPort} y {defaultPort + 19}. Definí PK3DS_PORT para elegir otro.");
+    return $"http://127.0.0.1:{port}";
+}
+
+static bool IsPortAvailable(int port)
+{
+    try
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        listener.Stop();
+        return true;
+    }
+    catch (SocketException)
+    {
+        return false;
+    }
+}

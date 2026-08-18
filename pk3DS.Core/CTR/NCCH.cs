@@ -118,8 +118,12 @@ public class NCCH
         }
     }
 
-    public void ExtractNCCHFromFile(string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, ProgressBar PB_Show = null)
+    public void ExtractNCCHFromFile(
+        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null,
+        ProgressBar PB_Show = null, long sourceOffset = 0)
     {
+        if (sourceOffset < 0)
+            throw new ArgumentOutOfRangeException(nameof(sourceOffset));
         TB_Progress ??= new RichTextBox();
         PB_Show ??= new ProgressBar();
         if (!Directory.Exists(outputDirectory))
@@ -128,25 +132,27 @@ public class NCCH
         byte[] headerBytes = new byte[0x200];
         using (var fs = new FileStream(NCCH_PATH, FileMode.Open, FileAccess.Read))
         {
+            fs.Seek(sourceOffset, SeekOrigin.Begin);
             _ = fs.Read(headerBytes, 0, headerBytes.Length);
             Header = new NCCHHeader();
             Header.BuildHeaderFromBytes(headerBytes);
 
             logo = new byte[Header.LogoSize * MEDIA_UNIT_SIZE];
-            fs.Seek(Convert.ToInt32(Header.LogoOffset * MEDIA_UNIT_SIZE), SeekOrigin.Begin);
+            fs.Seek(checked(sourceOffset + (Header.LogoOffset * MEDIA_UNIT_SIZE)), SeekOrigin.Begin);
             _ = fs.Read(logo, 0, logo.Length);
 
             plainregion = new byte[Header.PlainRegionSize * MEDIA_UNIT_SIZE];
-            fs.Seek(Convert.ToInt32(Header.PlainRegionOffset * MEDIA_UNIT_SIZE), SeekOrigin.Begin);
+            fs.Seek(checked(sourceOffset + (Header.PlainRegionOffset * MEDIA_UNIT_SIZE)), SeekOrigin.Begin);
             _ = fs.Read(plainregion, 0, plainregion.Length);
         }
 
-        ExtractExheader(NCCH_PATH, outputDirectory, TB_Progress);
-        ExtractExeFS(NCCH_PATH, outputDirectory, TB_Progress);
-        ExtractRomFS(NCCH_PATH, outputDirectory, TB_Progress, PB_Show);
+        ExtractExheader(NCCH_PATH, outputDirectory, TB_Progress, sourceOffset);
+        ExtractExeFS(NCCH_PATH, outputDirectory, TB_Progress, sourceOffset);
+        ExtractRomFS(NCCH_PATH, outputDirectory, TB_Progress, PB_Show, sourceOffset);
     }
 
-    private void ExtractExheader(string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null)
+    private void ExtractExheader(
+        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, long sourceOffset = 0)
     {
         string exheaderpath = Path.Combine(outputDirectory, "exheader.bin");
         UpdateTB(TB_Progress, "Extracting exheader.bin from CXI...");
@@ -154,7 +160,7 @@ public class NCCH
 
         using (var fs = new FileStream(NCCH_PATH, FileMode.Open, FileAccess.Read))
         {
-            fs.Seek(Convert.ToInt32(0x200), SeekOrigin.Begin);
+            fs.Seek(checked(sourceOffset + 0x200), SeekOrigin.Begin);
             _ = fs.Read(exheaderbytes, 0, exheaderbytes.Length);
         }
 
@@ -162,7 +168,8 @@ public class NCCH
         Exheader = new Exheader(exheaderpath);
     }
 
-    private void ExtractExeFS(string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null)
+    private void ExtractExeFS(
+        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, long sourceOffset = 0)
     {
         string exefsbinpath = Path.Combine(outputDirectory, "exefs.bin");
         string exefspath = Path.Combine(outputDirectory, "exefs");
@@ -171,7 +178,7 @@ public class NCCH
 
         using (var fs = new FileStream(NCCH_PATH, FileMode.Open, FileAccess.Read))
         {
-            fs.Seek(Convert.ToInt32(Header.ExefsOffset * MEDIA_UNIT_SIZE), SeekOrigin.Begin);
+            fs.Seek(checked(sourceOffset + (Header.ExefsOffset * MEDIA_UNIT_SIZE)), SeekOrigin.Begin);
             _ = fs.Read(exefsbytes, 0, exefsbytes.Length);
         }
 
@@ -180,7 +187,9 @@ public class NCCH
         File.Delete(exefsbinpath);
     }
 
-    private void ExtractRomFS(string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, ProgressBar PB_Show = null)
+    private void ExtractRomFS(
+        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null,
+        ProgressBar PB_Show = null, long sourceOffset = 0)
     {
         UpdateTB(TB_Progress, "Extracting romfs.bin from CXI...");
         string romfsbinpath = Path.Combine(outputDirectory, "romfs.bin");
@@ -190,7 +199,7 @@ public class NCCH
         using (FileStream ncchstream = new(NCCH_PATH, FileMode.Open, FileAccess.Read),
                romfsstream = new(romfsbinpath, FileMode.Create, FileAccess.Write))
         {
-            ncchstream.Seek(Convert.ToInt32(Header.RomfsOffset * MEDIA_UNIT_SIZE), SeekOrigin.Begin);
+            ncchstream.Seek(checked(sourceOffset + (Header.RomfsOffset * MEDIA_UNIT_SIZE)), SeekOrigin.Begin);
             if (PB_Show.InvokeRequired)
             {
                 PB_Show.Invoke((MethodInvoker)delegate { PB_Show.Minimum = 0; PB_Show.Step = 1; PB_Show.Value = 0; PB_Show.Maximum = Convert.ToInt32(Header.RomfsSize); });

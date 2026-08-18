@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using pk3DS.Core;
+using pk3DS.Core.Structures;
 using pk3DS.Editors;
 
 namespace pk3DS.Editors.Tests;
@@ -31,9 +33,74 @@ public class Gen7EditorEndToEndTests : IDisposable
 
         Assert.Equal("SM", response.GameVersion);
         Assert.True(response.Modules.Single(module => module.Id == "pickup").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "static").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "trainers").SourceAvailable);
         Assert.True(response.Modules.Single(module => module.Id == "tutors").SourceAvailable);
         Assert.True(response.Modules.Single(module => module.Id == "marts").SourceAvailable);
         Assert.True(response.Modules.Single(module => module.Id == "typechart").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "owse").SourceAvailable);
+    }
+
+    [Fact]
+    public void MissingGen7ZoneDataDisablesWildEncountersButKeepsStaticEncounters()
+    {
+        var garcPath = Path.Combine(_workspace.RomFs, "a", "0", "7", "7");
+        var original = File.ReadAllBytes(garcPath);
+        try
+        {
+            File.WriteAllBytes(garcPath, []);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.Modules.Single(module => module.Id == "wild").SourceAvailable);
+            Assert.True(response.Modules.Single(module => module.Id == "static").SourceAvailable);
+            Assert.Equal("GARC encdata + zonedata + worlddata", response.Modules.Single(module => module.Id == "wild").Requirement);
+        }
+        finally
+        {
+            File.WriteAllBytes(garcPath, original);
+        }
+    }
+
+    [Fact]
+    public void MissingGen7ZoneDataDisablesOwseToo()
+    {
+        var garcPath = Path.Combine(_workspace.RomFs, "a", "0", "7", "7");
+        var original = File.ReadAllBytes(garcPath);
+        try
+        {
+            File.WriteAllBytes(garcPath, []);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            var owse = response.Modules.Single(module => module.Id == "owse");
+            Assert.False(owse.SourceAvailable);
+            Assert.Equal("GARC encdata + zonedata + worlddata", owse.Requirement);
+        }
+        finally
+        {
+            File.WriteAllBytes(garcPath, original);
+        }
+    }
+
+    [Fact]
+    public void MissingGen7TrainerTeamDisablesTrainerRandomizer()
+    {
+        var trpokePath = Path.Combine(_workspace.RomFs, "a", "1", "0", "6");
+        var original = File.ReadAllBytes(trpokePath);
+        try
+        {
+            File.WriteAllBytes(trpokePath, []);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.Modules.Single(module => module.Id == "trainers").SourceAvailable);
+            Assert.Equal("GARC trclass + trdata + trpoke + gametext", response.Modules.Single(module => module.Id == "trainers").Requirement);
+        }
+        finally
+        {
+            File.WriteAllBytes(trpokePath, original);
+        }
     }
 
     // Trainers -----------------------------------------------------------------
@@ -467,5 +534,80 @@ public class Gen7EditorEndToEndTests : IDisposable
             Moves: new MoveOptions(MetronomeMode: true)));
 
         AssertArchiveContainsChangedFiles(result);
+    }
+
+    [Fact]
+    public void TheRandomizerExportsGen7WildEncounters()
+    {
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Wild: new WildRandomizerOptions(
+                Enabled: true, RandomizeSpecies: true, RandomizeLevels: true,
+                LevelMultiplier: 1.25m)));
+
+        AssertArchiveContainsChangedFiles(result);
+        Assert.Contains(result.ChangedFiles, file => file == "a/0/8/2");
+        AssertArchiveDiffersFromSource(result);
+    }
+
+    [Fact]
+    public void TheRandomizerExportsGen7TrainerTeams()
+    {
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: true, RandomizeLevels: true,
+                LevelMultiplier: 1.25m, RandomizeClasses: true, RandomizeComposition: true, RandomizeItems: true, RandomizeAbilities: true, RandomizeMoves: true, MaximizeAI: true,
+                MinTeamSize: 1, MaxTeamSize: 1, MaximizeIVs: true, ForceFullyEvolved: true, FullyEvolvedLevel: 1, ForceHighPower: true, HighPowerLevel: 1, RandomizeNature: true, RandomizeShiny: true, ShinyChance: 100, RandomizeTypeThemes: true)));
+
+        AssertArchiveContainsChangedFiles(result);
+        Assert.Contains("a/1/0/5", result.ChangedFiles);
+        Assert.Contains("a/1/0/6", result.ChangedFiles);
+        ExportAssertions.AssertChangedFileDiffers(result, _workspace, "a/1/0/6");
+        var teamData = ExportAssertions.ReadGarcFile(result, "a/1/0/6", 1);
+        Assert.Equal(TrainerPoke7.SIZE, teamData.Length);
+        var team = new TrainerPoke7(teamData);
+        Assert.Equal([31, 31, 31, 31, 31, 31], team.IVs);
+        Assert.InRange(team.Item, 1, 7);
+        Assert.Equal(1, team.Moves[0]);
+        Assert.InRange(team.Nature, 0, 24);
+        Assert.True(team.Shiny);
+        Assert.Contains(team.Species, Legal.FinalEvolutions_7.Where(species => species < _workspace.SpeciesCount));
+    }
+
+    [Fact]
+    public void ImportantGen7TeamsCanBeFilledToSix()
+    {
+        using var workspace = new SyntheticSunMoonWorkspace(trainerCount: 14, pokemonPerTrainer: 2);
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            workspace.RomFs, workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: false, FillImportantGen7Teams: true)));
+
+        var importantTeam = ExportAssertions.ReadGarcFile(result, "a/1/0/6", 12);
+        Assert.Equal(6 * TrainerPoke7.SIZE, importantTeam.Length);
+    }
+
+    [Fact]
+    public void MegaTrainerFormsAreRejectedForGen7()
+    {
+        Assert.Throws<WorkspaceException>(() => RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: true, AllowMegaForms: true))));
+    }
+
+    [Fact]
+    public void Gen6GymTrainerThemesAreRejectedForGen7()
+    {
+        Assert.Throws<WorkspaceException>(() => RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: true, RandomizeTypeThemes: true, IncludeGymTrainerThemes: true))));
     }
 }

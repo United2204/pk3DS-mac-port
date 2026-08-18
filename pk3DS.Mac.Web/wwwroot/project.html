@@ -21,10 +21,10 @@
       <section id="extract" class="panel">
         <div class="section-heading">
           <span class="section-number">1</span>
-          <div><p class="kicker">EXTRACCIÓN</p><h2>Extraer un CXI o 3DS</h2></div>
+          <div><p class="kicker">EXTRACCIÓN</p><h2>Extraer un CXI, 3DS o CIA</h2></div>
         </div>
-        <p class="section-copy">Elegí un archivo de juego y una carpeta nueva o vacía. Se generará un workspace con <code>RomFS</code>, <code>ExeFS</code> y <code>exheader.bin</code>.</p>
-          <div class="path-input"><span aria-hidden="true">⌁</span><input id="input-file" type="text" placeholder="Archivo .cxi o .3ds" spellcheck="false"><button id="browse-file" class="secondary" type="button">Examinar…</button></div>
+        <p class="section-copy">Elegí un CXI, 3DS o CIA desencriptado y una carpeta nueva o vacía. Se generará un workspace con <code>RomFS</code>, <code>ExeFS</code> y <code>exheader.bin</code>.</p>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="input-file" type="text" placeholder="Archivo .cxi, .3ds o .cia" spellcheck="false"><button id="browse-file" class="secondary" type="button">Examinar…</button></div>
         <label class="field project-output">Carpeta de extracción
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="extract-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-extract-output" class="secondary" type="button">Elegir…</button></div>
         </label>
@@ -83,9 +83,22 @@
         <p id="rebuild-result" class="status neutral" role="status" aria-live="polite"></p>
       </section>
 
+      <section id="rebuild-crr" class="panel">
+        <div class="section-heading">
+          <span class="section-number">5</span>
+          <div><p class="kicker">CRO / CRR</p><h2>Verificar y reconstruir hashes</h2></div>
+        </div>
+        <p class="section-copy">Recalcula los hashes internos de todos los CRO y la tabla <code>RomFS/.crr/static.crr</code>. Se genera un parche LayeredFS con solo los archivos que cambian; el workspace original queda intacto.</p>
+        <label class="field project-output">Carpeta de salida
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="crr-output" type="text" placeholder="Opcional: pk3ds-mac-output"><button id="browse-crr-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+        <div class="ready-row project-action"><div><b>Se requiere RomFS con CRO y static.crr.</b><small>Esto corrige hashes internos y la tabla de verificación; no elimina la firma RSA de consola.</small></div><button id="rebuild-crr-action" class="primary" type="button" disabled>Verificar →</button></div>
+        <p id="crr-result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
       <section id="rebuild-cia" class="panel">
         <div class="section-heading">
-          <span class="section-number">3b</span>
+          <span class="section-number">6</span>
           <div><p class="kicker">CIA</p><h2>Crear un archivo .cia</h2></div>
         </div>
         <p class="section-copy">Reconstruye primero una ROM .3ds en staging y luego la convierte a un CIA desencriptado con <code>makerom</code>, compatible con Azahar. La conversión omite las firmas retail del contenido modificado; la versión macOS arm64 se incluye en la aplicación.</p>
@@ -102,7 +115,7 @@
 
       <section id="patch" class="panel">
         <div class="section-heading">
-          <span class="section-number">4</span>
+          <span class="section-number">7</span>
           <div><p class="kicker">PARCHE</p><h2>Crear parche de redirección</h2></div>
         </div>
         <p class="section-copy">Porta el parche “Redirect [CIA]” de pk3DS: cambia las referencias de los GARCs seleccionados en <code>code.bin</code> y copia sus archivos al árbol <code>a0/</code>. Esto genera los contenidos del parche; todavía no firma ni construye un archivo CIA.</p>
@@ -113,16 +126,47 @@
         <label class="field project-output">Carpeta del parche
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="patch-output" type="text" placeholder="Opcional: Patch (fecha y hora)"><button id="browse-patch-output" class="secondary" type="button">Elegir…</button></div>
         </label>
-        <div class="ready-row project-action"><div><b>Se requiere ExeFS con un code.bin parcheable.</b><small>El origen se conserva intacto.</small></div><button id="create-patch" class="primary" type="button" disabled>Crear parche →</button></div>
+        <div class="ready-row project-action"><div><b>Se requiere ExeFS con un code.bin parcheable.</b><small>Si está comprimido con BLZ, la aplicación lo normaliza en memoria; el origen se conserva intacto.</small></div><button id="create-patch" class="primary" type="button" disabled>Crear parche →</button></div>
         <p id="patch-result" class="status neutral" role="status" aria-live="polite"></p>
       </section>
 
       <section id="garc" class="panel">
         <div class="section-heading">
-          <span class="section-number">5</span>
-          <div><p class="kicker">ARCHIVOS GARC</p><h2>Desempaquetar o empaquetar</h2></div>
+          <span class="section-number">8</span>
+          <div><p class="kicker">ARCHIVOS GARC / MINI</p><h2>Desempaquetar o empaquetar</h2></div>
         </div>
         <p class="section-copy">Trabaja sobre una copia de los archivos: el desempaquetado genera una carpeta nueva y el empaquetado nunca altera la carpeta de entrada.</p>
+        <div class="tool-block">
+          <h3>Desempaquetado automático</h3>
+          <p class="section-copy">Detecta y abre automáticamente GAR, GARC, Mini, ALYT, Shuffle ARC, DARC, SARC o FARC. Si el archivo no tiene una extensión reconocible, se inspecciona su firma interna. Si dejás vacía la salida, GARC/DARC/Mini usan las carpetas Windows <code>_g</code>, <code>_d</code> y <code>_XX</code>; los demás formatos usan una carpeta <code>-unpacked</code>.</p>
+          <p class="section-copy">Al detectar un Mini, también puede abrir los contenedores Mini que estén dentro de sus bloques. El límite de seguridad es de ocho niveles y la opción se puede desactivar para conservar una extracción raw plana.</p>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="auto-unpack-input" type="text" placeholder="Elegí un archivo de archivo" spellcheck="false"><button id="browse-auto-unpack-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="auto-unpack-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-auto-unpack-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <label class="check-card project-check"><input id="auto-unpack-skip-decompression" type="checkbox"><span>No descomprimir entradas LZSS cuando sea GARC</span></label>
+          <label class="check-card project-check"><input id="auto-unpack-recursive" type="checkbox" checked><span>Abrir contenedores Mini internos</span></label>
+          <div class="ready-row project-action"><div><b>La fuente queda intacta.</b><small>Se deriva al desempaquetador específico del formato detectado.</small></div><button id="auto-unpack" class="primary" type="button" disabled>Detectar y desempaquetar →</button></div>
+          <p id="auto-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Empaquetado automático</h3>
+          <p class="section-copy">Usa las convenciones de Windows: una carpeta terminada en <code>_g</code> se empaqueta como GARC, <code>_d</code> como DARC y <code>_XX</code> como Mini (por ejemplo, <code>encdata_zo</code>).</p>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="auto-pack-input" type="text" placeholder="Carpeta terminada en _g, _d o _XX" spellcheck="false"><button id="browse-auto-pack-input" class="secondary" type="button">Elegir…</button></div>
+          <label class="field project-output">Archivo de salida
+            <input id="auto-pack-output" type="text" placeholder="Opcional: se deduce del nombre de la carpeta">
+          </label>
+          <div class="inline-fields">
+            <label class="field">Versión GARC
+              <select id="auto-pack-garc-version"><option value="4">Gen. VI (4)</option><option value="6" selected>Gen. VII (6)</option></select>
+            </label>
+            <label class="field">Padding GARC
+              <input id="auto-pack-garc-padding" type="number" min="1" max="4096" value="4">
+            </label>
+          </div>
+          <div class="ready-row project-action"><div><b>No elimina la carpeta de entrada.</b><small>El formato se determina por el sufijo del nombre.</small></div><button id="auto-pack" class="primary" type="button" disabled>Detectar y empaquetar →</button></div>
+          <p id="auto-pack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
         <div class="tool-block">
           <h3>Desempaquetar GARC</h3>
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="garc-input" type="text" placeholder="Archivo .garc" spellcheck="false"><button id="browse-garc-input" class="secondary" type="button">Examinar…</button></div>
@@ -150,14 +194,104 @@
           <div class="ready-row project-action"><div><b>La carpeta de entrada queda intacta.</b></div><button id="pack-garc" class="primary" type="button">Empaquetar →</button></div>
           <p id="garc-pack-result" class="status neutral" role="status" aria-live="polite"></p>
         </div>
+        <div class="tool-block">
+          <h3>GARC Shuffler</h3>
+          <p class="section-copy">Reordena las referencias FATB de las entradas sin carpeta, como la herramienta de Windows. El bloque de datos no se mueve y se genera un GARC nuevo; el original nunca se modifica.</p>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="garc-shuffle-input" type="text" placeholder="Archivo .garc" spellcheck="false"><button id="browse-garc-shuffle-input" class="secondary" type="button">Examinar…</button></div>
+          <div class="inline-fields">
+            <label class="field project-output">Archivo de salida
+              <input id="garc-shuffle-output" type="text" placeholder="Opcional: nombre-shuffled.garc" spellcheck="false">
+            </label>
+            <label class="field">Semilla reproducible
+              <input id="garc-shuffle-seed" type="number" placeholder="Aleatoria" step="1">
+            </label>
+          </div>
+          <div class="ready-row project-action"><div><b>Se crea una copia nueva.</b><small>Algunos archivos dependen de posiciones concretas: conservá siempre el original.</small></div><button id="shuffle-garc" class="primary" type="button">Reordenar →</button></div>
+          <p id="garc-shuffle-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Archivos Mini / BinLinker</h3>
+          <p class="section-copy">Desempaquetá o empaquetá contenedores de dos letras como <code>WD</code>, <code>ZO</code> o <code>EP</code>. Cada archivo de la carpeta representa un bloque y la entrada siempre queda intacta.</p>
+          <div class="inline-fields">
+            <label class="field">Identificador
+              <input id="mini-identifier" type="text" maxlength="2" value="WD" placeholder="WD" spellcheck="false">
+            </label>
+            <label class="field">Archivo Mini
+              <div class="path-input"><span aria-hidden="true">⌁</span><input id="mini-input" type="text" placeholder="Archivo Mini .bin" spellcheck="false"><button id="browse-mini-input" class="secondary" type="button">Examinar…</button></div>
+            </label>
+          </div>
+          <label class="field project-output">Carpeta de salida al desempaquetar
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="mini-unpack-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-mini-unpack-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una carpeta nueva con bloques numerados.</b></div><button id="unpack-mini" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="mini-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+          <div class="path-input project-output"><span aria-hidden="true">⌁</span><input id="mini-folder" type="text" placeholder="Carpeta con bloques .bin" spellcheck="false"><button id="browse-mini-folder" class="secondary" type="button">Elegir…</button></div>
+          <label class="field project-output">Plantilla Mini original (opcional)
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="mini-template" type="text" placeholder="Archivo original para conservar padding"><button id="browse-mini-template" class="secondary" type="button">Usar original…</button></div>
+            <small>Si la carpeta proviene de un Mini con cabecera extendida, se conservará su primer offset.</small>
+          </label>
+          <label class="field project-output">Archivo Mini de salida
+            <input id="mini-pack-output" type="text" placeholder="Opcional: se genera junto a la carpeta">
+          </label>
+          <div class="ready-row project-action"><div><b>Empaqueta los archivos en orden alfabético.</b><small>El modo automático también busca el original junto a la carpeta.</small></div><button id="pack-mini" class="primary" type="button">Empaquetar →</button></div>
+          <p id="mini-pack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Desempaquetar ALYT (SARC envuelto)</h3>
+          <p class="section-copy">ALYT es un contenedor que guarda etiquetas, símbolos y un SARC interno. Se extrae el árbol SARC conservando el archivo original.</p>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="alyt-input" type="text" placeholder="Archivo .alyt" spellcheck="false"><button id="browse-alyt-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="alyt-output" type="text" placeholder="Opcional: junto al ALYT"><button id="browse-alyt-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <div class="ready-row project-action"><div><b>Extrae y valida el SARC embebido.</b><small>También informa cuántas etiquetas y símbolos tenía el contenedor.</small></div><button id="unpack-alyt" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="alyt-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Empaquetar ALYT (SARC envuelto)</h3>
+          <p class="section-copy">Elegí una carpeta con los archivos del SARC interno. Las etiquetas y símbolos son opcionales y se guardan en slots UTF-8 fijos; una línea representa una entrada.</p>
+          <div class="path-input project-output"><span aria-hidden="true">⌁</span><input id="alyt-folder" type="text" placeholder="Carpeta con archivos del SARC" spellcheck="false"><button id="browse-alyt-folder" class="secondary" type="button">Elegir…</button></div>
+          <div class="inline-fields">
+            <label class="field">Etiquetas (opcional)
+              <textarea id="alyt-labels" rows="3" placeholder="Una etiqueta por línea"></textarea>
+            </label>
+            <label class="field">Símbolos (opcional)
+              <textarea id="alyt-symbols" rows="3" placeholder="Un símbolo por línea"></textarea>
+            </label>
+          </div>
+          <label class="field project-output">Archivo ALYT de salida
+            <input id="alyt-pack-output" type="text" placeholder="Opcional: nombre.alyt">
+          </label>
+          <div class="ready-row project-action"><div><b>Genera un ALYT nuevo y valida el SARC interno.</b><small>La carpeta original queda intacta y la salida no sobrescribe archivos.</small></div><button id="pack-alyt" class="primary" type="button">Empaquetar →</button></div>
+          <p id="alyt-pack-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Desempaquetar GAR legacy</h3>
+          <p class="section-copy">GAR es un contenedor genérico distinto de GARC. Extrae sus archivos usando las dos tablas de nombres y valida todos los offsets antes de escribir.</p>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="gar-input" type="text" placeholder="Archivo .gar" spellcheck="false"><button id="browse-gar-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="gar-output" type="text" placeholder="Opcional: junto al GAR"><button id="browse-gar-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una carpeta nueva con los nombres originales.</b><small>El origen se conserva intacto.</small></div><button id="unpack-gar" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="gar-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+        <div class="tool-block">
+          <h3>Desempaquetar Shuffle ARC</h3>
+          <p class="section-copy">Extrae los fragmentos numerados del contenedor usado por algunas herramientas de Windows. Se conservan como bytes raw aunque no sean ZIP válidos.</p>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="shuffle-arc-input" type="text" placeholder="Archivo Shuffle ARC" spellcheck="false"><button id="browse-shuffle-arc-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Carpeta de salida
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="shuffle-arc-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-shuffle-arc-output" class="secondary" type="button">Elegir…</button></div>
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una carpeta nueva con fragmentos 0.zip, 1.zip…</b><small>El origen se conserva intacto.</small></div><button id="unpack-shuffle-arc" class="primary" type="button">Desempaquetar →</button></div>
+          <p id="shuffle-arc-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
       </section>
 
       <section id="darc" class="panel">
         <div class="section-heading">
-          <span class="section-number">6</span>
+          <span class="section-number">9</span>
           <div><p class="kicker">ARCHIVOS DARC</p><h2>Desempaquetar o empaquetar</h2></div>
         </div>
-        <p class="section-copy">Trabaja con la estructura DARC habitual de una sola capa: una carpeta raíz con subcarpetas que contienen archivos.</p>
+        <p class="section-copy">Trabaja con carpetas DARC anidadas y conserva el árbol completo de archivos. La raíz no puede contener archivos directamente.</p>
         <div class="tool-block">
           <h3>Desempaquetar DARC</h3>
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="darc-input" type="text" placeholder="Archivo .darc" spellcheck="false"><button id="browse-darc-input" class="secondary" type="button">Examinar…</button></div>
@@ -169,7 +303,11 @@
         </div>
         <div class="tool-block">
           <h3>Empaquetar DARC</h3>
-          <div class="path-input"><span aria-hidden="true">⌁</span><input id="darc-folder" type="text" placeholder="Carpeta DARC de una sola capa" spellcheck="false"><button id="browse-darc-folder" class="secondary" type="button">Elegir…</button></div>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="darc-folder" type="text" placeholder="Carpeta DARC con subcarpetas" spellcheck="false"><button id="browse-darc-folder" class="secondary" type="button">Elegir…</button></div>
+          <label class="field project-output">Plantilla DARC original (opcional)
+            <div class="path-input"><span aria-hidden="true">⌁</span><input id="darc-template" type="text" placeholder="Opcional: archivo original junto a la carpeta _d" spellcheck="false"><button id="browse-darc-template" class="secondary" type="button">Elegir…</button></div>
+            <small>Conserva el prefijo y la estructura de un DARC existente. Si la carpeta termina en <code>_d</code>, Empaquetado automático intenta encontrarla solo.</small>
+          </label>
           <label class="field project-output">Archivo de salida
             <input id="darc-pack-output" type="text" placeholder="Opcional: nombre.darc">
           </label>
@@ -178,12 +316,184 @@
         </div>
       </section>
 
+      <section id="images" class="panel">
+        <div class="section-heading">
+          <span class="section-number">10</span>
+          <div><p class="kicker">IMÁGENES</p><h2>Convertir PNG, BCLIM y BFLIM</h2></div>
+        </div>
+        <p class="section-copy">Convertí PNG, BCLIM y BFLIM en cualquiera de las tres direcciones, usando codecs portables. La entrada queda intacta y la salida no sobrescribe archivos existentes.</p>
+        <div class="tool-block">
+          <h3>Archivo de entrada</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="image-input" type="text" placeholder="Archivo .png, .bclim o .bflim" spellcheck="false"><button id="browse-image-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Archivo de salida
+            <input id="image-output" type="text" placeholder="Opcional: se genera junto a la entrada">
+          </label>
+          <label class="field project-output">Formato XLIM de salida
+            <select id="image-format"><option value="RGBA8" selected>RGBA8 (sin compresión)</option><option value="ETC1">ETC1 (color comprimido)</option><option value="ETC1A4">ETC1A4 (color + alpha comprimido)</option></select>
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una copia convertida.</b><small>PNG → BCLIM/BFLIM usa el formato elegido; BCLIM/BFLIM → PNG conserva las dimensiones. La entrada nunca se modifica.</small></div><button id="convert-image" class="primary" type="button">Convertir →</button></div>
+          <p id="image-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="smdh" class="panel">
+        <div class="section-heading">
+          <span class="section-number">11</span>
+          <div><p class="kicker">ICONO SMDH</p><h2>Inspeccionar icon.bin</h2></div>
+        </div>
+        <p class="section-copy">Lee el SMDH de <code>ExeFS/icon.bin</code> para mostrar el nombre, la descripción y el editor por idioma. También podés exportar el archivo original y sus iconos PNG; el workspace no se modifica.</p>
+        <div class="ready-row project-action"><div><b id="smdh-summary">Cargá un workspace para analizarlo.</b><small>Disponible cuando ExeFS contiene un <code>icon.bin</code> SMDH válido.</small></div><button id="inspect-smdh" class="primary" type="button" disabled>Analizar →</button></div>
+        <div id="smdh-preview" class="smdh-preview" hidden>
+          <div class="smdh-icons">
+            <figure><img id="smdh-small-icon" alt="Icono SMDH pequeño" hidden><figcaption>24 × 24</figcaption></figure>
+            <figure><img id="smdh-large-icon" alt="Icono SMDH grande" hidden><figcaption>48 × 48</figcaption></figure>
+          </div>
+          <div id="smdh-app-info" class="title-screen-list" hidden></div>
+        </div>
+        <div id="smdh-editing" class="tool-block" hidden>
+          <h3>Editar metadatos e iconos</h3>
+          <p class="section-copy">Elegí un slot AppInfo para editar sus textos. Los PNG son opcionales; si los indicás deben medir exactamente 24×24 o 48×48 píxeles.</p>
+          <label class="field project-output">Slot AppInfo
+            <select id="smdh-slot"></select>
+          </label>
+          <label class="field project-output">Descripción corta
+            <input id="smdh-short" type="text" maxlength="64" placeholder="Nombre del juego">
+          </label>
+          <label class="field project-output">Descripción larga
+            <textarea id="smdh-long" rows="3" maxlength="128" placeholder="Descripción del juego"></textarea>
+          </label>
+          <label class="field project-output">Editor / publisher
+            <input id="smdh-publisher" type="text" maxlength="64" placeholder="Editor">
+          </label>
+          <div class="inline-fields">
+            <label class="field">Icono pequeño (opcional)
+              <div class="path-input"><span aria-hidden="true">⌁</span><input id="smdh-small-input" type="text" placeholder="24×24 PNG"><button id="browse-smdh-small" class="secondary" type="button">Examinar…</button></div>
+            </label>
+            <label class="field">Icono grande (opcional)
+              <div class="path-input"><span aria-hidden="true">⌁</span><input id="smdh-large-input" type="text" placeholder="48×48 PNG"><button id="browse-smdh-large" class="secondary" type="button">Examinar…</button></div>
+            </label>
+          </div>
+          <div class="ready-row project-action"><div><b>Actualiza el workspace con backup.</b><small>Se conserva una copia de <code>icon.bin</code> antes de escribir.</small></div><button id="update-smdh" class="primary" type="button" disabled>Aplicar →</button></div>
+          <p id="smdh-update-result" class="status neutral" role="status" aria-live="polite"></p>
+          <div class="tool-block">
+            <h3>Importar un SMDH completo</h3>
+            <p class="section-copy">Reemplaza todo el <code>icon.bin</code> por otro SMDH válido. El archivo seleccionado no se modifica y el workspace recibe un backup.</p>
+            <div class="path-input project-output"><span aria-hidden="true">⌁</span><input id="smdh-import-input" type="text" placeholder="Archivo icon.bin SMDH" spellcheck="false"><button id="browse-smdh-import" class="secondary" type="button">Examinar…</button></div>
+            <div class="ready-row project-action"><div><b>Importa el archivo completo.</b><small>Conserva el estado anterior en <code>.pk3ds-backups</code>.</small></div><button id="import-smdh" class="primary" type="button" disabled>Importar →</button></div>
+            <p id="smdh-import-result" class="status neutral" role="status" aria-live="polite"></p>
+          </div>
+          <div class="tool-block">
+            <h3>Restaurar un backup de icon.bin</h3>
+            <p class="section-copy">Las ediciones e importaciones conservan el estado anterior. Buscá una copia y restaurala; antes de reemplazar el icono actual también se crea un backup de seguridad.</p>
+            <div class="ready-row project-action"><div><b id="smdh-backup-summary">Buscá copias de icon.bin.</b></div><button id="load-smdh-backups" class="secondary" type="button" disabled>Buscar copias</button></div>
+            <select id="smdh-backup" disabled><option value="">Cargá el workspace para buscar copias</option></select>
+            <div class="ready-row project-action"><div><b>Restauración protegida.</b><small>El icon.bin actual queda respaldado antes de escribir.</small></div><button id="restore-smdh" class="primary" type="button" disabled>Restaurar →</button></div>
+            <p id="smdh-restore-result" class="status neutral" role="status" aria-live="polite"></p>
+          </div>
+          <div class="tool-block">
+            <h3>Ajustes avanzados</h3>
+            <p class="section-copy">Estos valores forman parte de <code>ApplicationSettings</code>. Se conservan aunque no los cambies; usá hexadecimal para los identificadores y ratings.</p>
+            <label class="field project-output">Ratings regionales · 16 bytes hexadecimales
+              <input id="smdh-ratings" type="text" maxlength="34" placeholder="00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00" spellcheck="false">
+            </label>
+            <h4>Bloqueo regional</h4>
+            <div id="smdh-regions" class="smdh-check-grid">
+              <label class="check-card"><input type="checkbox" data-smdh-region="1"><span>Japón</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-region="2"><span>Norteamérica</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-region="4"><span>Europa</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-region="8"><span>Australia</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-region="16"><span>China</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-region="32"><span>Corea</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-region="64"><span>Taiwán</span></label>
+            </div>
+            <h4>Flags de aplicación</h4>
+            <div id="smdh-flags" class="smdh-check-grid">
+              <label class="check-card"><input type="checkbox" data-smdh-flag="1"><span>Visible</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="2"><span>Autoarranque</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="4"><span>Permitir 3D</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="8"><span>Requiere aceptar EULA</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="16"><span>Guardar al salir</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="32"><span>Banner extendido</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="64"><span>Requiere rating regional</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="128"><span>Usa datos guardados</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="256"><span>Registrar uso</span></label>
+              <label class="check-card"><input type="checkbox" data-smdh-flag="512"><span>Sin backup de SD</span></label>
+            </div>
+            <div class="inline-fields">
+              <label class="field">MatchMaker ID · hex
+                <input id="smdh-matchmaker" type="text" maxlength="10" placeholder="0x00000000" spellcheck="false">
+              </label>
+              <label class="field">MatchMaker BIT ID · hex
+                <input id="smdh-matchmaker-bit" type="text" maxlength="18" placeholder="0x0000000000000000" spellcheck="false">
+              </label>
+              <label class="field">Versión EULA
+                <input id="smdh-eula" type="number" min="0" max="65535" step="1">
+              </label>
+              <label class="field">Frame de animación
+                <input id="smdh-animation" type="number" step="any">
+              </label>
+              <label class="field">StreetPass ID · hex
+                <input id="smdh-streetpass" type="text" maxlength="10" placeholder="0x00000000" spellcheck="false">
+              </label>
+            </div>
+            <p class="muted">El botón Aplicar de arriba guarda todos los valores mostrados junto con los textos e iconos.</p>
+          </div>
+        </div>
+        <label class="field project-output">Carpeta de exportación
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="smdh-output" type="text" placeholder="Opcional: smdh-export"><button id="browse-smdh-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+        <div class="ready-row project-action"><div><b>Exporta icon.bin y ambos tamaños.</b><small>Incluye el SMDH original, small-icon.png y large-icon.png.</small></div><button id="export-smdh" class="primary" type="button" disabled>Exportar →</button></div>
+        <p id="smdh-result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="lz11" class="panel">
+        <div class="section-heading">
+          <span class="section-number">12</span>
+          <div><p class="kicker">COMPRESIÓN</p><h2>Comprimir o descomprimir LZ11</h2></div>
+        </div>
+        <p class="section-copy">Procesá archivos con el formato LZ11 usado por muchos recursos de 3DS. La entrada queda intacta y la salida no sobrescribe archivos existentes.</p>
+        <div class="tool-block">
+          <h3>Archivo de entrada</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="lz11-input" type="text" placeholder="Archivo binario" spellcheck="false"><button id="browse-lz11-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Operación
+            <select id="lz11-operation"><option value="decompress" selected>Descomprimir LZ11</option><option value="compress">Comprimir a LZ11</option></select>
+          </label>
+          <label class="field project-output">Archivo de salida
+            <input id="lz11-output" type="text" placeholder="Opcional: se genera junto a la entrada">
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una copia procesada.</b><small>La operación valida la cabecera y conserva el archivo original.</small></div><button id="process-lz11" class="primary" type="button">Procesar →</button></div>
+          <p id="lz11-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="blz" class="panel">
+        <div class="section-heading">
+          <span class="section-number">13</span>
+          <div><p class="kicker">COMPRESIÓN</p><h2>Comprimir o descomprimir BLZ</h2></div>
+        </div>
+        <p class="section-copy">Procesá BLZ, el formato usado habitualmente por <code>code.bin</code> en ExeFS. La entrada queda intacta y la salida se publica como archivo nuevo.</p>
+        <div class="tool-block">
+          <h3>Archivo de entrada</h3>
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="blz-input" type="text" placeholder="Archivo BLZ o binario sin comprimir" spellcheck="false"><button id="browse-blz-input" class="secondary" type="button">Examinar…</button></div>
+          <label class="field project-output">Operación
+            <select id="blz-operation"><option value="decompress" selected>Descomprimir BLZ</option><option value="compress">Comprimir a BLZ</option></select>
+          </label>
+          <label class="check-card project-check"><input id="blz-best" type="checkbox"><span>Usar compresión optimizada</span></label>
+          <label class="check-card project-check"><input id="blz-arm9" type="checkbox"><span>Modo ARM9</span></label>
+          <label class="field project-output">Archivo de salida
+            <input id="blz-output" type="text" placeholder="Opcional: se genera junto a la entrada">
+          </label>
+          <div class="ready-row project-action"><div><b>Genera una copia procesada.</b><small>Al descomprimir se valida la cabecera BLZ; las opciones avanzadas solo afectan la compresión.</small></div><button id="process-blz" class="primary" type="button">Procesar →</button></div>
+          <p id="blz-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
       <section id="titlescreen" class="panel">
         <div class="section-heading">
-          <span class="section-number">7</span>
+          <span class="section-number">14</span>
           <div><p class="kicker">PANTALLA DE TÍTULO</p><h2>Inventario de XY / ORAS</h2></div>
         </div>
-        <p class="section-copy">Lee el GARC <code>titlescreen</code>, sus DARCs por juego e idioma y los recursos BCLIM internos. Podés previsualizar formatos compatibles, exportar el BCLIM original y generar PNG; también podés aplicar un reemplazo al workspace con copia de seguridad automática.</p>
+        <p class="section-copy">Lee el GARC <code>titlescreen</code>, sus DARCs por juego e idioma y los recursos BCLIM internos. Podés previsualizar formatos compatibles, exportar el BCLIM original y generar PNG; también podés aplicar un reemplazo al workspace con copia de seguridad automática. Si detecta una envoltura retail alrededor del DARC, muestra sus bytes en el inventario.</p>
         <div class="ready-row project-action"><div><b id="title-screen-summary">Cargá un workspace para analizarlo.</b><small>Disponible para Pokémon X/Y y Rubí Omega / Zafiro Alfa.</small></div><button id="inspect-title-screen" class="primary" type="button" disabled>Analizar →</button></div>
         <div id="title-screen-catalog" class="title-screen-list" hidden></div>
         <label class="field project-output">Carpeta de exportación
@@ -193,7 +503,7 @@
         <p id="title-screen-result" class="status neutral" role="status" aria-live="polite"></p>
         <div class="tool-block">
           <h3>Reemplazar una imagen</h3>
-          <p class="section-copy">Elegí un archivo BCLIM o un PNG con las mismas dimensiones. Se genera un DARC nuevo fuera del workspace.</p>
+          <p class="section-copy">Elegí un archivo BCLIM o un PNG con las mismas dimensiones. Al usar PNG se conserva automáticamente el formato BCLIM original, incluido ETC1/ETC1A4. Se genera un DARC nuevo fuera del workspace.</p>
           <label class="field project-output">Archivo de título
             <select id="title-screen-archive" disabled><option>Analizá primero el workspace</option></select>
           </label>
@@ -218,12 +528,22 @@
           <p id="title-screen-replace-garc-result" class="status neutral" role="status" aria-live="polite"></p>
           <div class="ready-row project-action"><div><b>Aplica el reemplazo al workspace.</b><small>Guarda primero una copia en <code>.pk3ds-backups</code> y conserva LZSS cuando corresponde.</small></div><button id="apply-title-screen" class="primary" type="button" disabled>Aplicar →</button></div>
           <p id="title-screen-apply-result" class="status neutral" role="status" aria-live="polite"></p>
+          <div class="tool-block">
+            <h3>Restaurar una copia de seguridad</h3>
+            <p class="section-copy">Las copias se guardan dentro de <code>.pk3ds-backups</code>. Antes de restaurar se conserva otra copia del GARC actual.</p>
+            <div class="ready-row project-action"><div><b id="title-screen-backup-summary">Cargá el workspace para buscar copias.</b></div><button id="load-title-screen-backups" class="secondary" type="button" disabled>Buscar copias</button></div>
+            <label class="field project-output">Copia disponible
+              <select id="title-screen-backup" disabled><option>Cargá el workspace para buscar copias</option></select>
+            </label>
+            <div class="ready-row project-action"><div><b>Restauración protegida.</b><small>El GARC actual queda respaldado antes de reemplazarlo.</small></div><button id="restore-title-screen" class="primary" type="button" disabled>Restaurar →</button></div>
+            <p id="title-screen-restore-result" class="status neutral" role="status" aria-live="polite"></p>
+          </div>
         </div>
       </section>
 
       <section id="sarc" class="panel">
         <div class="section-heading">
-          <span class="section-number">8</span>
+          <span class="section-number">15</span>
           <div><p class="kicker">ARCHIVOS SARC</p><h2>Desempaquetar o empaquetar</h2></div>
         </div>
         <p class="section-copy">Conserva rutas raíz y anidadas dentro de archivos SARC. El empaquetado usa UTF-8 y una alineación de datos configurable; la carpeta de entrada queda intacta.</p>
@@ -252,10 +572,10 @@
 
       <section id="farc" class="panel">
         <div class="section-heading">
-          <span class="section-number">9</span>
+          <span class="section-number">16</span>
           <div><p class="kicker">ARCHIVOS FARC</p><h2>Desempaquetar o empaquetar</h2></div>
         </div>
-        <p class="section-copy">Trabaja con la variante FARC heredada que usa un índice SIR0 con nombres UTF-16 y rutas anidadas. Las rutas se validan antes de extraerlas y las variantes indexadas por hash no se modifican.</p>
+        <p class="section-copy">Trabaja con las variantes FARC basadas en SIR0. Los índices con nombres conservan sus rutas UTF-16; los índices por hash se extraen con nombres sintéticos <code>hash-XXXXXXXX.bin</code>, porque el archivo no contiene los nombres originales. Al empaquetar podés elegir nombres UTF-16 o CRC32/hash.</p>
         <div class="tool-block">
           <h3>Desempaquetar FARC</h3>
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="farc-input" type="text" placeholder="Archivo .farc" spellcheck="false"><button id="browse-farc-input" class="secondary" type="button">Examinar…</button></div>
@@ -274,12 +594,15 @@
           <label class="field project-output">Alineación de datos
             <select id="farc-alignment"><option value="16">0x10</option><option value="128" selected>0x80 · recomendada</option><option value="4096">0x1000</option></select>
           </label>
-          <div class="ready-row project-action"><div><b>La carpeta de entrada queda intacta.</b><small>Genera el índice SIR0 y conserva nombres UTF-16.</small></div><button id="pack-farc" class="primary" type="button">Empaquetar →</button></div>
+          <label class="field project-output">Tipo de índice
+            <select id="farc-index-kind"><option value="0" selected>Nombres UTF-16 · recomendado</option><option value="1">CRC32/hash · conserva hash-XXXXXXXX.bin</option></select>
+          </label>
+          <div class="ready-row project-action"><div><b>La carpeta de entrada queda intacta.</b><small>El tipo hash conserva los nombres sintéticos <code>hash-XXXXXXXX.bin</code> como claves CRC32.</small></div><button id="pack-farc" class="primary" type="button">Empaquetar →</button></div>
           <p id="farc-pack-result" class="status neutral" role="status" aria-live="polite"></p>
         </div>
       </section>
     </main>
     <footer>pk3DS Mac trabaja de forma local. Ningún archivo se sube a internet.</footer>
-    <script src="project.js?v=2"></script>
+    <script src="project.js?v=4"></script>
   </body>
 </html>

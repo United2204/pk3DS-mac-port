@@ -484,9 +484,77 @@ public static class GARC
         garc.fimg.HeaderSize = br.ReadInt32();
         garc.fimg.DataSize = br.ReadInt32();
 
+        ValidateGarc(garc, stream.Length);
+
         // Files data
         // Oftentimes too large to toss into a byte array. Fetch as needed with a BinaryReader.
         return garc;
+    }
+
+    private static void ValidateGarc(GARCFile garc, long streamLength)
+    {
+        // These four-byte tags are read through a little-endian BinaryReader, so the byte order
+        // appears reversed compared with the human-readable chunk names written as uints.
+        if (new string(garc.Magic) != "CRAG")
+            throw new InvalidDataException("El archivo no contiene una cabecera GARC.");
+        if (garc.Endianess != 0xFEFF)
+            throw new InvalidDataException("El GARC usa un orden de bytes no compatible.");
+
+        var expectedHeaderSize = garc.Version == VER_4 ? 0x1C : 0x24;
+        if (garc.HeaderSize != expectedHeaderSize || garc.DataOffset < garc.HeaderSize)
+            throw new InvalidDataException("La cabecera GARC tiene un tamaño u offset de datos inválido.");
+        if (garc.FileSize < garc.DataOffset || garc.FileSize > streamLength)
+            throw new InvalidDataException("El tamaño declarado del GARC sale de los límites del archivo.");
+        if (new string(garc.fato.Magic) != "OTAF" || new string(garc.fatb.Magic) != "BTAF"
+            || new string(garc.fimg.Magic) != "BMIF")
+        {
+            throw new InvalidDataException("Las tablas OTAF/BTAF/FIMB del GARC están incompletas.");
+        }
+
+        var expectedFatoHeader = checked(0x0C + (garc.fato.EntryCount * 4));
+        if (garc.fato.HeaderSize != expectedFatoHeader || garc.fato.Entries is null
+            || garc.fato.Entries.Length != garc.fato.EntryCount)
+        {
+            throw new InvalidDataException("La tabla OTAF del GARC tiene un tamaño inválido.");
+        }
+        if (garc.fatb.HeaderSize < 0x0C || garc.fatb.Entries is null
+            || garc.fatb.Entries.Length != garc.fato.EntryCount || garc.fatb.FileCount < 0)
+        {
+            throw new InvalidDataException("La tabla BTAF del GARC tiene un tamaño inválido.");
+        }
+        if (garc.fimg.HeaderSize != 0x0C || garc.fimg.DataSize < 0)
+            throw new InvalidDataException("La cabecera FIMB del GARC tiene un tamaño inválido.");
+
+        var dataEnd = checked((long)garc.DataOffset + garc.fimg.DataSize);
+        if (dataEnd > garc.FileSize || dataEnd > streamLength)
+            throw new InvalidDataException("El bloque FIMB del GARC sale de los límites del archivo.");
+
+        var totalFiles = 0;
+        foreach (var entry in garc.fatb.Entries)
+        {
+            if (entry.SubEntries is null || entry.SubEntries.Length != 32)
+                throw new InvalidDataException("Una entrada BTAF del GARC no tiene sus 32 subentradas.");
+
+            foreach (var subEntry in entry.SubEntries)
+            {
+                if (!subEntry.Exists)
+                    continue;
+
+                totalFiles++;
+                if (subEntry.Start < 0 || subEntry.End < subEntry.Start || subEntry.Length < 0
+                    || subEntry.Length > subEntry.End - subEntry.Start)
+                {
+                    throw new InvalidDataException("Una subentrada BTAF del GARC tiene un rango inválido.");
+                }
+
+                var absoluteEnd = checked((long)garc.DataOffset + subEntry.End);
+                if (absoluteEnd > dataEnd || absoluteEnd > garc.FileSize || absoluteEnd > streamLength)
+                    throw new InvalidDataException("Una subentrada BTAF del GARC apunta fuera de FIMB.");
+            }
+        }
+
+        if (totalFiles != garc.fatb.FileCount)
+            throw new InvalidDataException("La cantidad de archivos del GARC no coincide con la tabla BTAF.");
     }
 
     public static MemGARC PackGARC(byte[][] data, int version, int contentpadnearest)

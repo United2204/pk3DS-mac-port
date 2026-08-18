@@ -33,7 +33,7 @@ public static class TitleScreenEditor
             catalog.Archives.Any(entry => entry.Compressed),
             catalog.GarcPath,
             catalog.Archives.Select(entry => entry.Summary).ToArray(),
-            "Inventario de DARC y BCLIM generado en modo de solo lectura; el workspace original no se modifica.");
+            "Inventario de DARC y BCLIM generado sin tocar el workspace; reemplazar un recurso es una acción explícita y crea backup cuando se aplica.");
     }
 
     public static TitleScreenExportResponse Export(TitleScreenExportRequest request)
@@ -116,6 +116,8 @@ public static class TitleScreenEditor
                     fileNumber = archive.Summary.FileNumber,
                     romFsPath = archive.Summary.RomFsPath,
                     compressed = archive.Summary.Compressed,
+                    darcPrefixBytes = archive.Summary.DarcPrefixBytes,
+                    darcSuffixBytes = archive.Summary.DarcSuffixBytes,
                     darc = request.IncludeRawDarc ? Path.Combine(label, rawDarcName).Replace(Path.DirectorySeparatorChar, '/') : null,
                     assets = exportedAssets,
                 });
@@ -195,7 +197,7 @@ public static class TitleScreenEditor
             throw new WorkspaceException($"No existe el recurso BCLIM #{request.AssetEntryIndex} dentro de {archive.Summary.Game}-{archive.Summary.Language}.");
         var replacementPath = ResolveExistingReplacement(request.ReplacementFile);
         var originalImage = BCLIMPortable.Read(originalBytes);
-        var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height);
+        var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height, originalImage.Format);
 
         DARC darc;
         try
@@ -215,7 +217,7 @@ public static class TitleScreenEditor
 
         var output = ResolveReplacementOutput(workspace, archive.Summary, asset.Name, request.OutputFile);
         Directory.CreateDirectory(Directory.GetParent(output)!.FullName);
-        var darcBytes = DARC.SetDARC(darc);
+        var darcBytes = CombineDarcEnvelope(archive.DarcPrefix, DARC.SetDARC(darc), archive.DarcSuffix);
         File.WriteAllBytes(output, darcBytes);
         return new TitleScreenReplaceResponse(
             workspace.Version.ToString(),
@@ -246,7 +248,7 @@ public static class TitleScreenEditor
             throw new WorkspaceException($"No existe el recurso BCLIM #{request.AssetEntryIndex} dentro de {archive.Summary.Game}-{archive.Summary.Language}.");
         var replacementPath = ResolveExistingReplacement(request.ReplacementFile);
         var originalImage = BCLIMPortable.Read(originalBytes);
-        var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height);
+        var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height, originalImage.Format);
 
         var output = ResolveGarcReplacementOutput(workspace, archive.Summary, request.OutputFile);
         var garcBytes = BuildGarcReplacement(
@@ -254,6 +256,8 @@ public static class TitleScreenEditor
             request.FileNumber,
             request.AssetEntryIndex,
             archive.DarcData,
+            archive.DarcPrefix,
+            archive.DarcSuffix,
             archive.Summary.Compressed,
             replacement.Data);
         Directory.CreateDirectory(Directory.GetParent(output)!.FullName);
@@ -288,13 +292,15 @@ public static class TitleScreenEditor
             throw new WorkspaceException($"No existe el recurso BCLIM #{request.AssetEntryIndex} dentro de {archive.Summary.Game}-{archive.Summary.Language}.");
         var replacementPath = ResolveExistingReplacement(request.ReplacementFile);
         var originalImage = BCLIMPortable.Read(originalBytes);
-        var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height);
+        var replacement = ReadReplacement(replacementPath, originalImage.Width, originalImage.Height, originalImage.Format);
         var originalGarc = ReadSourceGarc(catalog.GarcPath);
         var garcBytes = BuildGarcReplacement(
             catalog.GarcPath,
             request.FileNumber,
             request.AssetEntryIndex,
             archive.DarcData,
+            archive.DarcPrefix,
+            archive.DarcSuffix,
             archive.Summary.Compressed,
             replacement.Data);
         var backupFile = CreateWorkspaceBackupPath(workspace.RootPath, archive.Summary, catalog.GarcPath);
@@ -326,8 +332,78 @@ public static class TitleScreenEditor
             "GARC del workspace actualizado; se guardó una copia de seguridad antes de escribir y se conservó LZSS cuando correspondía.");
     }
 
+    public static TitleScreenBackupsResponse GetBackups(TitleScreenBackupsRequest request)
+    {
+        var workspace = GameWorkspace.Open(request.WorkspacePath);
+        var garcPath = ResolveTitleScreenGarcPath(workspace, out _);
+        var backups = FindBackupFiles(workspace.RootPath, garcPath)
+            .Select(path => new TitleScreenBackupSummary(
+                path,
+                new FileInfo(path).Length,
+                File.GetLastWriteTimeUtc(path)))
+            .OrderByDescending(entry => entry.CreatedUtc)
+            .ToArray();
+        return new TitleScreenBackupsResponse(
+            workspace.Version.ToString(),
+            garcPath,
+            backups,
+            backups.Length == 0
+                ? "Todavía no hay copias de seguridad de pantalla de título en este workspace."
+                : $"Hay {backups.Length} copia(s) de seguridad disponibles para restaurar.");
+    }
+
+    public static TitleScreenRestoreResponse RestoreBackup(TitleScreenRestoreRequest request)
+    {
+        var workspace = GameWorkspace.Open(request.WorkspacePath);
+        var garcPath = ResolveTitleScreenGarcPath(workspace, out var spec);
+        var backupDirectory = Path.Combine(workspace.RootPath, ".pk3ds-backups");
+        var backupFile = ResolveBackupFile(request.BackupFile, backupDirectory, garcPath);
+        byte[] backupBytes;
+        try
+        {
+            backupBytes = File.ReadAllBytes(backupFile);
+            var backupGarc = new GARC.MemGARC(backupBytes);
+            var requiredFileCount = spec.Archives.Max(entry => entry.FileNumber) + 1;
+            if (backupGarc.FileCount < requiredFileCount)
+                throw new WorkspaceException("La copia no contiene todas las entradas del GARC de pantalla de título.");
+        }
+        catch (WorkspaceException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is ArgumentException or EndOfStreamException or IOException or InvalidDataException or FormatException or OverflowException)
+        {
+            throw new WorkspaceException($"La copia de seguridad no es un GARC válido: {ex.Message}");
+        }
+
+        if (!File.Exists(garcPath))
+            throw new WorkspaceException("No encuentro el GARC de pantalla de título del workspace.");
+
+        var safetyBackup = Path.Combine(
+            backupDirectory,
+            $"restore-before-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}-{Path.GetFileName(garcPath)}.bak");
+        try
+        {
+            Directory.CreateDirectory(backupDirectory);
+            File.Copy(garcPath, safetyBackup);
+            WriteAtomically(garcPath, backupBytes);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            throw new WorkspaceException($"No pude restaurar la copia de seguridad: {ex.Message}");
+        }
+
+        return new TitleScreenRestoreResponse(
+            workspace.Version.ToString(),
+            garcPath,
+            backupFile,
+            safetyBackup,
+            backupBytes.LongLength,
+            "GARC restaurado; se guardó una copia del estado anterior antes de reemplazarlo.");
+    }
+
     private static byte[] BuildGarcReplacement(string garcPath, int fileNumber, int assetEntryIndex,
-        byte[] darcData, bool compressed, byte[] replacementData)
+        byte[] darcData, byte[]? darcPrefix, byte[]? darcSuffix, bool compressed, byte[] replacementData)
     {
         DARC darc;
         try
@@ -345,7 +421,7 @@ public static class TitleScreenEditor
         if (!DARC.InsertFile(ref darc, assetEntryIndex, replacementData))
             throw new WorkspaceException("No pude reemplazar el contenido BCLIM dentro del DARC.");
 
-        var replacementDarc = DARC.SetDARC(darc);
+        var replacementDarc = CombineDarcEnvelope(darcPrefix, DARC.SetDARC(darc), darcSuffix);
         var storedArchive = compressed ? CompressLzss(replacementDarc) : replacementDarc;
         try
         {
@@ -414,14 +490,8 @@ public static class TitleScreenEditor
 
     private static CatalogReadResult ReadCatalog(GameWorkspace workspace)
     {
-        if (workspace.Version is not (GameVersion.XY or GameVersion.ORAS))
-            throw new WorkspaceException("La pantalla de título está disponible para X/Y y OR/AS.");
-
-        var spec = workspace.Version == GameVersion.XY
-            ? new TitleGarcSpec(165, XyArchives)
-            : new TitleGarcSpec(152, OrasArchives);
+        var garcPath = ResolveTitleScreenGarcPath(workspace, out var spec);
         var relativePath = $"a/{spec.FileNumber / 100 % 10}/{spec.FileNumber / 10 % 10}/{spec.FileNumber % 10}";
-        var garcPath = Path.Combine(workspace.RomFsPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(garcPath))
             throw new WorkspaceException($"Falta el GARC de pantalla de título: {relativePath}.");
 
@@ -437,6 +507,52 @@ public static class TitleScreenEditor
 
         var archives = spec.Archives.Select(entry => InspectArchive(garc, entry, relativePath)).ToArray();
         return new CatalogReadResult(garcPath, archives);
+    }
+
+    private static string ResolveTitleScreenGarcPath(GameWorkspace workspace, out TitleGarcSpec spec)
+    {
+        if (workspace.Version is not (GameVersion.XY or GameVersion.ORAS))
+            throw new WorkspaceException("La pantalla de título está disponible para X/Y y OR/AS.");
+
+        spec = workspace.Version == GameVersion.XY
+            ? new TitleGarcSpec(165, XyArchives)
+            : new TitleGarcSpec(152, OrasArchives);
+        var relativePath = $"a/{spec.FileNumber / 100 % 10}/{spec.FileNumber / 10 % 10}/{spec.FileNumber % 10}";
+        return Path.Combine(workspace.RomFsPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+    }
+
+    private static string[] FindBackupFiles(string workspaceRoot, string garcPath)
+    {
+        var directory = Path.Combine(workspaceRoot, ".pk3ds-backups");
+        if (!Directory.Exists(directory))
+            return [];
+        var garcName = Path.GetFileName(garcPath);
+        return Directory.GetFiles(directory, "*.bak", SearchOption.TopDirectoryOnly)
+            .Where(path => IsBackupForGarc(path, garcName))
+            .ToArray();
+    }
+
+    private static string ResolveBackupFile(string? requested, string backupDirectory, string garcPath)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+            throw new WorkspaceException("Elegí una copia de seguridad para restaurar.");
+        var fullPath = Path.GetFullPath(requested.Trim());
+        var parent = Path.GetDirectoryName(fullPath);
+        if (!string.Equals(parent?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                backupDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase)
+            || !IsBackupForGarc(fullPath, Path.GetFileName(garcPath)))
+            throw new WorkspaceException("La copia seleccionada no pertenece a este GARC de pantalla de título.");
+        if (!File.Exists(fullPath))
+            throw new WorkspaceException("La copia de seguridad seleccionada no existe.");
+        return fullPath;
+    }
+
+    private static bool IsBackupForGarc(string path, string garcName)
+    {
+        var fileName = Path.GetFileName(path);
+        return fileName.EndsWith($"-{garcName}.bak", StringComparison.OrdinalIgnoreCase)
+            || fileName.Contains($"-{garcName}-", StringComparison.OrdinalIgnoreCase);
     }
 
     private static ArchiveReadResult InspectArchive(GARC.MemGARC garc, TitleArchiveSpec spec, string garcPath)
@@ -466,6 +582,7 @@ public static class TitleScreenEditor
         if (darcPosition < 0)
             return InvalidArchive(spec, garcPath, compressed, source.Length, "No contiene una cabecera DARC reconocible.");
 
+        var darcPrefix = decoded[..darcPosition];
         var darcData = decoded[darcPosition..];
         DARC darc;
         try
@@ -502,9 +619,11 @@ public static class TitleScreenEditor
             return InvalidArchive(spec, garcPath, compressed, source.Length, ex.Message);
         }
 
-        var actualDarcBytes = darc.Header.FileSize is > 0 and <= int.MaxValue && darc.Header.FileSize <= darcData.Length
-            ? darcData[..(int)darc.Header.FileSize]
-            : darcData;
+        var declaredDarcLength = darc.Header.FileSize is > 0 and <= int.MaxValue && darc.Header.FileSize <= darcData.Length
+            ? (int)darc.Header.FileSize
+            : darcData.Length;
+        var actualDarcBytes = darcData[..declaredDarcLength];
+        var darcSuffix = darcData[declaredDarcLength..];
         var summary = new TitleScreenArchiveSummary(
             spec.Game,
             spec.Language,
@@ -515,8 +634,10 @@ public static class TitleScreenEditor
             actualDarcBytes.Length,
             true,
             null,
-            assets.ToArray());
-        return new ArchiveReadResult(summary, actualDarcBytes, assetData);
+            assets.ToArray(),
+            darcPrefix.Length,
+            darcSuffix.Length);
+        return new ArchiveReadResult(summary, actualDarcBytes, darcPrefix, darcSuffix, assetData);
     }
 
     private static ArchiveReadResult InvalidArchive(TitleArchiveSpec spec, string garcPath, bool compressed,
@@ -525,7 +646,16 @@ public static class TitleScreenEditor
             new TitleScreenArchiveSummary(spec.Game, spec.Language, spec.FileNumber, garcPath, compressed,
                 sourceBytes, null, false, error, []),
             null,
+            null,
+            null,
             new Dictionary<int, byte[]>());
+
+    private static byte[] CombineDarcEnvelope(byte[]? prefix, byte[] darc, byte[]? suffix)
+    {
+        if ((prefix is null || prefix.Length == 0) && (suffix is null || suffix.Length == 0))
+            return darc;
+        return (prefix ?? []).Concat(darc).Concat(suffix ?? []).ToArray();
+    }
 
     private static byte[] DecodeArchive(byte[] source, bool compressed)
     {
@@ -546,7 +676,8 @@ public static class TitleScreenEditor
         return darc.Data.AsSpan((int)relative, (int)entry.DataLength).ToArray();
     }
 
-    private static ReplacementData ReadReplacement(string path, int expectedWidth, int expectedHeight)
+    private static ReplacementData ReadReplacement(string path, int expectedWidth, int expectedHeight,
+        XLIMEncoding originalFormat)
     {
         var extension = Path.GetExtension(path);
         if (extension.Equals(".bclim", StringComparison.OrdinalIgnoreCase))
@@ -562,9 +693,9 @@ public static class TitleScreenEditor
         var png = PortablePng.DecodeRgba(File.ReadAllBytes(path));
         EnsureDimensions(png.Width, png.Height, expectedWidth, expectedHeight);
         return new ReplacementData(
-            BCLIMPortable.EncodeRgba(png.Rgba, png.Width, png.Height, XLIMEncoding.RGBA8),
+            BCLIMPortable.EncodeRgba(png.Rgba, png.Width, png.Height, originalFormat),
             "PNG",
-            XLIMEncoding.RGBA8.ToString());
+            originalFormat.ToString());
     }
 
     private static void EnsureDimensions(int width, int height, int expectedWidth, int expectedHeight)
@@ -695,6 +826,8 @@ public static class TitleScreenEditor
     private sealed record ArchiveReadResult(
         TitleScreenArchiveSummary Summary,
         byte[]? DarcData,
+        byte[]? DarcPrefix,
+        byte[]? DarcSuffix,
         Dictionary<int, byte[]> AssetData)
     {
         public IEnumerable<TitleScreenAssetSummary> Assets => Summary.Assets;

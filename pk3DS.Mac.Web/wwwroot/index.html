@@ -117,6 +117,64 @@
               </div>
             </article>
 
+            <article class="option-group" data-group="wild">
+              <div class="option-group-head"><div><h3>Encuentros salvajes</h3><p>Equivale a <em>Wild Encounters</em> en la versión de Windows. También mantiene sincronizada la copia interna de OR/AS.</p></div><span class="group-state" id="wild-state">Sin cambios</span><label class="toggle compact tooltip" data-tooltip="Activa la randomización masiva de las tablas de encuentros del juego cargado."><input id="wild" type="checkbox"><span aria-hidden="true"></span><b class="sr-only">Randomizar encuentros salvajes</b></label></div>
+              <div class="group-content" data-requires="wild">
+                <div class="check-grid three-columns">
+                  <label class="check-card tooltip" data-tooltip="Cambia las especies de cada slot activo y asigna una forma válida cuando corresponde."><input id="wild-species" type="checkbox" checked><span>Randomizar especies</span></label>
+                  <label class="check-card tooltip" data-tooltip="Multiplica el nivel máximo de cada slot activo y deja mínimo y máximo iguales, como pk3DS Windows."><input id="wild-levels" type="checkbox"><span>Modificar niveles</span></label>
+                  <label class="check-card tooltip" data-tooltip="En Gen. VI hace que los cinco Pokémon de cada horda compartan la misma especie y forma."><input id="wild-hordes" type="checkbox"><span>Hordas homogéneas</span></label>
+                </div>
+                <div class="check-grid three-columns" data-requires="wild-species">
+                  <label class="check-card tooltip" data-tooltip="Busca especies con una suma de estadísticas base parecida a la original."><input id="wild-bst" type="checkbox" checked><span>Conservar potencia (BST)</span></label>
+                  <label class="check-card tooltip" data-tooltip="Permite que aparezcan Pokémon legendarios en los encuentros."><input id="wild-legendary" type="checkbox"><span>Incluir legendarios</span></label>
+                  <label class="check-card tooltip" data-tooltip="Permite que aparezcan Pokémon singulares o míticos en los encuentros."><input id="wild-mythical" type="checkbox"><span>Incluir singulares</span></label>
+                </div>
+                <div class="number-settings">
+                  <label class="field tooltip" data-requires="wild-levels" data-tooltip="Factor aplicado a los niveles. 1.00 conserva la escala original; 1.20 aumenta los niveles un 20%.">Multiplicador de nivel<input id="wild-level-multiplier" type="number" min="0.1" max="3" step="0.05" value="1.00"></label>
+                </div>
+              </div>
+            </article>
+
+            <article class="option-group" data-group="trainer-randomizer">
+              <div class="option-group-head"><div><h3>Equipos de entrenadores</h3><p>Cambia los equipos de los entrenadores de Gen. VI y Gen. VII. Los objetos, movimientos, IA y cantidad de Pokémon son opcionales.</p></div><span class="group-state" id="trainer-randomizer-state">Sin cambios</span><label class="toggle compact tooltip" data-tooltip="Activa las opciones de randomización masiva de los equipos."><input id="trainer-randomizer" type="checkbox"><span aria-hidden="true"></span><b class="sr-only">Randomizar equipos de entrenadores</b></label></div>
+              <div class="group-content" data-requires="trainer-randomizer">
+                <div class="check-grid three-columns">
+                  <label class="check-card tooltip" data-tooltip="Cambia las especies y asigna una forma válida cuando corresponde."><input id="trainer-species" type="checkbox" checked><span>Randomizar especies</span></label>
+                  <label class="check-card tooltip" data-tooltip="Multiplica el nivel de cada Pokémon del equipo y lo limita al rango 1–100."><input id="trainer-levels" type="checkbox"><span>Modificar niveles</span></label>
+                  <label class="check-card tooltip" data-tooltip="Asigna una clase de entrenador válida del juego a cada equipo."><input id="trainer-classes" type="checkbox"><span>Clases de entrenador</span></label>
+                  <label class="check-card tooltip" data-tooltip="Aumenta o reduce cada equipo entre 1 y 6 Pokémon. Los slots nuevos copian los datos del último registro para conservar campos desconocidos."><input id="trainer-composition" type="checkbox"><span>Variar composición</span></label>
+                  <label class="check-card tooltip" data-tooltip="Asigna un objeto aleatorio válido a cada Pokémon del equipo."><input id="trainer-items" type="checkbox"><span>Objetos equipados</span></label>
+                  <label class="check-card tooltip" data-tooltip="Cambia la habilidad asignada a cada Pokémon del equipo."><input id="trainer-abilities" type="checkbox"><span>Habilidades</span></label>
+                  <label class="check-card tooltip" data-tooltip="Genera cuatro movimientos distintos y válidos para cada Pokémon del equipo."><input id="trainer-moves" type="checkbox"><span>Movimientos</span></label>
+                  <label class="check-card tooltip" data-tooltip="Activa los tres bits de IA de combate que pk3DS Windows usa para subir la dificultad del entrenador."><input id="trainer-ai" type="checkbox"><span>IA avanzada</span></label>
+                  <label class="check-card tooltip" data-tooltip="Asigna IVs máximos: 255 en Gen. VI y 31 en las seis estadísticas de Gen. VII."><input id="trainer-max-ivs" type="checkbox"><span>IVs al máximo</span></label>
+                  <label class="check-card tooltip" data-tooltip="Reemplaza los Pokémon que superen el nivel indicado por una especie de evolución final válida."><input id="trainer-force-evolved" type="checkbox"><span>Forzar evolución final</span></label>
+                  <label class="check-card tooltip" data-tooltip="Cambia el premio del entrenador por un objeto, medicina o baya válida de Gen. VI; si la probabilidad falla, lo elimina."><input id="trainer-prizes" type="checkbox"><span>Premios (Gen. VI)</span></label>
+                  <label class="check-card tooltip" data-tooltip="Completa hasta seis Pokémon los equipos importantes identificados por el juego de Gen. VII."><input id="trainer-important-teams" type="checkbox"><span>Equipos importantes (Gen. VII)</span></label>
+                  <label class="check-card tooltip" data-tooltip="Reemplaza los movimientos por los cuatro de mayor potencia disponibles en el learnset cuando se alcanza el nivel indicado."><input id="trainer-high-power" type="checkbox"><span>Ataques potentes</span></label>
+                  <label class="check-card tooltip" data-tooltip="Asigna una naturaleza aleatoria a cada Pokémon del equipo. Solo los registros de Gen. VII almacenan este campo."><input id="trainer-natures" type="checkbox"><span>Randomizar naturalezas (Gen. VII)</span></label>
+                  <label class="check-card tooltip" data-tooltip="Marca o desmarca shiny cada Pokémon según la probabilidad indicada. Solo Gen. VII almacena este campo en trpoke."><input id="trainer-shiny" type="checkbox"><span>Randomizar shiny (Gen. VII)</span></label>
+                  <label class="check-card tooltip" data-requires="trainer-species" data-tooltip="Intenta mantener un mismo tipo por grupo de entrenadores importantes en Gen. VI y elige un tipo por Pokémon en Gen. VII."><input id="trainer-type-themes" type="checkbox"><span>Temas por tipo</span></label>
+                  <label class="check-card tooltip" data-requires="trainer-type-themes" data-tooltip="Hace que los entrenadores comunes de cada gimnasio compartan el tema por tipo de su líder. Solo se aplica a Gen. VI."><input id="trainer-gym-themes" type="checkbox"><span>Incluir entrenadores de gimnasio (Gen. VI)</span></label>
+                  <label class="check-card tooltip" data-requires="trainer-species" data-tooltip="Permite que las especies con formas Mega puedan recibir una forma Mega aleatoria. Solo se aplica a equipos de Gen. VI."><input id="trainer-mega-forms" type="checkbox"><span>Permitir formas Mega (Gen. VI)</span></label>
+                </div>
+                <div class="check-grid three-columns" data-requires="trainer-classes">
+                  <label class="check-card tooltip" data-tooltip="Conserva clases especiales como rivales, líderes, campeones y personajes de historia."><input id="trainer-ignore-special" type="checkbox" checked><span>Proteger clases especiales</span></label>
+                  <label class="check-card tooltip" data-tooltip="Sólo cambia la clase de entrenadores con combate individual; dobles y múltiples conservan la suya."><input id="trainer-only-singles" type="checkbox"><span>Sólo combates individuales</span></label>
+                </div>
+                <div class="number-settings">
+                  <label class="field tooltip" data-requires="trainer-levels" data-tooltip="Factor aplicado a los niveles. 1.00 conserva la escala original; 1.20 aumenta los niveles un 20%.">Multiplicador de nivel<input id="trainer-level-multiplier" type="number" min="0.1" max="3" step="0.05" value="1.00"></label>
+                  <label class="field tooltip" data-requires="trainer-force-evolved" data-tooltip="Nivel mínimo a partir del cual se fuerza una especie de evolución final.">Nivel de evolución final<input id="trainer-force-evolved-level" type="number" min="1" max="100" step="1" value="30"></label>
+                  <label class="field tooltip" data-requires="trainer-prizes" data-tooltip="Probabilidad de conservar un premio aleatorio en cada entrenador. 0% elimina todos; 100% cambia todos.">Probabilidad de premio <div class="suffix-input"><input id="trainer-prize-chance" type="number" min="0" max="100" step="1" value="15"><span>%</span></div></label>
+                  <label class="field tooltip" data-requires="trainer-composition" data-tooltip="Cantidad mínima de Pokémon en cada equipo cuando se varía la composición.">Mínimo de Pokémon<input id="trainer-min-team-size" type="number" min="1" max="6" step="1" value="1"></label>
+                  <label class="field tooltip" data-requires="trainer-composition" data-tooltip="Cantidad máxima de Pokémon en cada equipo cuando se varía la composición.">Máximo de Pokémon<input id="trainer-max-team-size" type="number" min="1" max="6" step="1" value="6"></label>
+                  <label class="field tooltip" data-requires="trainer-high-power" data-tooltip="Nivel mínimo a partir del cual se seleccionan los movimientos de mayor potencia.">Nivel de ataques potentes<input id="trainer-high-power-level" type="number" min="1" max="100" step="1" value="30"></label>
+                  <label class="field tooltip" data-requires="trainer-shiny" data-tooltip="Probabilidad de que cada Pokémon quede shiny; 100% marca todos y 0% desmarca todos.">Probabilidad shiny <div class="suffix-input"><input id="trainer-shiny-chance" type="number" min="0" max="100" step="1" value="3"><span>%</span></div></label>
+                </div>
+              </div>
+            </article>
+
             <article class="option-group" data-group="moves">
               <div class="option-group-head"><div><h3>Datos de movimientos</h3><p>Acciones globales de <em>Move Stats</em> en la versión de Windows.</p></div><span class="group-state" id="moves-state">Sin cambios</span></div>
               <div class="check-grid three-columns">

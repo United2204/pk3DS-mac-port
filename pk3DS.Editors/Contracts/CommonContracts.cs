@@ -1,3 +1,5 @@
+using pk3DS.Core.CTR;
+
 namespace pk3DS.Editors;
 
 /// <summary>An id/name pair for a dropdown: species, item, move, trainer class.</summary>
@@ -47,6 +49,22 @@ public sealed record RebuildRomResponse(
     bool Trimmed,
     string Note);
 
+/// <summary>Rebuilds the embedded CRO hashes and the RomFS static CRR table in a LayeredFS patch.</summary>
+public sealed record RebuildCrrRequest(
+    string WorkspacePath,
+    string? OutputDirectory = null,
+    string? TitleId = null);
+
+public sealed record RebuildCrrResponse(
+    string GameVersion,
+    string OutputDirectory,
+    string ZipPath,
+    string[] ChangedFiles,
+    int CroCount,
+    int RehashedCros,
+    bool CrrChanged,
+    string Note);
+
 public sealed record RebuildCiaRequest(
     string WorkspacePath,
     string? OutputFile = null,
@@ -89,6 +107,41 @@ public sealed record UnpackGarcResponse(
     int Files,
     string Note);
 
+/// <summary>Runs the Windows ToolsUI-style archive detection before unpacking a supported container.</summary>
+public sealed record AutoUnpackRequest(
+    string InputFile,
+    string? OutputDirectory = null,
+    bool SkipDecompression = false,
+    bool Recursive = true);
+
+public sealed record AutoUnpackResponse(
+    string InputFile,
+    string Format,
+    string? Identifier,
+    string OutputDirectory,
+    int Files,
+    long Bytes,
+    string Note)
+{
+    public int NestedArchives { get; init; }
+}
+
+/// <summary>Runs the Windows ToolsUI-style folder-name detection before packing a supported container.</summary>
+public sealed record AutoPackRequest(
+    string InputDirectory,
+    string? OutputFile = null,
+    int GarcVersion = 6,
+    int GarcBytesPadding = 4);
+
+public sealed record AutoPackResponse(
+    string InputDirectory,
+    string Format,
+    string? Identifier,
+    string OutputFile,
+    int Files,
+    long Bytes,
+    string Note);
+
 public sealed record PackGarcRequest(
     string InputDirectory,
     string? OutputFile = null,
@@ -102,6 +155,21 @@ public sealed record PackGarcResponse(
     int Version,
     string Note);
 
+public sealed record ShuffleGarcRequest(
+    string InputFile,
+    string? OutputFile = null,
+    int? Seed = null);
+
+public sealed record ShuffleGarcResponse(
+    string InputFile,
+    string OutputFile,
+    int Seed,
+    int EntryCount,
+    int ShuffledEntries,
+    int ChangedEntries,
+    long Bytes,
+    string Note);
+
 public sealed record UnpackDarcRequest(
     string InputFile,
     string? OutputDirectory = null);
@@ -113,7 +181,8 @@ public sealed record UnpackDarcResponse(
 
 public sealed record PackDarcRequest(
     string InputDirectory,
-    string? OutputFile = null);
+    string? OutputFile = null,
+    string? TemplateFile = null);
 
 public sealed record PackDarcResponse(
     string OutputFile,
@@ -142,16 +211,239 @@ public sealed record PackSarcResponse(
     int DataAlignment,
     string Note);
 
+public sealed record UnpackAlytRequest(
+    string InputFile,
+    string? OutputDirectory = null);
+
+public sealed record UnpackAlytResponse(
+    string InputFile,
+    string OutputDirectory,
+    int Files,
+    int Labels,
+    int Symbols,
+    long Bytes,
+    string Note);
+
+public sealed record PackAlytRequest(
+    string InputDirectory,
+    string? OutputFile = null,
+    string[]? Labels = null,
+    string[]? Symbols = null);
+
+public sealed record PackAlytResponse(
+    string OutputFile,
+    int Files,
+    int Labels,
+    int Symbols,
+    long Bytes,
+    string Note);
+
+public sealed record UnpackShuffleArcRequest(
+    string InputFile,
+    string? OutputDirectory = null);
+
+public sealed record UnpackShuffleArcResponse(
+    string InputFile,
+    string OutputDirectory,
+    int Files,
+    int HeaderOffset,
+    long Bytes,
+    string Note);
+
+public sealed record UnpackGarRequest(
+    string InputFile,
+    string? OutputDirectory = null);
+
+public sealed record UnpackGarResponse(
+    string InputFile,
+    string OutputDirectory,
+    int Files,
+    long Bytes,
+    string Note);
+
 public sealed record PackFarcRequest(
     string InputDirectory,
     string? OutputFile = null,
-    int DataAlignment = 0x80);
+    int DataAlignment = 0x80,
+    FARCIndexKind IndexKind = FARCIndexKind.NamedUtf16);
 
 public sealed record PackFarcResponse(
     string OutputFile,
     int Files,
     long Bytes,
     int DataAlignment,
+    string Note);
+
+public sealed record UnpackMiniRequest(
+    string InputFile,
+    string Identifier,
+    string? OutputDirectory = null);
+
+public sealed record UnpackMiniResponse(
+    string InputFile,
+    string Identifier,
+    string OutputDirectory,
+    int Files,
+    long Bytes,
+    string Note);
+
+public sealed record PackMiniRequest(
+    string InputDirectory,
+    string Identifier,
+    string? OutputFile = null,
+    string? TemplateFile = null);
+
+public sealed record PackMiniResponse(
+    string OutputFile,
+    string Identifier,
+    int Files,
+    long Bytes,
+    string Note);
+
+public sealed record ConvertImageRequest(
+    string InputFile,
+    string? OutputFile = null,
+    string BclimFormat = "RGBA8");
+
+public sealed record ConvertImageResponse(
+    string InputFile,
+    string OutputFile,
+    string InputFormat,
+    string OutputFormat,
+    int Width,
+    int Height,
+    long Bytes,
+    string Note);
+
+public sealed record SmdhSettingsResponse(
+    byte[] GameRatings,
+    uint RegionLockout,
+    uint MatchMakerId,
+    string MatchMakerBitId,
+    uint Flags,
+    ushort EulaVersion,
+    ushort Reserved,
+    float AnimationDefaultFrame,
+    uint StreetPassId);
+
+public sealed record SmdhSettingsRequest(
+    byte[] GameRatings,
+    uint RegionLockout,
+    uint MatchMakerId,
+    string MatchMakerBitId,
+    uint Flags,
+    ushort EulaVersion,
+    ushort Reserved,
+    float AnimationDefaultFrame,
+    uint StreetPassId);
+
+public sealed record SmdhInspectRequest(string WorkspacePath);
+
+public sealed record SmdhApplicationInfoResponse(
+    int Slot,
+    string ShortDescription,
+    string LongDescription,
+    string Publisher);
+
+public sealed record SmdhInspectResponse(
+    string GameVersion,
+    string IconFile,
+    SmdhApplicationInfoResponse[] AppInfo,
+    string SmallIconPngBase64,
+    string LargeIconPngBase64,
+    string Note,
+    SmdhSettingsResponse? Settings = null);
+
+public sealed record SmdhExportRequest(
+    string WorkspacePath,
+    string? OutputDirectory = null);
+
+public sealed record SmdhExportResponse(
+    string GameVersion,
+    string OutputDirectory,
+    string SmdhFile,
+    string SmallIconFile,
+    string LargeIconFile,
+    string Note);
+
+public sealed record SmdhApplicationInfoRequest(
+    int Slot,
+    string ShortDescription,
+    string LongDescription,
+    string Publisher);
+
+public sealed record SmdhUpdateRequest(
+    string WorkspacePath,
+    SmdhApplicationInfoRequest[] AppInfo,
+    string? SmallIconFile = null,
+    string? LargeIconFile = null,
+    SmdhSettingsRequest? Settings = null);
+
+public sealed record SmdhUpdateResponse(
+    string GameVersion,
+    string IconFile,
+    string BackupFile,
+    long Bytes,
+    string Note);
+
+public sealed record SmdhImportRequest(string WorkspacePath, string SourceFile);
+
+public sealed record SmdhImportResponse(
+    string GameVersion,
+    string IconFile,
+    string BackupFile,
+    long Bytes,
+    string Note);
+
+public sealed record SmdhBackupsRequest(string WorkspacePath);
+
+public sealed record SmdhBackupSummary(
+    string File,
+    long Bytes,
+    DateTime CreatedUtc);
+
+public sealed record SmdhBackupsResponse(
+    string GameVersion,
+    string IconFile,
+    SmdhBackupSummary[] Backups,
+    string Note);
+
+public sealed record SmdhRestoreRequest(
+    string WorkspacePath,
+    string BackupFile);
+
+public sealed record SmdhRestoreResponse(
+    string GameVersion,
+    string IconFile,
+    string BackupFile,
+    string SafetyBackupFile,
+    long Bytes,
+    string Note);
+
+public sealed record Lz11Request(
+    string InputFile,
+    string Operation = "decompress",
+    string? OutputFile = null);
+
+public sealed record Lz11Response(
+    string InputFile,
+    string OutputFile,
+    string Operation,
+    long Bytes,
+    string Note);
+
+public sealed record BlzRequest(
+    string InputFile,
+    string Operation = "decompress",
+    string? OutputFile = null,
+    bool BestCompression = false,
+    bool Arm9 = false);
+
+public sealed record BlzResponse(
+    string InputFile,
+    string OutputFile,
+    string Operation,
+    long Bytes,
     string Note);
 
 public sealed record UnpackFarcRequest(
@@ -180,7 +472,9 @@ public sealed record TitleScreenArchiveSummary(
     int? DarcBytes,
     bool Valid,
     string? Error,
-    TitleScreenAssetSummary[] Assets);
+    TitleScreenAssetSummary[] Assets,
+    int DarcPrefixBytes = 0,
+    int DarcSuffixBytes = 0);
 
 public sealed record TitleScreenCatalogResponse(
     string GameVersion,
@@ -260,6 +554,31 @@ public sealed record TitleScreenApplyResponse(
     long Bytes,
     string Note);
 
+public sealed record TitleScreenBackupsRequest(string WorkspacePath);
+
+public sealed record TitleScreenBackupSummary(
+    string File,
+    long Bytes,
+    DateTime CreatedUtc);
+
+public sealed record TitleScreenBackupsResponse(
+    string GameVersion,
+    string GarcPath,
+    TitleScreenBackupSummary[] Backups,
+    string Note);
+
+public sealed record TitleScreenRestoreRequest(
+    string WorkspacePath,
+    string BackupFile);
+
+public sealed record TitleScreenRestoreResponse(
+    string GameVersion,
+    string GarcPath,
+    string BackupFile,
+    string SafetyBackupFile,
+    long Bytes,
+    string Note);
+
 public sealed record TitleScreenPreviewRequest(
     string WorkspacePath,
     int FileNumber,
@@ -286,7 +605,20 @@ public sealed record InspectResponse(
     string? ExeFsPath,
     string? ExheaderPath,
     ModuleAvailability[] Modules,
-    string Note);
+    string Note)
+{
+    public string? CodeBinPath { get; init; }
+    public long? CodeBinBytes { get; init; }
+    public bool CodeBinReady { get; init; }
+    public bool CodeBinCompressed { get; init; }
+    public bool SmdhReady { get; init; }
+    public InspectDiagnostic[] Diagnostics { get; init; } = [];
+}
+
+public sealed record InspectDiagnostic(
+    string Severity,
+    string Code,
+    string Message);
 
 public sealed record PickFolderResponse(string Path);
 

@@ -142,6 +142,61 @@ public static class EditorSession
     }
 
     /// <summary>
+    /// Rehashes every top-level CRO and rebuilds <c>.crr/static.crr</c> when the workspace has a
+    /// CRR table. Only files whose bytes actually change are included in the LayeredFS patch.
+    /// </summary>
+    public static ExportResult ExportCrr(
+        string workspacePath,
+        string? outputDirectory,
+        string? requestedTitleId,
+        string label)
+    {
+        var workspace = GameWorkspace.Open(workspacePath);
+        var titleId = ResolveTitleId(workspace, requestedTitleId);
+        const string crrRelative = ".crr/static.crr";
+        var sourceCrr = GetChildPath(workspace.RomFsPath, crrRelative);
+        if (!File.Exists(sourceCrr))
+            throw new WorkspaceException("No encuentro RomFS/.crr/static.crr en el workspace.");
+
+        var sourceCros = Directory.EnumerateFiles(workspace.RomFsPath, "*.cro", SearchOption.TopDirectoryOnly)
+            .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (sourceCros.Length == 0)
+            throw new WorkspaceException("No encuentro archivos CRO en la raíz del RomFS.");
+
+        return InScratchRomFs(label, scratchRomFs =>
+        {
+            var changed = new List<string>();
+            var prepared = new List<byte[]>(sourceCros.Length);
+            foreach (var sourceCro in sourceCros)
+            {
+                var relative = Path.GetFileName(sourceCro);
+                var original = File.ReadAllBytes(sourceCro);
+                var fixedCro = CRO.Rehash(original);
+                prepared.Add(fixedCro);
+                if (fixedCro.SequenceEqual(original))
+                    continue;
+
+                var destination = GetChildPath(scratchRomFs, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.WriteAllBytes(destination, fixedCro);
+                changed.Add(relative);
+            }
+
+            var rebuilt = CRO.RebuildCRR(File.ReadAllBytes(sourceCrr), prepared);
+            if (rebuilt.Changed)
+            {
+                CopyRelativeFile(workspace.RomFsPath, scratchRomFs, crrRelative);
+                File.WriteAllBytes(GetChildPath(scratchRomFs, crrRelative), rebuilt.Crr);
+                changed.Add(crrRelative);
+            }
+
+            return CreateLayeredFsArchive(outputDirectory, workspace.RomFsPath, scratchRomFs, titleId,
+                "romfs", changed, label);
+        });
+    }
+
+    /// <summary>
     /// Runs an ExeFS editor against a scratch copy of <c>code.bin</c> and emits an ExeFS
     /// LayeredFS patch. The loaded ROM config is supplied so the editor can validate IDs against
     /// the game's own text tables.
@@ -227,6 +282,7 @@ public static class EditorSession
         var label = $"pk3ds-mac-{labelPrefix}-{DateTime.Now:yyyyMMdd-HHmmss}";
         var outputRoot = Path.Combine(outputBase, label);
         var layeredRomFs = Path.Combine(outputRoot, "luma", "titles", titleId.ToUpperInvariant(), layer);
+        Directory.CreateDirectory(layeredRomFs);
         var changed = changedFiles.Distinct(StringComparer.Ordinal).ToArray();
         foreach (var relativePath in changed)
             CopyRelativeFile(scratchRomFs, layeredRomFs, relativePath);

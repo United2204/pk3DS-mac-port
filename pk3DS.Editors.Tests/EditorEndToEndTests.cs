@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using pk3DS.Core;
 using pk3DS.Editors;
 
 namespace pk3DS.Editors.Tests;
@@ -36,8 +37,123 @@ public class EditorEndToEndTests : IDisposable
         Assert.Equal("XY", response.GameVersion);
         Assert.NotEmpty(response.Modules);
         Assert.True(response.Modules.Single(module => module.Id == "gift6").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "static").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "trainers").SourceAvailable);
         Assert.True(response.Modules.Single(module => module.Id == "tutors6").SourceAvailable);
         Assert.True(response.Modules.Single(module => module.Id == "marts6").SourceAvailable);
+        Assert.True(response.SmdhReady);
+        Assert.True(response.Modules.Single(module => module.Id == "smdh").SourceAvailable);
+        Assert.True(response.CodeBinReady);
+        Assert.False(response.CodeBinCompressed);
+        Assert.Contains(response.Diagnostics, diagnostic => diagnostic.Code == "code-bin" && diagnostic.Severity == "success");
+    }
+
+    [Fact]
+    public void MissingSmdhDisablesTheIconModule()
+    {
+        var iconPath = Path.Combine(_workspace.ExeFs, "icon.bin");
+        var original = File.ReadAllBytes(iconPath);
+        try
+        {
+            File.Delete(iconPath);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.SmdhReady);
+            Assert.False(response.Modules.Single(module => module.Id == "smdh").SourceAvailable);
+
+            File.WriteAllBytes(iconPath, [0x53, 0x4D, 0x44, 0x48]);
+            response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.SmdhReady);
+            Assert.False(response.Modules.Single(module => module.Id == "smdh").SourceAvailable);
+        }
+        finally
+        {
+            File.WriteAllBytes(iconPath, original);
+        }
+    }
+
+    [Fact]
+    public void InvalidCodeBinIsReportedAndDisablesExeFsModules()
+    {
+        var codePath = Path.Combine(_workspace.ExeFs, "code.bin");
+        var original = File.ReadAllBytes(codePath);
+        try
+        {
+            File.WriteAllBytes(codePath, [0x01, 0x02, 0x03]);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.CodeBinReady);
+            Assert.False(response.Modules.Single(module => module.Id == "tm").SourceAvailable);
+            Assert.False(response.Modules.Single(module => module.Id == "tutors6").SourceAvailable);
+            Assert.Contains(response.Diagnostics, diagnostic => diagnostic.Code == "code-bin" && diagnostic.Severity == "error");
+        }
+        finally
+        {
+            File.WriteAllBytes(codePath, original);
+        }
+    }
+
+    [Fact]
+    public void MissingDllFieldDisablesGen6StaticEncounters()
+    {
+        var croPath = Path.Combine(_workspace.RomFs, "DllField.cro");
+        var original = File.ReadAllBytes(croPath);
+        try
+        {
+            File.Delete(croPath);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.Modules.Single(module => module.Id == "static").SourceAvailable);
+            Assert.Equal("DllField.cro", response.Modules.Single(module => module.Id == "static").Requirement);
+        }
+        finally
+        {
+            File.WriteAllBytes(croPath, original);
+        }
+    }
+
+    [Fact]
+    public void MissingPersonalGarcDisablesPersonalStats()
+    {
+        var garcPath = Path.Combine(_workspace.RomFs, "a", "2", "1", "8");
+        var original = File.ReadAllBytes(garcPath);
+        try
+        {
+            File.WriteAllBytes(garcPath, []);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.Modules.Single(module => module.Id == "personal").SourceAvailable);
+            Assert.Equal("GARC personal", response.Modules.Single(module => module.Id == "personal").Requirement);
+        }
+        finally
+        {
+            File.WriteAllBytes(garcPath, original);
+        }
+    }
+
+    [Fact]
+    public void MissingGen6TrainerTeamDisablesTrainerRandomizer()
+    {
+        var trpokePath = Path.Combine(_workspace.RomFs, "a", "0", "4", "0");
+        var original = File.ReadAllBytes(trpokePath);
+        try
+        {
+            File.WriteAllBytes(trpokePath, []);
+
+            var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+            Assert.False(response.Modules.Single(module => module.Id == "trainers").SourceAvailable);
+            Assert.Equal("GARC trclass + trdata + trpoke + gametext", response.Modules.Single(module => module.Id == "trainers").Requirement);
+        }
+        finally
+        {
+            File.WriteAllBytes(trpokePath, original);
+        }
     }
 
     [Fact]
@@ -467,6 +583,48 @@ public class EditorEndToEndTests : IDisposable
 
         Assert.True(File.Exists(result.ZipPath));
         Assert.NotEmpty(result.ChangedFiles);
+    }
+
+    [Fact]
+    public void TheRandomizerExportsGen6WildEncounters()
+    {
+        _workspace.WriteWildFixture();
+
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Wild: new WildRandomizerOptions(
+                Enabled: true, RandomizeSpecies: true, RandomizeLevels: true,
+                LevelMultiplier: 1.25m, HomogeneousHordes: true)));
+
+        Assert.Contains("a/0/1/2", result.ChangedFiles);
+        ExportAssertions.AssertContentDiffersFromSource(result, _workspace);
+    }
+
+    [Fact]
+    public void TheRandomizerExportsGen6TrainerTeams()
+    {
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: true, RandomizeLevels: true,
+                LevelMultiplier: 1.25m, RandomizeClasses: true, RandomizeComposition: true, RandomizeItems: true, RandomizeAbilities: true, RandomizeMoves: true, MaximizeAI: true,
+                MinTeamSize: 1, MaxTeamSize: 1, MaximizeIVs: true, ForceFullyEvolved: true, FullyEvolvedLevel: 1, RandomizePrizes: true, PrizeChance: 100, ForceHighPower: true, HighPowerLevel: 1, RandomizeTypeThemes: true, AllowMegaForms: true, IncludeGymTrainerThemes: true)));
+
+        ExportAssertions.AssertContainsChangedFiles(result);
+        Assert.Contains("a/0/3/8", result.ChangedFiles);
+        Assert.Contains("a/0/4/0", result.ChangedFiles);
+        ExportAssertions.AssertChangedFileDiffers(result, _workspace, "a/0/4/0");
+        var team = ExportAssertions.ReadGarcFile(result, "a/0/4/0", 1);
+        Assert.Equal(18, team.Length);
+        Assert.Equal(byte.MaxValue, team[0]);
+        Assert.Contains(BitConverter.ToUInt16(team, 8), Legal.HeldItem_XY);
+        Assert.Equal(1, BitConverter.ToUInt16(team, 10));
+        Assert.Contains(BitConverter.ToUInt16(team, 4), Legal.FinalEvolutions_6.Where(species => species < _workspace.SpeciesCount));
+        var trainer = ExportAssertions.ReadGarcFile(result, "a/0/3/8", 1);
+        var prize = BitConverter.ToUInt16(trainer, 18);
+        Assert.Contains(prize, Legal.Pouch_Items_XY.Concat(Legal.Pouch_Medicine_XY).Concat(Legal.Pouch_Berry_XY));
     }
 
     [Fact]

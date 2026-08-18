@@ -14,6 +14,10 @@ async function post(url, body = {}) {
 }
 
 function setStatus(element, message, state = 'neutral') { element.textContent = message; element.className = `status ${state}`; }
+function moduleAvailable(id) {
+  const module = inspectedGame?.modules?.find((entry) => entry.id === id);
+  return module ? module.sourceAvailable : true;
+}
 function setDependentState(key, enabled) {
   document.querySelectorAll(`[data-requires="${key}"]`).forEach((element) => {
     element.classList.toggle('is-disabled', !enabled);
@@ -27,7 +31,7 @@ function getEvolutionMode() {
 }
 function setGameSpecificState(id, enabled, message) {
   const input = byId(id);
-  const card = input?.closest('.check-card');
+  const card = input?.closest('.check-card, .toggle, .option-group') || input;
   if (!input || !card) return;
   input.disabled = !enabled;
   if (!enabled) input.checked = false;
@@ -38,9 +42,40 @@ function setGameSpecificState(id, enabled, message) {
 function updateGameSpecificOptions() {
   const version = inspectedGame?.gameVersion;
   const generation6 = ['XY', 'ORAS'].includes(version);
-  setGameSpecificState('move-tutors', version === 'ORAS', 'Solo OR/AS contiene estos tutores.');
-  setGameSpecificState('hm', generation6, 'Sol/Luna y Ultrasol/Ultraluna no tienen MO.');
-  setGameSpecificState('full-hm', generation6, 'Sol/Luna y Ultrasol/Ultraluna no tienen MO.');
+  const generation7 = ['SM', 'USUM'].includes(version);
+  setGameSpecificState('abilities', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('held-items', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('catch-rate', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('types', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('egg-groups', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('stats', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('tm', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('type-tutors', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('move-tutors', version === 'ORAS' && moduleAvailable('personal'), 'Solo OR/AS contiene estos tutores y requieren el GARC personal.');
+  setGameSpecificState('wonder-guard', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('learnsets', moduleAvailable('levelup'), 'Este workspace no contiene el GARC levelup.');
+  setGameSpecificState('egg-moves', moduleAvailable('eggmove'), 'Este workspace no contiene el GARC eggmove.');
+  setGameSpecificState('move-types', moduleAvailable('moves'), 'Este workspace no contiene el GARC move.');
+  setGameSpecificState('move-categories', moduleAvailable('moves'), 'Este workspace no contiene el GARC move.');
+  setGameSpecificState('metronome-mode', moduleAvailable('moves'), 'Este workspace no contiene el GARC move.');
+  setGameSpecificState('evo-randomize', moduleAvailable('evolutions'), 'Este workspace no contiene el GARC evolution.');
+  setGameSpecificState('evo-no-trades', moduleAvailable('evolutions'), 'Este workspace no contiene el GARC evolution.');
+  setGameSpecificState('evo-every-level', moduleAvailable('evolutions'), 'Este workspace no contiene el GARC evolution.');
+  setGameSpecificState('hm', generation6 && moduleAvailable('personal'), 'Sol/Luna y Ultrasol/Ultraluna no tienen MO o falta el GARC personal.');
+  setGameSpecificState('full-hm', generation6 && moduleAvailable('personal'), 'Sol/Luna y Ultrasol/Ultraluna no tienen MO o falta el GARC personal.');
+  for (const id of ['no-evs', 'fast-growth', 'quick-hatch', 'remove-tutors', 'full-tm', 'full-tutor', 'base-exp', 'fixed-catch-rate'])
+    setGameSpecificState(id, moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('wild', (generation6 || generation7) && moduleAvailable('wild'), 'Los encuentros salvajes requieren sus GARCs completos de Gen. VI o Gen. VII.');
+  setGameSpecificState('wild-hordes', generation6, 'Las hordas son exclusivas de los encuentros Gen. VI.');
+  setGameSpecificState('trainer-randomizer', (generation6 || generation7) && moduleAvailable('trainers'), 'Los equipos requieren trclass, trdata, trpoke y gametext del juego.');
+  setGameSpecificState('trainer-prizes', generation6 && moduleAvailable('trainers'), 'Los premios aleatorios de entrenadores solo están disponibles en Gen. VI.');
+  setGameSpecificState('trainer-important-teams', generation7 && moduleAvailable('trainers'), 'Los equipos importantes de seis Pokémon solo están definidos para Gen. VII.');
+  setGameSpecificState('trainer-high-power', moduleAvailable('levelup'), 'Los ataques potentes requieren el GARC levelup.');
+  setGameSpecificState('trainer-natures', generation7 && moduleAvailable('trainers'), 'Las naturalezas aleatorias solo están disponibles en Gen. VII.');
+  setGameSpecificState('trainer-shiny', generation7 && moduleAvailable('trainers'), 'El shiny de los equipos solo está disponible en Gen. VII.');
+  setGameSpecificState('trainer-type-themes', (generation6 || generation7) && moduleAvailable('trainers') && moduleAvailable('personal'), 'Los temas por tipo requieren los equipos y el GARC personal.');
+  setGameSpecificState('trainer-gym-themes', generation6 && moduleAvailable('trainers') && moduleAvailable('personal'), 'Los temas de entrenadores de gimnasio solo están disponibles en Gen. VI y requieren el GARC personal.');
+  setGameSpecificState('trainer-mega-forms', generation6 && moduleAvailable('trainers') && moduleAvailable('personal'), 'Las formas Mega aleatorias solo están disponibles en equipos de Gen. VI y requieren el GARC personal.');
 }
 function updateUi() {
   updateGameSpecificOptions();
@@ -49,6 +84,19 @@ function updateUi() {
   setDependentState('egg-groups', checked('egg-groups'));
   setDependentState('learnsets', checked('learnsets'));
   setDependentState('egg-moves', checked('egg-moves'));
+  setDependentState('wild', checked('wild'));
+  setDependentState('wild-species', checked('wild-species'));
+  setDependentState('wild-levels', checked('wild-levels'));
+  setDependentState('trainer-randomizer', checked('trainer-randomizer'));
+  setDependentState('trainer-classes', checked('trainer-classes'));
+  setDependentState('trainer-levels', checked('trainer-levels'));
+  setDependentState('trainer-force-evolved', checked('trainer-force-evolved'));
+  setDependentState('trainer-prizes', checked('trainer-prizes'));
+  setDependentState('trainer-composition', checked('trainer-composition'));
+  setDependentState('trainer-high-power', checked('trainer-high-power'));
+  setDependentState('trainer-shiny', checked('trainer-shiny'));
+  setDependentState('trainer-species', checked('trainer-species'));
+  setDependentState('trainer-type-themes', checked('trainer-type-themes'));
   byId('base-exp-percent').disabled = !checked('base-exp');
   byId('fixed-catch-rate-value').disabled = !checked('fixed-catch-rate');
   const evolutionMode = getEvolutionMode();
@@ -60,10 +108,14 @@ function updateUi() {
   const moveCount = activeCount('[data-group="moves"] input[type="checkbox"]');
   const hasMoves = moveCount > 0;
   const hasEvolutions = evolutionMode !== 'None';
-  const groupCount = Number(hasPersonalChanges) + Number(hasLearnsets) + Number(hasEggMoves) + Number(hasMoves) + Number(hasEvolutions);
+  const hasWild = checked('wild') && (checked('wild-species') || checked('wild-levels'));
+  const hasTrainerRandomizer = checked('trainer-randomizer') && (checked('trainer-species') || checked('trainer-levels') || checked('trainer-classes') || checked('trainer-composition') || checked('trainer-items') || checked('trainer-abilities') || checked('trainer-moves') || checked('trainer-ai') || checked('trainer-max-ivs') || checked('trainer-force-evolved') || checked('trainer-prizes') || checked('trainer-important-teams') || checked('trainer-high-power') || checked('trainer-natures') || checked('trainer-shiny') || checked('trainer-type-themes') || checked('trainer-mega-forms') || checked('trainer-gym-themes'));
+  const groupCount = Number(hasPersonalChanges) + Number(hasLearnsets) + Number(hasEggMoves) + Number(hasMoves) + Number(hasEvolutions) + Number(hasWild) + Number(hasTrainerRandomizer);
   byId('personal-state').textContent = hasPersonalChanges ? `${personalCount} ${personalCount === 1 ? 'opción' : 'opciones'}` : 'Sin cambios';
   byId('moves-state').textContent = hasMoves ? `${moveCount} ${moveCount === 1 ? 'opción' : 'opciones'}` : 'Sin cambios';
   byId('evolution-state').textContent = hasEvolutions ? 'Activo' : 'Sin cambios';
+  byId('wild-state').textContent = hasWild ? 'Activo' : 'Sin cambios';
+  byId('trainer-randomizer-state').textContent = hasTrainerRandomizer ? 'Activo' : 'Sin cambios';
   byId('step-options').textContent = groupCount ? `${groupCount} ${groupCount === 1 ? 'grupo activo' : 'grupos activos'}` : 'Sin cambios';
   byId('selection-summary').textContent = groupCount ? `${groupCount} ${groupCount === 1 ? 'grupo con cambios' : 'grupos con cambios'}` : 'Sin cambios seleccionados';
   const summary = [];
@@ -72,15 +124,24 @@ function updateUi() {
   if (hasEggMoves) summary.push('movimientos huevo');
   if (hasMoves) summary.push('datos de movimientos');
   if (hasEvolutions) summary.push('evoluciones');
+  if (hasWild) summary.push('encuentros salvajes');
+  if (hasTrainerRandomizer) summary.push('equipos de entrenadores');
   byId('selection-detail').textContent = summary.length ? `${summary.join(', ')}.` : 'Marca al menos una opción para continuar.';
   byId('randomize').disabled = !inspectedGame?.titleId || groupCount === 0;
 }
 function resetOptions() {
   document.querySelectorAll('#changes input[type="checkbox"]').forEach((control) => { control.checked = false; });
-  ['abilities', 'wonder-guard', 'stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe', 'learnsets', 'expand', 'spread', 'stab', 'power-order', 'egg-expand', 'egg-stab', 'evo-bst'].forEach((id) => { byId(id).checked = true; });
+  ['abilities', 'wonder-guard', 'stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe', 'learnsets', 'expand', 'spread', 'stab', 'power-order', 'egg-expand', 'egg-stab', 'evo-bst', 'wild-species', 'wild-bst', 'trainer-species', 'trainer-ignore-special'].forEach((id) => { byId(id).checked = true; });
   Object.assign(byId('stat-deviation'), { value: 25 }); Object.assign(byId('same-type'), { value: 50 }); Object.assign(byId('same-egg'), { value: 50 });
   Object.assign(byId('move-count'), { value: 25 }); Object.assign(byId('max-level'), { value: 75 }); Object.assign(byId('stab-percent'), { value: 52.3 });
   Object.assign(byId('egg-move-count'), { value: 18 }); Object.assign(byId('egg-stab-percent'), { value: 32.1 });
+  Object.assign(byId('wild-level-multiplier'), { value: 1.00 });
+  Object.assign(byId('trainer-level-multiplier'), { value: 1.00 });
+  Object.assign(byId('trainer-force-evolved-level'), { value: 30 });
+  Object.assign(byId('trainer-prize-chance'), { value: 15 });
+  Object.assign(byId('trainer-min-team-size'), { value: 1 }); Object.assign(byId('trainer-max-team-size'), { value: 6 });
+  Object.assign(byId('trainer-high-power-level'), { value: 30 });
+  Object.assign(byId('trainer-shiny-chance'), { value: 3 });
   Object.assign(byId('base-exp-percent'), { value: 100 }); Object.assign(byId('fixed-catch-rate-value'), { value: 45 });
   updateUi();
 }
@@ -127,6 +188,8 @@ byId('randomize').addEventListener('click', async () => {
       eggMoves: { enabled: checked('egg-moves'), expand: checked('egg-expand'), moveCount: number('egg-move-count'), stab: checked('egg-stab'), stabPercent: number('egg-stab-percent') },
       moves: { randomizeType: checked('move-types'), randomizeCategory: checked('move-categories'), metronomeMode: checked('metronome-mode') },
       evolutions: { mode: getEvolutionMode(), matchBst: checked('evo-bst'), matchExperience: checked('evo-exp'), matchType: checked('evo-type'), includeLegendary: checked('evo-legendary'), includeMythical: checked('evo-mythical') },
+      wild: { enabled: checked('wild'), randomizeSpecies: checked('wild-species'), randomizeLevels: checked('wild-levels'), levelMultiplier: number('wild-level-multiplier'), homogeneousHordes: checked('wild-hordes'), matchBst: checked('wild-bst'), includeLegendary: checked('wild-legendary'), includeMythical: checked('wild-mythical') },
+      trainers: { enabled: checked('trainer-randomizer'), randomizeSpecies: checked('trainer-species'), randomizeLevels: checked('trainer-levels'), levelMultiplier: number('trainer-level-multiplier'), randomizeClasses: checked('trainer-classes'), randomizeComposition: checked('trainer-composition'), minTeamSize: number('trainer-min-team-size'), maxTeamSize: number('trainer-max-team-size'), ignoreSpecialClasses: checked('trainer-ignore-special'), onlySinglesForClasses: checked('trainer-only-singles'), randomizeItems: checked('trainer-items'), randomizeAbilities: checked('trainer-abilities'), randomizeMoves: checked('trainer-moves'), maximizeAI: checked('trainer-ai'), maximizeIVs: checked('trainer-max-ivs'), forceFullyEvolved: checked('trainer-force-evolved'), fullyEvolvedLevel: number('trainer-force-evolved-level'), randomizePrizes: checked('trainer-prizes'), prizeChance: number('trainer-prize-chance'), fillImportantGen7Teams: checked('trainer-important-teams'), forceHighPower: checked('trainer-high-power'), highPowerLevel: number('trainer-high-power-level'), randomizeNature: checked('trainer-natures'), randomizeShiny: checked('trainer-shiny'), shinyChance: number('trainer-shiny-chance'), randomizeTypeThemes: checked('trainer-type-themes'), allowMegaForms: checked('trainer-mega-forms'), includeGymTrainerThemes: checked('trainer-gym-themes') },
     });
     setStatus(result, `Listo. ZIP: ${data.zipPath} · Archivos modificados: ${data.changedFiles.join(', ')}`, 'success');
   } catch (error) { setStatus(result, error.message, 'error'); }

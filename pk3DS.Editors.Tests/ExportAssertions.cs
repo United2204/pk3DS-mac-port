@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using pk3DS.Core.CTR;
 using pk3DS.Editors;
 
 namespace pk3DS.Editors.Tests;
@@ -53,6 +54,29 @@ internal static class ExportAssertions
             Assert.True(File.Exists(source), $"{changed}: no existe en el dump de origen");
             Assert.NotEqual(File.ReadAllBytes(source), buffer.ToArray());
         }
+    }
+
+    public static void AssertChangedFileDiffers(ExportResult result, SyntheticWorkspace workspace, string changedFile)
+    {
+        AssertContainsChangedFiles(result);
+        using var archive = ZipFile.OpenRead(result.ZipPath);
+        var entry = archive.GetEntry(ArchivePathFor(changedFile))!;
+        using var stream = entry.Open();
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        var source = Path.Combine(workspace.RomFs, changedFile.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(source), $"{changedFile}: no existe en el dump de origen");
+        Assert.NotEqual(File.ReadAllBytes(source), buffer.ToArray());
+    }
+
+    public static byte[] ReadGarcFile(ExportResult result, string changedFile, int fileIndex)
+    {
+        using var archive = ZipFile.OpenRead(result.ZipPath);
+        var entry = archive.GetEntry(ArchivePathFor(changedFile))!;
+        using var stream = entry.Open();
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return new GARC.MemGARC(buffer.ToArray()).GetFile(fileIndex);
     }
 
     public static void AssertExeFsContentDiffersFromSource(ExportResult result, SyntheticWorkspace workspace)

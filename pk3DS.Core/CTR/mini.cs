@@ -7,17 +7,44 @@ namespace pk3DS.Core.CTR;
 // Mini Packing Util
 public static class Mini
 {
+    /// <summary>
+    /// Returns the first payload offset after validating the Mini offset table.
+    /// Some retail files reserve extra bytes between the table and the first block;
+    /// callers can use this value to preserve that non-standard header when repacking.
+    /// </summary>
+    public static bool TryGetDataStart(byte[] data, out int dataStart)
+    {
+        dataStart = 0;
+        if (data is null || data.Length < 8)
+            return false;
+
+        var count = BitConverter.ToUInt16(data, 2);
+        var tableEnd = checked(8L + (4L * count));
+        if (tableEnd > data.Length)
+            return false;
+
+        uint previous = 0;
+        for (var index = 0; index <= count; index++)
+        {
+            var offset = BitConverter.ToUInt32(data, 4 + (index * 4));
+            if (offset < tableEnd || offset > data.Length || (index > 0 && offset < previous))
+                return false;
+            previous = offset;
+            if (index == 0)
+                dataStart = checked((int)offset);
+        }
+
+        return true;
+    }
+
     public static byte[] AdjustMiniHeader(byte[] data, int headerLength)
     {
         // Adjust the header size of the mini file.
+        if (!TryGetDataStart(data, out var dataStart))
+            throw new InvalidDataException("La tabla de offsets Mini no es válida.");
         int count = BitConverter.ToUInt16(data, 2);
-        int[] start = new int[count];
-        for (int i = 0; i < count; i++)
-            start[i] = BitConverter.ToInt32(data, 4 + (i * 4));
-
-        int dataStart = start.Min();
         if (headerLength < dataStart)
-            throw new Exception("Specified Header length is too small!?");
+            throw new InvalidDataException("La cabecera Mini indicada es más pequeña que la cabecera mínima.");
         byte[] pack = data.Skip(dataStart).ToArray(); // pull out payload
         byte[] newData = new byte[headerLength].Concat(pack).ToArray(); // append payload onto new header
         Array.Copy(data, 0, newData, 0, dataStart); // copy in old header (then repoint)

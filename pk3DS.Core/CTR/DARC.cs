@@ -146,37 +146,8 @@ public class DARC
                 EntryList.Add(new FileTableEntry { DataOffset = 0, DataLength = 0, IsFolder = true, NameOffset = 2 });
                 NameList.Add(new NameTableEntry(6, "."));
             }
-            foreach (string folder in Directory.GetDirectories(folderName))
-            {
-                string parentName = new DirectoryInfo(folder).Name;
-                string[] files = Directory.GetFiles(folder);
-                NameList.Add(new NameTableEntry(nameOffset, parentName));
-                EntryList.Add(new FileTableEntry
-                {
-                    DataOffset = 1,
-                    DataLength = (uint)(files.Length + EntryList.Count + 1),
-                    IsFolder = true,
-                    NameOffset = nameOffset,
-                });
-                nameOffset += (uint)((parentName.Length + 1) * 2); // UTF-16 bytes, including null terminator
-
-                foreach (string file in files)
-                {
-                    var fi = new FileInfo(file);
-                    string fileName = fi.Name;
-                    NameList.Add(new NameTableEntry(nameOffset, fileName));
-
-                    EntryList.Add(new FileTableEntry
-                    {
-                        DataOffset = (uint)Data.Length,
-                        DataLength = (uint)fi.Length,
-                        IsFolder = false,
-                        NameOffset = nameOffset,
-                    });
-                    Data = [.. Data, .. File.ReadAllBytes(file)];
-                    nameOffset += (uint)((fileName.Length + 1) * 2); // UTF-16 bytes, including null terminator
-                }
-            }
+            foreach (string folder in Directory.GetDirectories(folderName).OrderBy(Path.GetFileName, StringComparer.Ordinal))
+                AddDarcFolder(folder, parentIndex: 1, EntryList, NameList, ref Data, ref nameOffset);
         }
         #endregion
 
@@ -217,6 +188,45 @@ public class DARC
         return darc;
     }
 
+    private static void AddDarcFolder(string folderPath, int parentIndex,
+        List<FileTableEntry> entries, List<NameTableEntry> names, ref byte[] data, ref uint nameOffset)
+    {
+        var folderIndex = entries.Count;
+        var folderName = new DirectoryInfo(folderPath).Name;
+        names.Add(new NameTableEntry(nameOffset, folderName));
+        entries.Add(new FileTableEntry
+        {
+            DataOffset = (uint)parentIndex,
+            DataLength = 0,
+            IsFolder = true,
+            NameOffset = nameOffset,
+        });
+        nameOffset += checked((uint)((folderName.Length + 1) * 2));
+
+        foreach (var childFolder in Directory.GetDirectories(folderPath).OrderBy(Path.GetFileName, StringComparer.Ordinal))
+            AddDarcFolder(childFolder, folderIndex, entries, names, ref data, ref nameOffset);
+
+        foreach (var filePath in Directory.GetFiles(folderPath).OrderBy(Path.GetFileName, StringComparer.Ordinal))
+        {
+            var fileInfo = new FileInfo(filePath);
+            var fileName = fileInfo.Name;
+            names.Add(new NameTableEntry(nameOffset, fileName));
+            entries.Add(new FileTableEntry
+            {
+                DataOffset = (uint)data.Length,
+                DataLength = checked((uint)fileInfo.Length),
+                IsFolder = false,
+                NameOffset = nameOffset,
+            });
+            data = [.. data, .. File.ReadAllBytes(filePath)];
+            nameOffset += checked((uint)((fileName.Length + 1) * 2));
+        }
+
+        // Folder ranges are preorder intervals: DataLength points to the first
+        // entry after the complete subtree, including nested folders.
+        entries[folderIndex].DataLength = checked((uint)entries.Count);
+    }
+
     public static bool Darc2files(string path, string folderName)
     {
         try { return Darc2files(File.ReadAllBytes(path), folderName); }
@@ -225,7 +235,7 @@ public class DARC
 
     public static bool Darc2files(byte[] darc, string folderName)
     {
-        // Save all contents of a DARC to a folder, assuming there's only 1 layer of folders.
+        // Save all contents of a DARC to a folder, including nested folders.
         try
         {
             // Clear existing contents
@@ -235,35 +245,101 @@ public class DARC
 
             // Create new DARC object from input data
             var DARC = new DARC(darc);
-
-            // Output data
-            for (int i = 2; i < DARC.FileNameTable.Length;)
-            {
-                bool isFolder = DARC.Entries[i].IsFolder;
-                if (!isFolder)
-                    return false;
-                // uint level = DARC.Entries[i].DataOffset; Only assuming 1 layer of folders.
-                string parentName = DARC.FileNameTable[i].FileName;
-                Directory.CreateDirectory(Path.Combine(root, parentName));
-
-                int nextFolder = (int)DARC.Entries[i++].DataLength;
-
-                // Extract all Contents of said folder
-                while (i < nextFolder)
-                {
-                    string fileName = DARC.FileNameTable[i].FileName;
-                    int offset = (int)DARC.Entries[i].DataOffset;
-                    int length = (int)DARC.Entries[i].DataLength;
-                    byte[] data = DARC.Data.Skip((int)(offset - DARC.Header.FileDataOffset)).Take(length).ToArray();
-
-                    string outPath = Path.Combine(root, parentName, fileName);
-                    File.WriteAllBytes(outPath, data);
-                    i++; // Advance to next Entry
-                }
-            }
+            ValidateDarcTree(DARC);
+            Directory.CreateDirectory(root);
+            UnpackDarcFolder(DARC, folderIndex: 1, firstChild: 2,
+                endExclusive: checked((int)DARC.Entries[1].DataLength), root);
             return true;
         }
         catch (Exception) { return false; }
+    }
+
+    private static void ValidateDarcTree(DARC darc)
+    {
+        if (darc.Header is null || darc.Entries is null || darc.FileNameTable is null || darc.Data is null
+            || darc.Header.Signature != "darc" || darc.Entries.Length < 2
+            || darc.FileNameTable.Length != darc.Entries.Length
+            || !darc.Entries[0].IsFolder || !darc.Entries[1].IsFolder)
+            throw new InvalidDataException("La tabla DARC no tiene una raíz válida.");
+
+        var rootEnd = checked((int)darc.Entries[1].DataLength);
+        if (rootEnd < 2 || rootEnd > darc.Entries.Length)
+            throw new InvalidDataException("El rango de la raíz DARC sale de la tabla.");
+
+        ValidateDarcFolderRange(darc, folderIndex: 1, firstChild: 2, endExclusive: rootEnd);
+    }
+
+    private static void ValidateDarcFolderRange(DARC darc, int folderIndex, int firstChild, int endExclusive)
+    {
+        if (firstChild < 0 || firstChild > endExclusive || endExclusive > darc.Entries.Length)
+            throw new InvalidDataException("Un rango de carpeta DARC sale de la tabla.");
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = firstChild; index < endExclusive;)
+        {
+            var entry = darc.Entries[index];
+            var name = darc.FileNameTable[index].FileName;
+            ValidateDarcName(name);
+            if (!names.Add(name))
+                throw new InvalidDataException("Una carpeta DARC contiene nombres duplicados.");
+
+            if (entry.IsFolder)
+            {
+                if (entry.DataOffset != (uint)folderIndex)
+                    throw new InvalidDataException("La relación padre/hijo de una carpeta DARC es inválida.");
+                var childEnd = checked((int)entry.DataLength);
+                if (childEnd <= index || childEnd > endExclusive)
+                    throw new InvalidDataException("El rango de una carpeta DARC es inválido.");
+                ValidateDarcFolderRange(darc, index, index + 1, childEnd);
+                index = childEnd;
+            }
+            else
+            {
+                ValidateDarcDataRange(darc, entry);
+                index++;
+            }
+        }
+    }
+
+    private static void UnpackDarcFolder(DARC darc, int folderIndex, int firstChild,
+        int endExclusive, string parentPath)
+    {
+        for (var index = firstChild; index < endExclusive;)
+        {
+            var entry = darc.Entries[index];
+            var name = darc.FileNameTable[index].FileName;
+            var path = Path.Combine(parentPath, name);
+            if (entry.IsFolder)
+            {
+                var childEnd = checked((int)entry.DataLength);
+                Directory.CreateDirectory(path);
+                UnpackDarcFolder(darc, index, index + 1, childEnd, path);
+                index = childEnd;
+            }
+            else
+            {
+                var relative = checked((long)entry.DataOffset - darc.Header.FileDataOffset);
+                var length = checked((int)entry.DataLength);
+                var data = darc.Data.AsSpan(checked((int)relative), length).ToArray();
+                Directory.CreateDirectory(parentPath);
+                File.WriteAllBytes(path, data);
+                index++;
+            }
+        }
+    }
+
+    private static void ValidateDarcDataRange(DARC darc, FileTableEntry entry)
+    {
+        var relative = (long)entry.DataOffset - darc.Header.FileDataOffset;
+        if (relative < 0 || entry.DataLength > int.MaxValue || relative + entry.DataLength > darc.Data.LongLength)
+            throw new InvalidDataException("Una entrada DARC apunta fuera del bloque de datos.");
+    }
+
+    private static void ValidateDarcName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.Contains('/') || name.Contains('\\')
+            || name.Contains(':') || name.Any(char.IsControl))
+            throw new InvalidDataException("Una entrada DARC tiene un nombre de ruta inseguro.");
     }
 
     public static bool Files2darc(string folderName, bool delete = false, string originalDARC = null, string outFile = null)
@@ -280,12 +356,18 @@ public class DARC
                 byte[] darc = File.ReadAllBytes(originalDARC);
                 int darcPos = GetDARCposition(darc);
                 if (darcPos < 0) return false;
-                byte[] origData = darc.Skip(darcPos).ToArray();
+                byte[] origData = darc[darcPos..];
 
                 orig = new DARC(origData);
+                if (orig.Header is null || orig.Data is null)
+                    return false;
+                var declaredDarcLength = orig.Header.FileSize is > 0 and <= int.MaxValue && orig.Header.FileSize <= origData.Length
+                    ? (int)orig.Header.FileSize
+                    : origData.Length;
+                var suffix = origData[declaredDarcLength..];
                 orig = InsertFiles(orig, folderName);
                 byte[] newDARC = SetDARC(orig);
-                darcData = darc.Take(darcPos).Concat(newDARC).ToArray();
+                darcData = darc[..darcPos].Concat(newDARC).Concat(suffix).ToArray();
             }
             else // no existing darc to get
             {

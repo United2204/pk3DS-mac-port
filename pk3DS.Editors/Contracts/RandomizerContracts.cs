@@ -12,7 +12,9 @@ public sealed record RandomizeRequest(
     LearnsetOptions? Learnsets = null,
     EggMoveOptions? EggMoves = null,
     MoveOptions? Moves = null,
-    EvolutionOptions? Evolutions = null);
+    EvolutionOptions? Evolutions = null,
+    WildRandomizerOptions? Wild = null,
+    TrainerRandomizerOptions? Trainers = null);
 
 public sealed record PersonalOptions(
     bool RandomizeAbilities = false,
@@ -86,3 +88,53 @@ public sealed record EvolutionOptions(
     bool MatchType = false,
     bool IncludeLegendary = false,
     bool IncludeMythical = false);
+
+/// <summary>
+/// Bulk encounter randomization shared by the Gen. VI and Gen. VII games.
+/// </summary>
+public sealed record WildRandomizerOptions(
+    bool Enabled = false,
+    bool RandomizeSpecies = true,
+    bool RandomizeLevels = false,
+    decimal LevelMultiplier = 1.0m,
+    bool HomogeneousHordes = false,
+    bool MatchBst = true,
+    bool IncludeLegendary = false,
+    bool IncludeMythical = false)
+{
+    public bool HasChanges => Enabled && (RandomizeSpecies || RandomizeLevels);
+}
+
+/// <summary>Safe first-pass trainer randomization shared by Gen. VI and Gen. VII.</summary>
+public sealed record TrainerRandomizerOptions(
+    bool Enabled = false,
+    bool RandomizeSpecies = true,
+    bool RandomizeLevels = false,
+    decimal LevelMultiplier = 1.0m,
+    bool RandomizeClasses = false,
+    bool RandomizeComposition = false,
+    int MinTeamSize = 1,
+    int MaxTeamSize = 6,
+    bool IgnoreSpecialClasses = true,
+    bool OnlySinglesForClasses = false,
+    bool RandomizeItems = false,
+    bool RandomizeAbilities = false,
+    bool RandomizeMoves = false,
+    bool MaximizeAI = false,
+    bool MaximizeIVs = false,
+    bool ForceFullyEvolved = false,
+    decimal FullyEvolvedLevel = 30,
+    bool RandomizePrizes = false,
+    decimal PrizeChance = 15,
+    bool FillImportantGen7Teams = false,
+    bool ForceHighPower = false,
+    decimal HighPowerLevel = 30,
+    bool RandomizeNature = false,
+    bool RandomizeShiny = false,
+    decimal ShinyChance = 3,
+    bool RandomizeTypeThemes = false,
+    bool AllowMegaForms = false,
+    bool IncludeGymTrainerThemes = false)
+{
+    public bool HasChanges => Enabled && (RandomizeSpecies || RandomizeLevels || RandomizeClasses || RandomizeComposition || RandomizeItems || RandomizeAbilities || RandomizeMoves || MaximizeAI || MaximizeIVs || ForceFullyEvolved || RandomizePrizes || FillImportantGen7Teams || ForceHighPower || RandomizeNature || RandomizeShiny || RandomizeTypeThemes || AllowMegaForms || IncludeGymTrainerThemes);
+}
