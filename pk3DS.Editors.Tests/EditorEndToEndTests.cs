@@ -628,6 +628,46 @@ public class EditorEndToEndTests : IDisposable
     }
 
     [Fact]
+    public void TheTrainerRandomizerCanUseCurrentLearnsetMoves()
+    {
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: false, UseCurrentLearnsetMoves: true)));
+
+        var team = ExportAssertions.ReadGarcFile(result, "a/0/4/0", 1);
+        Assert.Equal(36, team.Length);
+        Assert.Equal(1, BitConverter.ToUInt16(team, 10));
+        Assert.Equal([0, 0, 0], Enumerable.Range(1, 3)
+            .Select(index => BitConverter.ToUInt16(team, 10 + (index * sizeof(ushort)))).ToArray());
+    }
+
+    [Fact]
+    public void TheTrainerRandomizerCanUseMetronomeMode()
+    {
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: false, MetronomeMoves: true)));
+
+        var team = ExportAssertions.ReadGarcFile(result, "a/0/4/0", 1);
+        Assert.Equal([118, 0, 0, 0], Enumerable.Range(0, 4)
+            .Select(index => BitConverter.ToUInt16(team, 10 + (index * sizeof(ushort)))).ToArray());
+    }
+
+    [Fact]
+    public void TheTrainerRandomizerRejectsConflictingMoveModes()
+    {
+        Assert.Throws<WorkspaceException>(() => RandomizerService.Randomize(new RandomizeRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Trainers: new TrainerRandomizerOptions(
+                Enabled: true, RandomizeSpecies: false, RandomizeMoves: true, MetronomeMoves: true))));
+    }
+
+    [Fact]
     public void TheRandomizerRefusesAnExportWithNothingSelected() =>
         Assert.Throws<WorkspaceException>(() => RandomizerService.Randomize(new RandomizeRequest(
             _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,

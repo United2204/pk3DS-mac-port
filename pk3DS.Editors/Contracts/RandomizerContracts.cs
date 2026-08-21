@@ -134,7 +134,13 @@ public sealed record TrainerRandomizerOptions(
     decimal ShinyChance = 3,
     bool RandomizeTypeThemes = false,
     bool AllowMegaForms = false,
-    bool IncludeGymTrainerThemes = false)
+    bool IncludeGymTrainerThemes = false,
+    bool MatchBst = false,
+    bool IncludeLegendary = false,
+    bool IncludeMythical = false,
+    bool IncludeShedinja = false,
+    bool UseCurrentLearnsetMoves = false,
+    bool MetronomeMoves = false)
 {
-    public bool HasChanges => Enabled && (RandomizeSpecies || RandomizeLevels || RandomizeClasses || RandomizeComposition || RandomizeItems || RandomizeAbilities || RandomizeMoves || MaximizeAI || MaximizeIVs || ForceFullyEvolved || RandomizePrizes || FillImportantGen7Teams || ForceHighPower || RandomizeNature || RandomizeShiny || RandomizeTypeThemes || AllowMegaForms || IncludeGymTrainerThemes);
+    public bool HasChanges => Enabled && (RandomizeSpecies || RandomizeLevels || RandomizeClasses || RandomizeComposition || RandomizeItems || RandomizeAbilities || RandomizeMoves || MaximizeAI || MaximizeIVs || ForceFullyEvolved || RandomizePrizes || FillImportantGen7Teams || ForceHighPower || RandomizeNature || RandomizeShiny || RandomizeTypeThemes || AllowMegaForms || IncludeGymTrainerThemes || UseCurrentLearnsetMoves || MetronomeMoves || (RandomizeSpecies && (MatchBst || IncludeLegendary || IncludeMythical || IncludeShedinja)));
 }

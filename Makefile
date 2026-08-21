@@ -13,7 +13,7 @@ CONFIG   = Debug
 FRONTEND = pk3DS.Mac.Web/frontend
 
 frontend-build:
-	cd $(FRONTEND) && if [ ! -d node_modules ]; then npm install; fi && npm run build
+	cd $(FRONTEND) && if [ ! -d node_modules ]; then npm ci; fi && npm run build
 
 build:
 	$(MAKE) frontend-build

@@ -37,6 +37,8 @@ public static class RandomizerService
         IEnumerable<string> trainerGarcs = trainers.HasChanges
             ? new[] { "trdata", "trpoke" }
             : Array.Empty<string>();
+        if (trainers.ForceHighPower || trainers.UseCurrentLearnsetMoves)
+            trainerGarcs = trainerGarcs.Append("levelup");
 
         return EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId, request.Language,
             "randomizer", wildGarcs.Concat(trainerGarcs), config =>
@@ -293,6 +295,12 @@ public static class RandomizerService
             throw new WorkspaceException("Los temas de entrenadores de gimnasio solo están disponibles en el flujo de entrenadores de Gen. VI.");
         if (options.IncludeGymTrainerThemes && !options.RandomizeTypeThemes)
             throw new WorkspaceException("Los temas de entrenadores de gimnasio requieren activar los temas por tipo.");
+        var moveModes = Convert.ToInt32(options.RandomizeMoves) + Convert.ToInt32(options.UseCurrentLearnsetMoves)
+            + Convert.ToInt32(options.MetronomeMoves);
+        if (moveModes > 1)
+            throw new WorkspaceException("Elegí un único modo de movimientos para los entrenadores.");
+        if ((options.UseCurrentLearnsetMoves || options.ForceHighPower) && config.Learnsets is null)
+            throw new WorkspaceException("Los movimientos por nivel requieren el GARC levelup del workspace.");
 
         var species = new SpeciesRandomizer(config)
         {
@@ -303,8 +311,10 @@ public static class RandomizerService
             G5 = true,
             G6 = true,
             G7 = config.Generation == 7,
-            Shedinja = false,
-            rBST = false,
+            L = options.IncludeLegendary,
+            E = options.IncludeMythical,
+            Shedinja = options.IncludeShedinja,
+            rBST = options.MatchBst,
         };
         species.Initialize();
 
@@ -328,9 +338,9 @@ public static class RandomizerService
         var gen6Themes = options.RandomizeTypeThemes && config.Generation == 6
             ? BuildGen6TrainerThemes(config, typeCount, options.IncludeGymTrainerThemes)
             : null;
-        var highPower = options.ForceHighPower
+        var learnset = options.ForceHighPower || options.UseCurrentLearnsetMoves
             ? config.Learnsets is null
-                ? throw new WorkspaceException("Forzar ataques potentes requiere el GARC levelup del workspace.")
+                ? throw new WorkspaceException("Los movimientos por nivel requieren el GARC levelup del workspace.")
                 : new LearnsetRandomizer(config, config.Learnsets)
             : null;
         var fallbackMoves = GetFallbackMoves(config);
@@ -354,6 +364,8 @@ public static class RandomizerService
             if (config.Generation == 6)
             {
                 var trainer = new TrainerData6(trdata.Files[index], trpoke.Files[index], config.ORAS);
+                if (options.RandomizeMoves || options.UseCurrentLearnsetMoves || options.MetronomeMoves || options.ForceHighPower)
+                    trainer.Moves = true;
                 if (options.RandomizeClasses)
                     trainer.Class = GetRandomTrainerClass(config, trainerClassCount, trainer.Class, trainer.BattleType, options);
                 if (options.RandomizeComposition)
@@ -388,7 +400,12 @@ public static class RandomizerService
                     if (options.RandomizeMoves)
                         pokemon.Moves = GetRandomTrainerMoves(config, move, fallbackMoves, pokemon.Species, pokemon.Form)
                             .Select(value => (ushort)value).ToArray();
-                    ApplyHighPowerMoves(pokemon, options, highPower);
+                    else if (options.UseCurrentLearnsetMoves)
+                        pokemon.Moves = learnset!.GetCurrentMoves(pokemon.Species, pokemon.Form, pokemon.Level, 4)
+                            .Select(value => (ushort)value).ToArray();
+                    else if (options.MetronomeMoves)
+                        pokemon.Moves = [118, 0, 0, 0];
+                    ApplyHighPowerMoves(pokemon, options, learnset);
                     ForceFinalEvolution(pokemon, options, finalSpecies, form);
                 }
                 trdata.SetFile(index, trainer.Write());
@@ -435,7 +452,11 @@ public static class RandomizerService
                     pokemon.Shiny = Util.Rand.Next(101) < Math.Clamp(options.ShinyChance, 0, 100);
                 if (options.RandomizeMoves)
                     pokemon.Moves = GetRandomTrainerMoves(config, move, fallbackMoves, pokemon.Species, pokemon.Form);
-                ApplyHighPowerMoves(pokemon, options, highPower);
+                else if (options.UseCurrentLearnsetMoves)
+                    pokemon.Moves = learnset!.GetCurrentMoves(pokemon.Species, pokemon.Form, pokemon.Level, 4);
+                else if (options.MetronomeMoves)
+                    pokemon.Moves = [118, 0, 0, 0];
+                ApplyHighPowerMoves(pokemon, options, learnset);
                 ForceFinalEvolution(pokemon, options, finalSpecies, form);
             }
             trainer7.Write(out var data, out var team);
