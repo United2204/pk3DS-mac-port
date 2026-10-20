@@ -862,8 +862,10 @@ async function inspectWorkspace() {
     setResult('Podés construir una copia binaria desde este workspace.');
     await loadWorkspaceBackups(true);
   } catch (error) {
-    setStatus(error.message, 'error');
-    setResult('Cargá un workspace válido para continuar.', 'neutral');
+    if (workspace.value === inspectedPath) {
+      setStatus(error.message, 'error');
+      setResult('Cargá un workspace válido para continuar.', 'neutral');
+    }
   } finally {
     button.disabled = false;
     updateBuildState();

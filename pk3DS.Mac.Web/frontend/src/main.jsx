@@ -52,7 +52,7 @@ const editorPages = [
   { id: "owse", label: "OWSE / Scripts", legacy: "owse.html", group: "RomFS", description: "Inspección de scripts y zonas." },
   { id: "tm", label: "TMs / HMs", legacy: "tm.html", group: "ExeFS", description: "Compatibilidad y movimientos de campo." },
   { id: "tutors", label: "Move Tutors", legacy: "tutors.html", group: "CRO", description: "Tutores Gen. VII almacenados en Shop.cro." },
-  { id: "tutors6", label: "Move Tutors Gen. VI", legacy: "tutors6.html", group: "ExeFS", description: "Tutores de X/Y y OR/AS." },
+  { id: "tutors6", label: "Move Tutors Gen. VI", legacy: "tutors6.html", group: "ExeFS", description: "Editor experimental: Windows advierte que los cambios no se reflejan en el juego." },
   { id: "marts", label: "Poké Mart", legacy: "marts.html", group: "CRO", description: "Tiendas Gen. VII almacenadas en Shop.cro." },
   { id: "marts6", label: "Poké Mart Gen. VI", legacy: "marts6.html", group: "ExeFS", description: "Inventarios de tiendas Gen. VI." },
   { id: "opowers", label: "O-Powers", legacy: "opowers.html", group: "ExeFS", description: "Valores de O-Powers." },

@@ -60,7 +60,7 @@
             <button id="load-workspace-backups" class="secondary-button" type="button" disabled>Actualizar lista</button>
           </div>
         </div>
-        <div class="workspace-backups-selection">
+        <div class="workspace-backups-selection" role="group" aria-labelledby="workspace-backup-summary">
           <label class="check-card"><input id="workspace-backup-select-all" type="checkbox" disabled><span>Seleccionar todos</span></label>
           <div id="workspace-backups-list" class="workspace-backups-list" aria-live="polite"></div>
         </div>
@@ -205,12 +205,12 @@
           <div><p class="kicker">PARCHE</p><h2>Crear parche de redirección</h2></div>
         </div>
         <p class="section-copy">Porta el parche “Redirect [CIA]” de pk3DS: cambia las referencias de los GARCs seleccionados en <code>code.bin</code> y copia sus archivos al árbol <code>a0/</code>. Al terminar, la carpeta se selecciona automáticamente en el constructor CIA para integrarla.</p>
-        <div class="workspace-backups-selection">
+        <div class="workspace-backups-selection" role="group" aria-labelledby="patch-garc-summary">
           <div class="ready-row"><b id="patch-garc-summary">Cargá un workspace para ver los GARCs del juego.</b><div class="backup-actions"><button id="patch-garc-select-all" class="secondary" type="button" disabled>Seleccionar todos</button><button id="patch-garc-select-none" class="secondary" type="button" disabled>Limpiar</button></div></div>
-          <div id="patch-garc-options" class="workspace-backups-list" aria-label="GARCs disponibles para el juego"></div>
+          <div id="patch-garc-options" class="workspace-backups-list"></div>
         </div>
         <label class="field project-output">GARCs adicionales o rutas de RomFS
-          <textarea id="patch-garcs" rows="4" placeholder="Un nombre por línea, por ejemplo:&#10;personal&#10;levelup&#10;gametext"></textarea>
+          <textarea id="patch-garcs" rows="4" placeholder="Un nombre o ruta por línea, por ejemplo:&#10;personal&#10;gametext&#10;a/0/0/5"></textarea>
         </label>
         <label class="check-card project-check"><input id="patch-all-languages" type="checkbox"><span>Incluir las ocho variantes de idioma para gametext/storytext</span></label>
         <label class="field project-output">Carpeta del parche
