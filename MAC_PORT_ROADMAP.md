@@ -24,11 +24,11 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 1.7. Recuperación de errores de la shell React — Hecho: mensaje en español, detalle técnico plegable y acción para recargar
 
 - **2. Randomizador de datos RomFS** — Hecho respecto a Windows
-  - 2.1. Personal Stats (habilidades, objetos, catch rate, tipos, egg groups, stats base, MT/MO, tutores) — Hecho
-  - 2.2. Level Up Moves (cantidad, distribución, STAB, potencia, cuatro movimientos iniciales, exclusión de daño fijo) — Hecho
-  - 2.3. Egg Moves — Hecho
+  - 2.1. Personal Stats (habilidades, objetos, catch rate, tipos, egg groups, stats base, MT/MO y tutores; cambios masivos incluyen tutores por tipo y tutores de playa de USUM por separado) — Hecho
+  - 2.2. Level Up Moves (cantidad, distribución, STAB, potencia, cuatro movimientos iniciales, exclusión de daño fijo, Allow HMs en Gen. VI y acción global de Modo Metronome que deja Metronome al nivel 1) — Hecho
+  - 2.3. Egg Moves (randomización Gen. VI/VII y Allow HMs Gen. VI con la lista de exclusión de Windows) — Hecho
   - 2.4. Evolutions (randomizar resultados, eliminar intercambios, evolución por nivel) — Hecho
-  - 2.5. Move Stats — acciones globales (tipos, categorías, modo Metronome) — Hecho
+  - 2.5. Move Stats — acciones globales (tipos, categorías, modo Metronome) y editor individual completo (calidad, golpes, efectos, objetivos, estadísticas, flags y campos Z de Gen. VII) — Hecho
   - 2.6. Wild Encounters — Hecho: randomización masiva de especies, formas, niveles y hordas homogéneas en Gen. VI; especies, formas, niveles y SOS/clima en Gen. VII, con una única exportación y copia OR/AS sincronizada
   - 2.7. Trainer Teams — Hecho respecto a Windows: randomización de especies con pool configurable por generación, legendarios/singulares, BST y Shedinja; formas, niveles, clases con restricciones de modelos especiales, equipos y movimientos. Los límites de equipo se aplican como en Windows, las hordas Gen. VI no cambian, los equipos importantes se pueden completar a seis en Gen. VI/VII y los combates Royal de Gen. VII conservan un Pokémon. Incluye premios Gen. VI, Megas de historia y temas por tipo; los 13 grupos de gimnasios/Alto Mando reciben tipos distintos y, al garantizar Megas de historia, se valida que existan suficientes tipos con Mega elegibles. En ORAS, los tres primeros combates del rival comparten el tema por tipo de su batalla posterior correspondiente, pero siguen excluidos del relleno de equipos importantes, igual que en Windows. En X/Y, los grupos de rival conservan los IDs propios del juego y no reciben los IDs iniciales de ORAS. En Gen. VI, las sustituciones temáticas también conservan al menos un tipo de la especie original cuando existe una opción compatible; las plazas nuevas clonan la última entrada y conservan su forma, como Windows. En Gen. VII, los reemplazos temáticos sólo requieren el tipo seleccionado, igual que en Windows. En Gen. VII, las plazas nuevas sólo reciben especie y nivel; los demás campos quedan a cero, como Windows. Los movimientos STAB usan la especie base, los promedios de perfiles se truncan como Windows y Gen. VII reutiliza el perfil previo al ajustar o completar el equipo. Una Mega forzada conserva su Megapiedra al exportar y el pool Gen. VI excluye medicinas de los objetos equipados, como Windows. Gen. VII conserva el emparejamiento de Megapiedras y randomiza objetos y naturalezas solo cuando sus opciones están activadas; también conserva el PokeChange de IA y el saneamiento de movimientos Z/ilegales. Los pools de respaldo respetan filtros de generaciones, legendarios, singulares, Shedinja, BST y movimientos prohibidos. Las evoluciones forzadas ocurren antes de generar movimientos y admiten legendarios/singulares. Los movimientos aleatorios ofrecen exclusión configurable de daño fijo y cantidad mínima configurable de ataques dañinos y STAB. La pantalla y el contrato aceptan una semilla opcional con signo de 32 bits, aplicada al RNG completo y serializada para evitar carreras entre randomizaciones concurrentes. El flujo combinado se validó con dumps reales de X, ORAS y UM; ver [REAL_DUMP_VALIDATION.md](REAL_DUMP_VALIDATION.md).
 
@@ -36,11 +36,11 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
   - 3.1. Game Text / Story Text — Hecho: búsqueda y edición de líneas, inserción/eliminación, importación/exportación del TXT completo de Windows, recuperación por tabla ante errores de conversión con descarga de informes `text_errata.txt` y `text_failed.txt`, exportación LayeredFS de una tabla y randomización smart/pura por tabla o archivo completo sin modificar el workspace
   - 3.2. Mega Evolutions — Hecho
   - 3.3. Wild Encounters Gen VI/VII (`encdata`) — Hecho: editor individual y exportación LayeredFS; informe JSON masivo de áreas Gen. VI/VII con manifiestos; Gen. VII también permite copiar especie y forma de slots regulares a SOS por tabla día/noche, manteniendo intactos niveles, tasas y clima
-  - 3.4. Trainers Gen VI/VII: datos, equipo y nombres (`trdata`, `trpoke`, `gametext`) — Hecho
+  - 3.4. Trainers Gen VI/VII: datos, equipo, premios Gen. VI y nombres (`trdata`, `trpoke`, `gametext`) — Hecho
   - 3.5. Static Encounters Gen VII (regalos, fijos, intercambios) — Hecho: edición individual y acciones Randomize Starters / Randomize All con pools por generación, legendarios/singulares, BST, Mega, objetos, niveles, habilidades, shiny locks, evolución final, movimientos especiales, aura de tótem y Metronome; Randomize Starters puede actualizar opcionalmente referencias de `storytext` en el idioma seleccionado; además edita forma, género, naturaleza, mapa, aliados SOS, movimientos relearn, IVs/EVs y datos de OT/intercambios, con exportación LayeredFS y semilla reproducible
-  - 3.6. Personal Stats — editor individual por especie — Hecho
+  - 3.6. Personal Stats — editor individual por especie con EV, género, crianza, experiencia, color, dimensiones, compatibilidades y campos SOS/Z de Gen. VII; muestra BST y metadatos de formas como solo lectura — Hecho
   - 3.7. Evolutions — editor individual por especie — Hecho
-  - 3.8. Move Stats — editor individual por movimiento — Hecho
+  - 3.8. Move Stats — editor individual por movimiento con todos los campos expuestos por Windows (tipo, calidad, categoría, potencia, precisión, PP, prioridad, parámetro bruto 0x0B, golpes, efectos, retroceso/curación, objetivo, cambios de estadísticas, flags y campos Z/refresh de Gen. VII), preservando bytes no interpretados — Hecho; el significado de 0x0B no está definido por Windows
   - 3.9. Item Stats — editor individual por objeto — Hecho
   - 3.10. Battle Maison / Royal / Tree — Hecho
   - 3.11. Pickup Gen VII — Hecho
@@ -98,16 +98,16 @@ Desglose jerárquico del port completo. El detalle de cada módulo (formatos, ex
 | --- | --- | --- | --- |
 | Game Text | Gen 6/7 | `gametext` | Portado: editor de tablas y exportación LayeredFS |
 | Story Text | Gen 6/7 | `storytext` | Portado: editor de tablas y exportación LayeredFS |
-| Personal Stats | Gen 6/7 | `personal` | Portado: randomizador, cambios masivos y editor individual |
+| Personal Stats | Gen 6/7 | `personal` | Portado: randomizador, cambios masivos (incluidos tutores por tipo y tutores de playa USUM separados) y editor individual con compatibilidades, campos SOS/Z Gen. VII y metadatos de formas/BST de solo lectura |
 | Evolutions | Gen 6/7 | `evolution` | Portado: randomizador y editor individual |
-| Level Up Moves | Gen 6/7 | `levelup` | Portado: randomizador y editor individual |
+| Level Up Moves | Gen 6/7 | `levelup` | Portado: randomizador con Allow HMs Gen. VI, editor individual y Modo Metronome global |
 | Wild Encounters | Gen 6/7 | `encdata`, `zonedata`, `worlddata` | Portado: editor individual Gen. VI/VII y exportación LayeredFS de `encdata`; reportes JSON masivos de tablas Gen. VI/VII con manifiestos de áreas sin encuentros, estructuras dañadas y archivos sobrantes; copia de especie/forma de slots regulares Gen. VII a SOS por día/noche |
 | Mega Evolutions | Gen 6/7 | `megaevo` | Portado: editor individual y exportación LayeredFS |
-| Egg Moves | Gen 6/7 | `eggmove` | Portado: randomizador y editor individual |
-| Trainers | Gen 6/7 | `trclass`, `trdata`, `trpoke`, `gametext` | Portado: editor individual Gen. VI/VII de datos, equipo, nombre de entrenador y clase, con exportación LayeredFS conjunta |
+| Egg Moves | Gen 6/7 | `eggmove` | Portado: randomizador con Allow HMs Gen. VI y editor individual |
+| Trainers | Gen 6/7 | `trclass`, `trdata`, `trpoke`, `gametext` | Portado: editor individual Gen. VI/VII de datos, equipo, tamaño de equipo, premios Gen. VI, nombre de entrenador y clase, con exportación LayeredFS conjunta |
 | Battle Maison / Royal / Tree | Gen 6/7 | `maisontr*`, `maisonpk*` | Portado: variantes normal/super o Tree/Royal, edición de entrenadores y Pokémon, exportación LayeredFS |
 | Item Stats | Gen 6/7 | `item` | Portado: editor individual y exportación LayeredFS |
-| Move Stats | Gen 6/7 | `move` | Portado: acciones globales y editor individual |
+| Move Stats | Gen 6/7 | `move` | Portado: acciones globales y editor individual con todos los campos del formulario de Windows, incluido el byte bruto 0x0B (sin semántica documentada), flags y campos Z/refresh de Gen. VII; conserva bytes no interpretados |
 | Static Encounters | Gen 7 | `encounterstatic` | Portado: edición individual y acciones Randomize Starters / Randomize All para regalos, encuentros fijos e intercambios; campos comunes y avanzados con exportación LayeredFS |
 | Pickup | Gen 7 | `pickup` | Portado: tabla de objetos y probabilidades por banda de nivel, con exportación LayeredFS |
 | Title Screen | Gen 6 | `titlescreen` | Portado: inventario DARC/BCLIM, vista previa ETC1/ETC1A4, exportación raw/PNG, reemplazo a DARC/copia GARC conservando la envoltura retail, aplicación individual/en lote y restauración protegida de backups |

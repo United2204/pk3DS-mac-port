@@ -22,6 +22,7 @@ public sealed record TextTableResponse(TextArchiveKind Kind, int TableIndex, str
 public sealed record LearnsetCatalogRequest(string WorkspacePath, int? Language = null);
 public sealed record LearnsetTableRequest(string WorkspacePath, int SpeciesIndex, int? Language = null);
 public sealed record LearnsetExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int SpeciesIndex, LearnsetEntry[] Entries, int? Language = null);
+public sealed record LearnsetMetronomeExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int? Language = null);
 public sealed record LearnsetSpeciesSummary(int Id, string Name, int MoveCount);
 public sealed record LearnsetEntry(int Level, int MoveId);
 public sealed record LearnsetCatalogResponse(string GameVersion, LearnsetSpeciesSummary[] Species, NamedEntry[] Moves);
@@ -40,13 +41,61 @@ public sealed record EvolutionTableResponse(int SpeciesIndex, EvolutionEntry[] E
 
 // Personal stats --------------------------------------------------------------
 public sealed record PersonalEntryRequest(string WorkspacePath, int SpeciesIndex, int? Language = null);
-public sealed record PersonalExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int SpeciesIndex, int[] Stats, int[] Types, int CatchRate, int[] Abilities, int[] Items, int[] EggGroups, int? Language = null);
-public sealed record PersonalEntryResponse(int SpeciesIndex, int[] Stats, int[] Types, int CatchRate, int[] Abilities, int[] Items, int[] EggGroups);
+/// <summary>
+/// The original required fields stay first for source and JSON compatibility. Every additional
+/// field is nullable so a caller that only knows the initial Mac contract can still export an
+/// entry without manufacturing values for fields it did not read. Compatibility arrays contain
+/// the complete packed bitfields in responses; the editor only applies the bits Windows exposes.
+/// </summary>
+public sealed record PersonalExportRequest(
+    string WorkspacePath, string? OutputDirectory, string? TitleId, int SpeciesIndex,
+    int[] Stats, int[] Types, int CatchRate, int[] Abilities, int[] Items, int[] EggGroups,
+    int? Language = null, int[]? EVYields = null, int? Gender = null,
+    int? HatchCycles = null, int? BaseFriendship = null, int? EXPGrowth = null,
+    int? Color = null, int? BaseEXP = null,
+    int? Height = null, int? Weight = null, bool[]? TMHM = null, bool[]? TypeTutors = null,
+    bool[][]? SpecialTutors = null, int? EscapeRate = null, int? SpecialZItem = null,
+    int? SpecialZBaseMove = null, int? SpecialZMove = null, bool? LocalVariant = null);
+
+/// <summary>Complete per-entry fields represented by the Gen. VI/VII personal records.</summary>
+public sealed record PersonalEntryResponse(
+    int SpeciesIndex, int[] Stats, int[] Types, int CatchRate, int[] Abilities, int[] Items,
+    int[] EggGroups, int[] EVYields = null!, int EvoStage = 0, int Gender = 0,
+    int HatchCycles = 0, int BaseFriendship = 0, int EXPGrowth = 0, int FormeCount = 0,
+    int FormeSprite = 0, int Color = 0, int BaseEXP = 0, int Height = 0, int Weight = 0,
+    bool[] TMHM = null!, bool[] TypeTutors = null!, bool[][] SpecialTutors = null!,
+    int? EscapeRate = null, int? SpecialZItem = null, int? SpecialZBaseMove = null,
+    int? SpecialZMove = null, bool? LocalVariant = null, int BST = 0, int ColorRaw = 0);
 
 // Move stats ------------------------------------------------------------------
 public sealed record MoveEntryRequest(string WorkspacePath, int MoveIndex, int? Language = null);
-public sealed record MoveExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int MoveIndex, int Type, int Category, int Power, int Accuracy, int PP, int Priority, int? Language = null);
-public sealed record MoveEntryResponse(int MoveIndex, int Type, int Category, int Power, int Accuracy, int PP, int Priority);
+/// <summary>
+/// The move editor keeps the original six arguments first for source compatibility with the
+/// initial Mac port. The remaining values are optional for older callers, but the web editor
+/// sends every field Windows exposes. Gen. VII-only values stay nullable so a Gen. VI request
+/// cannot accidentally manufacture bytes that do not exist in its record layout.
+/// </summary>
+public sealed record MoveExportRequest(
+    string WorkspacePath, string? OutputDirectory, string? TitleId, int MoveIndex,
+    int Type, int Category, int Power, int Accuracy, int PP, int Priority, int? Language = null,
+    int? Quality = null, int? HitMin = null, int? HitMax = null, int? Inflict = null, int? InflictPercent = null,
+    int? InflictCount = null, int? TurnMin = null, int? TurnMax = null, int? CritStage = null, int? Flinch = null,
+    int? EffectSequence = null, int? Recoil = null, int? Healing = null, int? Target = null,
+    int? Stat1 = null, int? Stat2 = null, int? Stat3 = null, int? Stat1Stage = null, int? Stat2Stage = null,
+    int? Stat3Stage = null, int? Stat1Percent = null, int? Stat2Percent = null, int? Stat3Percent = null,
+    uint? Flags = null, int? ZMove = null, int? ZPower = null, int? ZEffect = null,
+    int? RefreshAfflictType = null, int? RefreshAfflictPercent = null);
+
+/// <summary>All fields from the Gen. VI/VII move records that the Windows editor exposes.</summary>
+public sealed record MoveEntryResponse(
+    int MoveIndex, int Type, int Category, int Power, int Accuracy, int PP, int Priority,
+    int Quality = 0, int HitMin = 0, int HitMax = 0, int Inflict = 0, int InflictPercent = 0,
+    int InflictCount = 0, int TurnMin = 0, int TurnMax = 0, int CritStage = 0, int Flinch = 0,
+    int EffectSequence = 0, int Recoil = 0, int Healing = 0, int Target = 0,
+    int Stat1 = 0, int Stat2 = 0, int Stat3 = 0, int Stat1Stage = 0, int Stat2Stage = 0,
+    int Stat3Stage = 0, int Stat1Percent = 0, int Stat2Percent = 0, int Stat3Percent = 0,
+    uint Flags = 0, int Generation = 6, int? ZMove = null, int? ZPower = null, int? ZEffect = null,
+    int? RefreshAfflictType = null, int? RefreshAfflictPercent = null);
 
 // Item stats ------------------------------------------------------------------
 public sealed record ItemEntryRequest(string WorkspacePath, int ItemIndex, int? Language = null);
@@ -437,7 +486,7 @@ public sealed record TrainerCatalogResponse(TrainerSummary[] Trainers, NamedEntr
 public sealed record TrainerEntryRequest(string WorkspacePath, int TrainerIndex, int? Language = null);
 public sealed record TrainerPokemonEntry(int Species, int Form, int Level, int Item, int[] Moves, int Ability, int Gender, int Nature, bool Shiny, int[] IVs, int[] EVs);
 public sealed record TrainerEntry(int TrainerClass, int Mode, int[] Items, int AI, bool Flag, int Money, TrainerPokemonEntry[] Team,
-    bool? HasItems = null, bool? HasMoves = null, string? Name = null, string? ClassName = null);
+    bool? HasItems = null, bool? HasMoves = null, string? Name = null, string? ClassName = null, int? Prize = null);
 public sealed record TrainerEntryResponse(int TrainerIndex, TrainerEntry Entry);
 public sealed record TrainerExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int TrainerIndex, TrainerEntry? Entry, int? Language = null);
 

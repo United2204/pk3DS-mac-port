@@ -1,1 +1,67 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Personal Stats · pk3DS Mac</title><link rel="stylesheet" href="app.css"></head><body><header class="site-header"><a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a></header><main class="editor-main"><div class="intro editor-intro"><p class="eyebrow">EDITOR ROMFS</p><h1>Datos de Pokémon</h1><p>Estadísticas, tipos, captura, habilidades, objetos y grupos huevo.</p></div><section class="panel"><div class="path-input"><span>⌁</span><input id="workspace" placeholder="Carpeta completa del juego o RomFS"><button id="browse" class="secondary">Examinar…</button><button id="load">Cargar</button></div><p id="status" class="status neutral">Elige el juego.</p></section><section id="editor" class="panel is-disabled"><div class="text-toolbar"><label class="field">Especie<select id="species" disabled></select></label><button id="open" class="secondary-button" disabled>Abrir</button></div><div id="fields" class="personal-grid"></div></section><section class="panel output-panel text-export"><div class="ready-row"><b id="summary">Sin cambios para exportar</b><button id="export" class="primary" disabled>Exportar →</button></div><p id="result" class="status neutral"></p></section></main><script src="personal.js?v=3"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Personal Stats · pk3DS Mac</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .personal-grid { display: grid; gap: .9rem; margin-top: 1rem; }
+    .personal-panel { padding: .9rem; border: 1px solid #304049; border-radius: 9px; background: #10171d; }
+    .personal-panel h2 { margin: 0 0 .7rem; color: #b9ddc6; font-size: .88rem; }
+    .personal-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
+    .personal-field { display: grid; gap: .3rem; color: #aab8be; font-size: .7rem; }
+    .personal-field > input, .personal-field > select { width: 100%; box-sizing: border-box; padding: .45rem .5rem; border: 1px solid #3b4c54; border-radius: 6px; background: #0e141a; color: #edf3f5; }
+    .personal-array-field { grid-column: 1 / -1; display: grid; gap: .4rem; padding: .6rem; border: 1px solid #293940; border-radius: 7px; }
+    .personal-array-field > b, .personal-bitfield > b { color: #b9ddc6; font-size: .72rem; }
+    .personal-array { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .5rem; }
+    .personal-array .personal-field { min-width: 0; }
+    .personal-bitfield { grid-column: 1 / -1; display: grid; gap: .4rem; padding: .6rem; border: 1px solid #293940; border-radius: 7px; }
+    .personal-check-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .25rem .45rem; max-height: 260px; overflow: auto; }
+    .personal-check { display: flex; align-items: center; gap: .35rem; min-width: 0; padding: .25rem .3rem; color: #c8d2d4; font-size: .68rem; cursor: pointer; }
+    .personal-check input { accent-color: #8fe5af; }
+    .personal-note { grid-column: 1 / -1; margin: .1rem 0 0; color: #829198; font-size: .68rem; line-height: 1.45; }
+    @media (max-width: 760px) { .personal-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .personal-array { grid-template-columns: repeat(3, minmax(0, 1fr)); } .personal-check-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 500px) { .personal-fields, .personal-array { grid-template-columns: 1fr 1fr; } .personal-check-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a>
+    <a class="header-link" href="index.html">Randomizador</a>
+  </header>
+  <main class="editor-main">
+    <div class="intro editor-intro">
+      <p class="eyebrow">EDITOR ROMFS</p>
+      <h1>Datos de Pokémon</h1>
+      <p>Estadísticas, evolución, reproducción, formas, compatibilidad de movimientos y campos SOS/Z.</p>
+    </div>
+    <section class="panel">
+      <div class="path-input">
+        <span>⌁</span>
+        <input id="workspace" placeholder="Carpeta completa del juego o RomFS">
+        <button id="browse" class="secondary">Examinar…</button>
+        <button id="load">Cargar</button>
+      </div>
+      <p id="status" class="status neutral">Elige el juego.</p>
+    </section>
+    <section id="editor" class="panel is-disabled">
+      <div class="text-toolbar">
+        <label class="field">Especie<select id="species" disabled></select></label>
+        <button id="open" class="secondary-button" disabled>Abrir</button>
+      </div>
+      <p class="status neutral">Los controles de compatibilidad muestran las entradas de Windows; los bits reservados se mantienen al exportar.</p>
+      <div id="fields" class="personal-grid"></div>
+    </section>
+    <section class="panel output-panel text-export">
+      <div class="ready-row">
+        <div><b id="summary">Sin cambios para exportar</b><small>El juego original no se modifica.</small></div>
+        <button id="export" class="primary" disabled>Exportar →</button>
+      </div>
+      <p id="result" class="status neutral"></p>
+    </section>
+  </main>
+  <footer>pk3DS Mac trabaja de forma local.</footer>
+  <script src="personal.js?v=4"></script>
+</body>
+</html>

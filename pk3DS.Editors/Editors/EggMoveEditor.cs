@@ -39,7 +39,7 @@ public static class EggMoveEditor
         : new EggMoves7(garc.Files[index]);
 
     private static int RequireSpecies(GARCFile garc, int speciesIndex) =>
-        speciesIndex >= 0 && speciesIndex < garc.Files.Length
+        speciesIndex > 0 && speciesIndex < garc.Files.Length
             ? speciesIndex
             : throw new WorkspaceException("La especie indicada no existe.");
 }

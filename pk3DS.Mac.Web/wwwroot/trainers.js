@@ -74,6 +74,33 @@ function card(title) {
   return node;
 }
 
+function blankPokemon() {
+  return {
+    species: 0,
+    form: 0,
+    level: 1,
+    item: 0,
+    moves: [0, 0, 0, 0],
+    ability: 0,
+    gender: 0,
+    nature: 0,
+    shiny: false,
+    ivs: [0, 0, 0, 0, 0, 0],
+    evs: [0, 0, 0, 0, 0, 0],
+  };
+}
+
+function resizeTeam(size) {
+  const nextSize = Math.max(1, Math.min(6, size));
+  if (nextSize > data.team.length) {
+    while (data.team.length < nextSize)
+      data.team.push(blankPokemon());
+  } else if (nextSize < data.team.length) {
+    data.team.splice(nextSize);
+  }
+  render();
+}
+
 function render() {
   const box = $('details');
   box.replaceChildren();
@@ -96,6 +123,7 @@ function render() {
     label('Modo', select(modes, data.mode, { field: 'mode' })),
     label('IA', number(data.ai, 0, 255, { field: 'ai' })),
     label('Dinero', number(data.money, 0, 255, { field: 'money' })),
+    ...(gen6 ? [label('Premio', select(catalog.items, data.prize, { field: 'prize' }))] : []),
   );
 
   const flagInput = Object.assign(document.createElement('input'), { type: 'checkbox', checked: data.flag });
@@ -127,6 +155,27 @@ function render() {
 
   const team = document.createElement('div');
   team.className = 'trainer-team';
+  const teamToolbar = document.createElement('div');
+  teamToolbar.className = 'trainer-team-toolbar';
+  const teamSize = document.createElement('b');
+  teamSize.textContent = `Equipo (${data.team.length}/6)`;
+  const teamActions = document.createElement('div');
+  teamActions.className = 'trainer-team-actions';
+  const addPokemon = document.createElement('button');
+  addPokemon.type = 'button';
+  addPokemon.className = 'secondary-button';
+  addPokemon.dataset.teamAction = 'add';
+  addPokemon.textContent = 'Añadir Pokémon';
+  addPokemon.disabled = data.team.length >= 6;
+  const removePokemon = document.createElement('button');
+  removePokemon.type = 'button';
+  removePokemon.className = 'secondary-button';
+  removePokemon.dataset.teamAction = 'remove';
+  removePokemon.textContent = 'Quitar Pokémon';
+  removePokemon.disabled = data.team.length <= 1;
+  teamActions.append(addPokemon, removePokemon);
+  teamToolbar.append(teamSize, teamActions);
+  team.append(teamToolbar);
   data.team.forEach((poke, index) => {
     const node = card(`Pokémon ${index + 1}`);
     node.append(
@@ -242,6 +291,11 @@ $('details').oninput = event => {
     }
   }
   ui();
+};
+$('details').onclick = event => {
+  const action = event.target.dataset.teamAction;
+  if (!data || !action) return;
+  resizeTeam(action === 'add' ? data.team.length + 1 : data.team.length - 1);
 };
 $('details').onchange = event => {
   const field = event.target.dataset;

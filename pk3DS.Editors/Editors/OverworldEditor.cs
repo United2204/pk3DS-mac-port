@@ -350,14 +350,19 @@ public static class OverworldEditor
                 Guard.Gen7(config, "entidades del mundo");
                 var garc = config.GetlzGARCData("encdata");
                 var fileIndex = RequireGen7WorldFileIndex(garc.FileCount, request.WorldIndex);
-                var ed = ReadMini(garc[fileIndex], Gen7EntityIdentifier);
-                var epIndex = FindMiniBlock(ed, "EP");
-                if (epIndex < 0)
-                    throw new WorkspaceException("La zona Gen. VII no contiene un bloque EP editable.");
+                var sourceEd = garc[fileIndex];
+                var ed = ReadMini(sourceEd, Gen7EntityIdentifier);
+                if (request.Positions is not null)
+                {
+                    var epIndex = FindMiniBlock(ed, "EP");
+                    if (epIndex < 0)
+                        throw new WorkspaceException("La zona Gen. VII no contiene un bloque EP editable.");
 
-                var entries = ReadMini(ed[epIndex], "EP");
-                ApplyGen7EntityPositions(entries, request.Positions ?? []);
-                ed[epIndex] = Mini.PackMini(entries, "EP");
+                    var sourceEp = ed[epIndex];
+                    var entries = ReadMini(sourceEp, "EP");
+                    ApplyGen7EntityPositions(entries, request.Positions);
+                    ed[epIndex] = PackMiniPreservingEnvelope(sourceEp, entries, "EP");
+                }
 
                 var emIndex = FindMiniBlock(ed, "EM");
                 if (request.EmPositions is null)
@@ -370,9 +375,10 @@ public static class OverworldEditor
                 }
                 else
                 {
-                    var emEntries = ReadMini(ed[emIndex], "EM");
+                    var sourceEm = ed[emIndex];
+                    var emEntries = ReadMini(sourceEm, "EM");
                     ApplyGen7EmPositions(emEntries, request.EmPositions);
-                    ed[emIndex] = Mini.PackMini(emEntries, "EM");
+                    ed[emIndex] = PackMiniPreservingEnvelope(sourceEm, emEntries, "EM");
                 }
 
                 if (request.EiPositions is not null)
@@ -420,7 +426,7 @@ public static class OverworldEditor
                     ApplyGen7EtPositions(ed, request.EtPositions);
                 }
 
-                garc[fileIndex] = Mini.PackMini(ed, Gen7EntityIdentifier);
+                garc[fileIndex] = PackMiniPreservingEnvelope(sourceEd, ed, Gen7EntityIdentifier);
                 garc.Save();
                 return [config.GetGARCFileName("encdata")];
             });
@@ -2998,7 +3004,7 @@ public static class OverworldEditor
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
             }
-            blocks[blockIndex] = Mini.PackMini(entries, "EI");
+            blocks[blockIndex] = PackMiniPreservingEnvelope(blocks[blockIndex], entries, "EI");
         }
     }
 
@@ -3138,7 +3144,7 @@ public static class OverworldEditor
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + sizeof(float));
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + (sizeof(float) * 2));
             }
-            blocks[blockIndex] = Mini.PackMini(entries, "PR");
+            blocks[blockIndex] = PackMiniPreservingEnvelope(blocks[blockIndex], entries, "PR");
         }
     }
 
@@ -3382,7 +3388,7 @@ public static class OverworldEditor
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
             }
-            blocks[blockIndex] = Mini.PackMini(entries, "EB");
+            blocks[blockIndex] = PackMiniPreservingEnvelope(blocks[blockIndex], entries, "EB");
         }
     }
 
@@ -3555,7 +3561,7 @@ public static class OverworldEditor
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + sizeof(float));
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + (sizeof(float) * 2));
             }
-            blocks[blockIndex] = Mini.PackMini(entries, "EG");
+            blocks[blockIndex] = PackMiniPreservingEnvelope(blocks[blockIndex], entries, "EG");
         }
     }
 
@@ -3716,7 +3722,7 @@ public static class OverworldEditor
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
             }
-            blocks[blockIndex] = Mini.PackMini(entries, "ES");
+            blocks[blockIndex] = PackMiniPreservingEnvelope(blocks[blockIndex], entries, "ES");
         }
     }
 
@@ -3766,6 +3772,12 @@ public static class OverworldEditor
         {
             var kindOffset = sizeof(int) + (recordIndex * Gen7EsRecordSize);
             if (BitConverter.ToInt32(entry, kindOffset) != Gen7EsRecordKind)
+                return false;
+
+            var positionOffset = Gen7EsPositionOffset + (recordIndex * Gen7EsRecordSize);
+            if (!IsValidGen7Coordinate(BitConverter.ToSingle(entry, positionOffset))
+                || !IsValidGen7Coordinate(BitConverter.ToSingle(entry, positionOffset + sizeof(float)))
+                || !IsValidGen7Coordinate(BitConverter.ToSingle(entry, positionOffset + (sizeof(float) * 2))))
                 return false;
         }
 
@@ -3911,7 +3923,7 @@ public static class OverworldEditor
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
             }
-            blocks[blockIndex] = Mini.PackMini(entries, "EA");
+            blocks[blockIndex] = PackMiniPreservingEnvelope(blocks[blockIndex], entries, "EA");
         }
     }
 
@@ -4125,7 +4137,7 @@ public static class OverworldEditor
                 BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
                 BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
             }
-            blocks[blockIndex] = Mini.PackMini(entries, "ET");
+            blocks[blockIndex] = PackMiniPreservingEnvelope(blocks[blockIndex], entries, "ET");
         }
     }
 
@@ -4463,6 +4475,44 @@ public static class OverworldEditor
         }
 
         return Mini.UnpackMini(data, identifier) ?? [];
+    }
+
+    /// <summary>
+    /// Rebuilds a Mini file without discarding reserved bytes before its first payload or a
+    /// trailer after its final offset. The record count must remain unchanged because callers
+    /// export edits to existing entries rather than inserting or removing them.
+    /// </summary>
+    private static byte[] PackMiniPreservingEnvelope(byte[] source, byte[][] files, string identifier)
+    {
+        if (source is null || source.Length == 0)
+            return Mini.PackMini(files, identifier);
+        if (source.Length < 8 || source[0] != identifier[0] || source[1] != identifier[1])
+            throw new WorkspaceException($"El mini-archivo OWSE no tiene la firma {identifier} esperada.");
+
+        var count = BitConverter.ToUInt16(source, 2);
+        if (files is null || files.Length != count)
+            throw new WorkspaceException("La cantidad de entradas del mini-archivo debe conservarse al exportar.");
+        if (!Mini.TryGetDataStart(source, out var dataStart))
+            throw new WorkspaceException("La cabecera del mini-archivo OWSE no es válida para preservar sus bytes reservados.");
+
+        var tableEnd = checked(8 + (count * sizeof(uint)));
+        var payloadEnd = checked((int)BitConverter.ToUInt32(source, 4 + (count * sizeof(uint))));
+        if (dataStart < tableEnd || payloadEnd < dataStart || payloadEnd > source.Length)
+            throw new WorkspaceException("El límite de datos del mini-archivo OWSE es inválido.");
+
+        var packed = Mini.PackMini(files, identifier);
+        packed = Mini.AdjustMiniHeader(packed, dataStart);
+        if (dataStart > tableEnd)
+            Buffer.BlockCopy(source, tableEnd, packed, tableEnd, dataStart - tableEnd);
+
+        var trailerLength = source.Length - payloadEnd;
+        if (trailerLength == 0)
+            return packed;
+
+        var result = new byte[checked(packed.Length + trailerLength)];
+        Buffer.BlockCopy(packed, 0, result, 0, packed.Length);
+        Buffer.BlockCopy(source, payloadEnd, result, packed.Length, trailerLength);
+        return result;
     }
 
     private static OverworldScriptEntryResponse Describe(

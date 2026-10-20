@@ -38,4 +38,4 @@ La única `PR` tipo `364` de la muestra aparece en el mundo 284: entrada de `0x2
 
 Las demás variantes de `EG` y `ES` se conservan intactas y pueden exportarse con **Exportar ED crudo**. No se habilita edición por similitud de tamaño: para pasar una variante a editable hay que confirmar su cabecera, stride, offset y cola contra datos reales.
 
-La referencia de los campos confirmados vive en `OverworldEditor.cs`. EM tipo 3, EB tipo 11, EG tipo 8 y PR tipo 364 se identificaron en muestras retail; todavía falta un round-trip de exportación dedicado para esos perfiles y validar los cambios en juego.
+La referencia de los campos confirmados vive en `OverworldEditor.cs`. Al exportar posiciones Gen. VII, el empaquetador conserva también los bytes reservados entre la tabla y el primer payload, y los bytes posteriores al último offset de cada Mini ED modificado. EM tipo 3, EB tipo 11, EG tipo 8 y PR tipo 364 se identificaron en muestras retail; todavía falta un round-trip de exportación dedicado para esos perfiles y validar los cambios en juego.

@@ -47,7 +47,7 @@
                 <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender cada MT."><input id="tm" type="checkbox"><span>Compatibilidad MT</span></label>
                 <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender cada MO."><input id="hm" type="checkbox"><span>Compatibilidad MO</span></label>
                 <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender movimientos de los tutores asociados a tipos."><input id="type-tutors" type="checkbox"><span>Tutores por tipo</span></label>
-                <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender movimientos de los tutores de OR/AS. No se aplica a otros juegos."><input id="move-tutors" type="checkbox"><span>Tutores de OR/AS</span></label>
+                <label class="check-card tooltip" data-tooltip="Cambia qué especies pueden aprender movimientos de los tutores de OR/AS o de los tutores de playa de US/UM."><input id="move-tutors" type="checkbox"><span>Tutores de OR/AS y US/UM</span></label>
                 <label class="check-card tooltip" data-tooltip="Permite que Superguarda pueda salir al randomizar habilidades. Desmárcalo para excluirla."><input id="wonder-guard" type="checkbox" checked><span>Permitir Superguarda</span></label>
               </div>
               <div class="stat-choices dependent" data-requires="stats">
@@ -75,7 +75,8 @@
                   <label class="check-card tooltip" data-bulk-choice data-tooltip="Quita MT y tutores, pero conserva las MO para no bloquear el progreso de la historia."><input id="remove-tutors" type="checkbox"><span>Quitar compatibilidad de tutores</span></label>
                   <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles con todas las MT a todas las especies."><input id="full-tm" type="checkbox"><span>Compatibilidad total de MT</span></label>
                   <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles con todas las MO a todas las especies. En Gen. VII no hay MO."><input id="full-hm" type="checkbox"><span>Compatibilidad total de MO</span></label>
-                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles con todos los tutores por tipo a todas las especies."><input id="full-tutor" type="checkbox"><span>Compatibilidad total de tutores</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles a todas las especies con los tutores de movimientos por tipo."><input id="full-tutor" type="checkbox"><span>Compatibilidad total de tutores por tipo</span></label>
+                  <label class="check-card tooltip" data-bulk-choice data-tooltip="Hace compatibles a todas las especies con los 67 tutores de playa visibles en Ultrasol y Ultraluna."><input id="full-beach-tutor" type="checkbox"><span>Compatibilidad total de tutores de playa</span></label>
                 </div>
                 <div class="number-settings">
                   <label class="field tooltip" data-tooltip="Al activarlo, multiplica la experiencia base de todas las especies por este porcentaje. 100% no modifica los valores."><span class="check-field"><input id="base-exp" type="checkbox"> Experiencia base</span><div class="suffix-input"><input id="base-exp-percent" type="number" min="0" max="500" value="100" disabled><span>%</span></div></label>
@@ -94,6 +95,8 @@
                   <label class="check-card tooltip" data-tooltip="Ordena la lista para que los movimientos menos potentes aparezcan antes."><input id="power-order" type="checkbox" checked><span>Ordenar por potencia</span></label>
                   <label class="check-card tooltip" data-tooltip="Da cuatro movimientos desde el nivel 1, como si el Pokémon acabara de ser recibido."><input id="four-level-one" type="checkbox"><span>Cuatro movimientos al nivel 1</span></label>
                   <label class="check-card tooltip" data-tooltip="Excluye movimientos cuyo daño no depende de estadísticas, como SonicBoom o Furia Dragón."><input id="no-fixed" type="checkbox"><span>Excluir daño fijo</span></label>
+                  <label class="check-card tooltip" data-tooltip="Reemplaza la lista completa de cada especie por Metronome al nivel 1, como el botón global de Level Up Moves en Windows."><input id="learn-metronome" type="checkbox"><span>Modo Metronome global</span></label>
+                  <label class="check-card tooltip" data-tooltip="Permite que el randomizador de movimientos por nivel elija los siete movimientos HM de Gen. VI."><input id="learn-allow-hms" type="checkbox"><span>Permitir HMs</span></label>
                 </div>
                 <div class="number-settings">
                   <label class="field tooltip" data-tooltip="Cantidad máxima de movimientos por especie después de randomizar.">Movimientos por especie<input id="move-count" type="number" min="1" max="75" value="25"></label>
@@ -109,6 +112,7 @@
                 <div class="check-grid three-columns">
                   <label class="check-card tooltip" data-tooltip="Completa la lista de movimientos huevo de cada especie hasta la cantidad indicada abajo."><input id="egg-expand" type="checkbox" checked><span>Completar lista de movimientos</span></label>
                   <label class="check-card tooltip" data-tooltip="Da prioridad a movimientos del mismo tipo que el Pokémon al crear la lista de crianza."><input id="egg-stab" type="checkbox" checked><span>Favorecer movimientos STAB</span></label>
+                  <label class="check-card tooltip" data-tooltip="Permite que el randomizador de movimientos huevo elija los siete movimientos HM de Gen. VI."><input id="egg-allow-hms" type="checkbox"><span>Permitir HMs</span></label>
                 </div>
                 <div class="number-settings">
                   <label class="field tooltip" data-tooltip="Cantidad máxima de movimientos huevo que recibirá cada especie.">Movimientos por especie<input id="egg-move-count" type="number" min="1" max="18" value="18"></label>
@@ -204,7 +208,7 @@
               <div class="check-grid three-columns">
                 <label class="check-card tooltip" data-tooltip="Asigna un tipo aleatorio a cada movimiento, excepto Struggle y Curse, que se conservan como en pk3DS Windows."><input id="move-types" type="checkbox"><span>Randomizar tipos</span></label>
                 <label class="check-card tooltip" data-tooltip="Cambia entre físico y especial los movimientos que ya hacen daño. Los movimientos de estado se conservan."><input id="move-categories" type="checkbox"><span>Randomizar categorías</span></label>
-                <label class="check-card tooltip" data-tooltip="Deja los PP de todos los movimientos en 0, salvo Metronome (40) y Mimic (1). Es una modificación extrema."><input id="metronome-mode" type="checkbox"><span>Modo Metronome</span></label>
+                <label class="check-card tooltip" data-tooltip="Deja los PP de todos los movimientos en 0, salvo Metronome (40) y Tackle (1), como el modo de Windows. Es una modificación extrema."><input id="metronome-mode" type="checkbox"><span>Modo Metronome</span></label>
               </div>
             </article>
 

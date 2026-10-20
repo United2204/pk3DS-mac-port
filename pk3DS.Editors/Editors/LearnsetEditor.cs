@@ -5,12 +5,16 @@ namespace pk3DS.Editors;
 /// <summary>Level-up movesets: one list of (level, move) pairs per species/form entry.</summary>
 public static class LearnsetEditor
 {
+    internal const int MetronomeMoveId = 118;
+
     public static LearnsetCatalogResponse GetCatalog(LearnsetCatalogRequest request)
     {
         var (workspace, config) = EditorSession.OpenReadOnly(request.WorkspacePath, request.Language);
         var names = config.GetText(TextName.SpeciesNames);
         var species = config.Learnsets.Select((set, index) => new LearnsetSpeciesSummary(index,
-            index < names.Length && !string.IsNullOrWhiteSpace(names[index]) ? names[index] : $"Forma {index:000}", set.Count)).ToArray();
+                index < names.Length && !string.IsNullOrWhiteSpace(names[index]) ? names[index] : $"Forma {index:000}", set.Count))
+            .Where(entry => entry.Id > 0)
+            .ToArray();
         // Blank move names are dropped rather than given a placeholder: this list is the picker
         // for a single learnset slot, and unnamed ids are not selectable moves.
         var moves = config.GetText(TextName.MoveNames)
@@ -27,6 +31,15 @@ public static class LearnsetEditor
         return new LearnsetTableResponse(request.SpeciesIndex,
             set.Moves.Select((move, index) => new LearnsetEntry(Math.Clamp(set.Levels[index], 1, 100), move)).ToArray());
     }
+
+    public static ExportResult ExportMetronome(LearnsetMetronomeExportRequest request) =>
+        EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId, request.Language,
+            "levelup-metronome", [], config =>
+            {
+                ApplyMetronome(config);
+                GarcWriter.SaveLearnsets(config);
+                return [config.GetGARCFileName("levelup")];
+            });
 
     public static ExportResult Export(LearnsetExportRequest request) =>
         EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId, request.Language,
@@ -45,8 +58,18 @@ public static class LearnsetEditor
                 return [config.GetGARCFileName("levelup")];
             });
 
+    internal static void ApplyMetronome(GameConfig config)
+    {
+        for (var index = 1; index < config.Learnsets.Length; index++)
+        {
+            var set = config.Learnsets[index];
+            set.Moves = [MetronomeMoveId];
+            set.Levels = [1];
+        }
+    }
+
     private static int RequireSpecies(GameConfig config, int speciesIndex) =>
-        speciesIndex >= 0 && speciesIndex < config.Learnsets.Length
+        speciesIndex > 0 && speciesIndex < config.Learnsets.Length
             ? speciesIndex
             : throw new WorkspaceException("La especie indicada no existe.");
 }

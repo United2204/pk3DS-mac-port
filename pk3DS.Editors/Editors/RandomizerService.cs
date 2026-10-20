@@ -30,6 +30,14 @@ public static class RandomizerService
     // Struggle (165) and Shadow Blast (621) are never valid randomizer output.
     // A fresh array per read: the randomizers take ownership of what they are handed.
     private static int[] AlwaysBannedMoves => [165, 621];
+    // USUM exposes the first 67 bits of PersonalInfoSM's 80-bit special-tutor field.
+    // The trailing 13 bits are reserved/hidden and must survive bulk compatibility edits.
+    private const int UsumBeachTutorCount = 67;
+    // Windows uses this fallback list for both Gen. VI Level Up and Egg Move randomizers.
+    // The optional ExeFS refresh in those forms only runs when HMs are allowed and therefore
+    // does not affect the effective ban list.
+    private static readonly int[] Gen6HmMoves = [15, 19, 57, 70, 127, 249, 291];
+    private static readonly int[] OrasTutorBitCounts = [15, 17, 16, 15];
 
     private static readonly (int Species, ushort[] Items)[] MegaOptionsXY =
     [
@@ -77,14 +85,15 @@ public static class RandomizerService
             : Array.Empty<string>();
         if (trainers.ForceHighPower || trainers.UseCurrentLearnsetMoves)
             trainerGarcs = trainerGarcs.Append("levelup");
+        var hmMoves = workspace.Version is GameVersion.XY or GameVersion.ORAS or GameVersion.ORASDEMO ? Gen6HmMoves : Array.Empty<int>();
 
         return EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId, request.Language,
             "randomizer", wildGarcs.Concat(trainerGarcs), config => RandomizeData(config, request.Seed,
-                personal, learnsets, eggMoves, moves, evolutions, wild, trainers));
+                hmMoves, personal, learnsets, eggMoves, moves, evolutions, wild, trainers));
     }
 
     private static List<string> RandomizeData(GameConfig config, int? seed,
-        PersonalOptions personal, LearnsetOptions learnsets, EggMoveOptions eggMoves, MoveOptions moves,
+        int[] hmMoves, PersonalOptions personal, LearnsetOptions learnsets, EggMoveOptions eggMoves, MoveOptions moves,
         EvolutionOptions evolutions, WildRandomizerOptions wild, TrainerRandomizerOptions trainers)
     {
         return WithRandomizerSeed(seed, () =>
@@ -101,14 +110,14 @@ public static class RandomizerService
 
             if (learnsets.Enabled)
             {
-                RandomizeLearnsets(config, learnsets);
+                RandomizeLearnsets(config, learnsets, hmMoves);
                 GarcWriter.SaveLearnsets(config);
                 changed.Add(config.GetGARCFileName("levelup"));
             }
 
             if (eggMoves.Enabled)
             {
-                RandomizeEggMoves(config, eggMoves);
+                RandomizeEggMoves(config, eggMoves, hmMoves);
                 changed.Add(config.GetGARCFileName("eggmove"));
             }
 
@@ -155,7 +164,9 @@ public static class RandomizerService
             ModifyLearnsetTM = options.RandomizeTmCompatibility,
             ModifyLearnsetHM = options.RandomizeHmCompatibility,
             ModifyLearnsetTypeTutors = options.RandomizeTypeTutors,
-            ModifyLearnsetMoveTutors = config.ORAS && options.RandomizeMoveTutors,
+            // OR/AS uses the four special-tutor groups; USUM uses its visible Beach Tutor bits.
+            // Both are handled by PersonalRandomizer.RandomizeSpecialTutors at 30% per bit.
+            ModifyLearnsetMoveTutors = (config.ORAS || config.USUM) && options.RandomizeMoveTutors,
             ModifyStats = options.RandomizeStats,
             ShuffleStats = options.ShuffleStats,
             StatsToRandomize = NormalizeStats(options.StatsToRandomize),
@@ -202,12 +213,19 @@ public static class RandomizerService
 
             if (options.RemoveTutorCompatibility)
             {
-                // Windows keeps HMs (bits after index 100) for story progression.
+                // Match Windows' visible range: clear compatibility entries through index 100.
                 for (var i = 0; i < Math.Min(101, species.TMHM.Length); i++)
                     species.TMHM[i] = false;
-                Array.Fill(species.TypeTutors, false);
-                foreach (var tutorSet in species.SpecialTutors)
-                    Array.Fill(tutorSet, false);
+                SetVisibleBits(species.TypeTutors, false, VisibleTypeTutorCount(config));
+                if (config.ORAS)
+                {
+                    for (var tutor = 0; tutor < Math.Min(OrasTutorBitCounts.Length, species.SpecialTutors.Length); tutor++)
+                        SetVisibleBits(species.SpecialTutors[tutor], false, OrasTutorBitCounts[tutor]);
+                }
+                else if (config.USUM && species.SpecialTutors.Length > 0)
+                {
+                    SetVisibleBits(species.SpecialTutors[0], false, UsumBeachTutorCount);
+                }
             }
             if (options.FullTmCompatibility)
             {
@@ -220,12 +238,35 @@ public static class RandomizerService
                     species.TMHM[i] = true;
             }
             if (options.FullMoveTutorCompatibility)
-                Array.Fill(species.TypeTutors, true);
+                SetVisibleBits(species.TypeTutors, true, VisibleTypeTutorCount(config));
+            if (options.FullBeachTutorCompatibility && config.USUM && species.SpecialTutors.Length > 0)
+                SetVisibleBits(species.SpecialTutors[0], true, UsumBeachTutorCount);
         }
     }
 
-    private static void RandomizeLearnsets(GameConfig config, LearnsetOptions options)
+    private static int VisibleTypeTutorCount(GameConfig config) =>
+        config.Generation == 6 && !config.ORAS ? 7 : 8;
+
+    private static void SetVisibleBits(bool[] bits, bool value, int count)
     {
+        for (var i = 0; i < Math.Min(count, bits.Length); i++)
+            bits[i] = value;
+    }
+
+    private static void RandomizeLearnsets(GameConfig config, LearnsetOptions options, int[] hmMoves)
+    {
+        if (options.MetronomeMode)
+        {
+            LearnsetEditor.ApplyMetronome(config);
+            return;
+        }
+
+        int[] banned = config.Generation == 7
+            // LevelUpEditor7 also excludes Dark Void (464) and every Z-Move.
+            ? [.. AlwaysBannedMoves, 464, .. Legal.Z_Moves]
+            : options.AllowHMs
+                ? AlwaysBannedMoves
+                : [.. AlwaysBannedMoves, .. hmMoves];
         new LearnsetRandomizer(config, config.Learnsets)
         {
             Expand = options.Expand,
@@ -239,12 +280,12 @@ public static class RandomizerService
             OrderByPower = options.OrderByPower,
             Learn4Level1 = options.FourMovesAtLevel1,
             BannedMoves = options.ExcludeFixedDamage
-                ? [.. AlwaysBannedMoves, .. MoveRandomizer.FixedDamageMoves]
-                : AlwaysBannedMoves,
+                ? [.. banned, .. MoveRandomizer.FixedDamageMoves]
+                : banned,
         }.Execute();
     }
 
-    private static void RandomizeEggMoves(GameConfig config, EggMoveOptions options)
+    private static void RandomizeEggMoves(GameConfig config, EggMoveOptions options, int[] hmMoves)
     {
         var garc = config.GetGARCData("eggmove");
         EggMoves[] sets = config.Generation == 6
@@ -254,6 +295,8 @@ public static class RandomizerService
         int[] banned = config.Generation == 7
             ? [.. AlwaysBannedMoves, 464, .. Legal.Z_Moves]
             : AlwaysBannedMoves;
+        if (!options.AllowHMs)
+            banned = [.. banned, .. hmMoves];
 
         new EggMoveRandomizer(config, sets)
         {
@@ -289,7 +332,7 @@ public static class RandomizerService
 
         // Same values used by the Windows "Metronome Mode" button.
         for (var moveId = 1; moveId < config.Moves.Length; moveId++)
-            config.Moves[moveId].PP = moveId switch { 117 => 40, 32 => 1, _ => 0 };
+            config.Moves[moveId].PP = moveId switch { 118 => 40, 33 => 1, _ => 0 };
     }
 
     private static void RandomizeEvolutions(GameConfig config, EvolutionOptions options)

@@ -62,7 +62,7 @@ function updateTrainerMoveOptions() {
 }
 function updateGameSpecificOptions() {
   const version = inspectedGame?.gameVersion;
-  const generation6 = ['XY', 'ORAS'].includes(version);
+  const generation6 = ['XY', 'ORAS', 'ORASDEMO'].includes(version);
   const generation7 = ['SM', 'USUM'].includes(version);
   setGameSpecificState('abilities', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('held-items', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
@@ -72,10 +72,13 @@ function updateGameSpecificOptions() {
   setGameSpecificState('stats', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('tm', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('type-tutors', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
-  setGameSpecificState('move-tutors', version === 'ORAS' && moduleAvailable('personal'), 'Solo OR/AS contiene estos tutores y requieren el GARC personal.');
+  setGameSpecificState('move-tutors', (version === 'ORAS' || version === 'USUM') && moduleAvailable('personal'), 'OR/AS y US/UM contienen estos tutores y requieren el GARC personal.');
   setGameSpecificState('wonder-guard', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('learnsets', moduleAvailable('levelup'), 'Este workspace no contiene el GARC levelup.');
+  setGameSpecificState('learn-metronome', (generation6 || generation7) && moduleAvailable('levelup'), 'Los movimientos por nivel requieren un juego de Gen. VI o Gen. VII y el GARC levelup.');
+  setGameSpecificState('learn-allow-hms', generation6 && moduleAvailable('levelup'), 'Permitir HMs solo está definido para el randomizador de movimientos por nivel de Gen. VI.');
   setGameSpecificState('egg-moves', moduleAvailable('eggmove'), 'Este workspace no contiene el GARC eggmove.');
+  setGameSpecificState('egg-allow-hms', generation6 && moduleAvailable('eggmove'), 'Permitir HMs solo está definido para el randomizador de movimientos huevo de Gen. VI.');
   setGameSpecificState('move-types', moduleAvailable('moves'), 'Este workspace no contiene el GARC move.');
   setGameSpecificState('move-categories', moduleAvailable('moves'), 'Este workspace no contiene el GARC move.');
   setGameSpecificState('metronome-mode', moduleAvailable('moves'), 'Este workspace no contiene el GARC move.');
@@ -86,6 +89,7 @@ function updateGameSpecificOptions() {
   setGameSpecificState('full-hm', generation6 && moduleAvailable('personal'), 'Sol/Luna y Ultrasol/Ultraluna no tienen MO o falta el GARC personal.');
   for (const id of ['no-evs', 'fast-growth', 'quick-hatch', 'remove-tutors', 'full-tm', 'full-tutor', 'base-exp', 'fixed-catch-rate'])
     setGameSpecificState(id, moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
+  setGameSpecificState('full-beach-tutor', version === 'USUM' && moduleAvailable('personal'), 'Los tutores de playa solo existen en Ultrasol y Ultraluna.');
   setGameSpecificState('wild', (generation6 || generation7) && moduleAvailable('wild'), 'Los encuentros salvajes requieren sus GARCs completos de Gen. VI o Gen. VII.');
   setGameSpecificState('wild-hordes', generation6, 'Las hordas son exclusivas de los encuentros Gen. VI.');
   setGameSpecificState('trainer-randomizer', (generation6 || generation7) && moduleAvailable('trainers'), 'Los equipos requieren trclass, trdata, trpoke y gametext del juego.');
@@ -223,9 +227,9 @@ byId('randomize').addEventListener('click', async () => {
       workspacePath: workspace.value, outputDirectory: output.path, titleId: inspectedGame.titleId, language: 2,
       seed,
       randomizeAbilities: checked('abilities'), randomizeHeldItems: checked('held-items'), randomizeLearnsets: checked('learnsets'),
-      personal: { randomizeAbilities: checked('abilities'), allowWonderGuard: checked('wonder-guard'), randomizeHeldItems: checked('held-items'), randomizeCatchRate: checked('catch-rate'), randomizeTmCompatibility: checked('tm'), randomizeHmCompatibility: checked('hm'), randomizeTypeTutors: checked('type-tutors'), randomizeMoveTutors: checked('move-tutors'), randomizeStats: checked('stats'), shuffleStats: checked('shuffle-stats'), statsToRandomize: ['stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe'].map(checked), statDeviation: number('stat-deviation'), randomizeTypes: checked('types'), sameTypeChance: number('same-type'), randomizeEggGroups: checked('egg-groups'), sameEggGroupChance: number('same-egg'), removeEvYields: checked('no-evs'), setFastGrowth: checked('fast-growth'), baseExperiencePercent: checked('base-exp') ? number('base-exp-percent') : null, quickHatch: checked('quick-hatch'), setCatchRate: checked('fixed-catch-rate') ? number('fixed-catch-rate-value') : null, removeTutorCompatibility: checked('remove-tutors'), fullTmCompatibility: checked('full-tm'), fullHmCompatibility: checked('full-hm'), fullMoveTutorCompatibility: checked('full-tutor') },
-      learnsets: { enabled: checked('learnsets'), expand: checked('expand'), moveCount: number('move-count'), spread: checked('spread'), maxLevel: number('max-level'), stab: checked('stab'), stabPercent: number('stab-percent'), orderByPower: checked('power-order'), fourMovesAtLevel1: checked('four-level-one'), excludeFixedDamage: checked('no-fixed') },
-      eggMoves: { enabled: checked('egg-moves'), expand: checked('egg-expand'), moveCount: number('egg-move-count'), stab: checked('egg-stab'), stabPercent: number('egg-stab-percent') },
+      personal: { randomizeAbilities: checked('abilities'), allowWonderGuard: checked('wonder-guard'), randomizeHeldItems: checked('held-items'), randomizeCatchRate: checked('catch-rate'), randomizeTmCompatibility: checked('tm'), randomizeHmCompatibility: checked('hm'), randomizeTypeTutors: checked('type-tutors'), randomizeMoveTutors: checked('move-tutors'), randomizeStats: checked('stats'), shuffleStats: checked('shuffle-stats'), statsToRandomize: ['stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe'].map(checked), statDeviation: number('stat-deviation'), randomizeTypes: checked('types'), sameTypeChance: number('same-type'), randomizeEggGroups: checked('egg-groups'), sameEggGroupChance: number('same-egg'), removeEvYields: checked('no-evs'), setFastGrowth: checked('fast-growth'), baseExperiencePercent: checked('base-exp') ? number('base-exp-percent') : null, quickHatch: checked('quick-hatch'), setCatchRate: checked('fixed-catch-rate') ? number('fixed-catch-rate-value') : null, removeTutorCompatibility: checked('remove-tutors'), fullTmCompatibility: checked('full-tm'), fullHmCompatibility: checked('full-hm'), fullMoveTutorCompatibility: checked('full-tutor'), fullBeachTutorCompatibility: checked('full-beach-tutor') },
+      learnsets: { enabled: checked('learnsets'), expand: checked('expand'), moveCount: number('move-count'), spread: checked('spread'), maxLevel: number('max-level'), stab: checked('stab'), stabPercent: number('stab-percent'), orderByPower: checked('power-order'), fourMovesAtLevel1: checked('four-level-one'), excludeFixedDamage: checked('no-fixed'), allowHMs: checked('learn-allow-hms'), metronomeMode: checked('learn-metronome') },
+      eggMoves: { enabled: checked('egg-moves'), expand: checked('egg-expand'), moveCount: number('egg-move-count'), stab: checked('egg-stab'), stabPercent: number('egg-stab-percent'), allowHMs: checked('egg-allow-hms') },
       moves: { randomizeType: checked('move-types'), randomizeCategory: checked('move-categories'), metronomeMode: checked('metronome-mode') },
       evolutions: { mode: getEvolutionMode(), matchBst: checked('evo-bst'), matchExperience: checked('evo-exp'), matchType: checked('evo-type'), includeLegendary: checked('evo-legendary'), includeMythical: checked('evo-mythical') },
       wild: { enabled: checked('wild'), randomizeSpecies: checked('wild-species'), randomizeLevels: checked('wild-levels'), levelMultiplier: number('wild-level-multiplier'), homogeneousHordes: checked('wild-hordes'), matchBst: checked('wild-bst'), includeLegendary: checked('wild-legendary'), includeMythical: checked('wild-mythical') },

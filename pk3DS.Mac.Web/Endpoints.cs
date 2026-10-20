@@ -149,6 +149,7 @@ public static class Endpoints
 
         editors.MapPost("/levelup/catalog", (LearnsetCatalogRequest r) => Results.Ok(LearnsetEditor.GetCatalog(r)));
         editors.MapPost("/levelup/table", (LearnsetTableRequest r) => Results.Ok(LearnsetEditor.GetTable(r)));
+        editors.MapPost("/levelup/metronome", (LearnsetMetronomeExportRequest r) => Results.Ok(LearnsetEditor.ExportMetronome(r)));
         editors.MapPost("/levelup/export", (LearnsetExportRequest r) => Results.Ok(LearnsetEditor.Export(r)));
 
         editors.MapPost("/eggmoves/table", (EggMoveTableRequest r) => Results.Ok(EggMoveEditor.GetTable(r)));

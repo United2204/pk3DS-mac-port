@@ -103,7 +103,7 @@ public static class TrainerEditor
             pokemon.Species, pokemon.Form, pokemon.Level, pokemon.Item,
             pokemon.Moves.Select(move => (int)move).ToArray(), pokemon.Ability, pokemon.Gender,
             Nature: 0, Shiny: false, IVs: [pokemon.IVs, 0, 0, 0, 0, 0], EVs: [0, 0, 0, 0, 0, 0])).ToArray(),
-        HasItems: trainer.Item, HasMoves: trainer.Moves);
+        HasItems: trainer.Item, HasMoves: trainer.Moves, Prize: trainer.Prize);
 
     private static void Apply(TrainerData7 trainer, TrainerEntry entry)
     {
@@ -150,6 +150,8 @@ public static class TrainerEditor
         trainer.AI = (byte)entry.AI;
         trainer.Healer = entry.Flag;
         trainer.Money = (byte)entry.Money;
+        if (entry.Prize is int prize)
+            trainer.Prize = (ushort)prize;
         trainer.Item = entry.HasItems ?? trainer.Item;
         trainer.Moves = entry.HasMoves ?? trainer.Moves;
         Array.Resize(ref trainer.Team, entry.Team.Length);
@@ -180,6 +182,7 @@ public static class TrainerEditor
             || entry.Items.Any(item => item < 0 || item >= itemCount)
             || entry.AI is < 0 or > byte.MaxValue
             || entry.Money is < 0 or > byte.MaxValue
+            || (generation6 && entry.Prize is int prize && (prize < 0 || prize >= itemCount))
             || entry.Team is null || entry.Team.Length is < 1 or > 6
             || entry.Team.Any(pokemon => IsOutOfRange(pokemon, speciesCount, itemCount, moveCount, generation6)))
             throw new WorkspaceException("Los datos del entrenador no son válidos.");

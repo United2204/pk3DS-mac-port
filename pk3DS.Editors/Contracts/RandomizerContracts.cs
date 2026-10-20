@@ -42,9 +42,10 @@ public sealed record PersonalOptions(
     bool RemoveTutorCompatibility = false,
     bool FullTmCompatibility = false,
     bool FullHmCompatibility = false,
-    bool FullMoveTutorCompatibility = false)
+    bool FullMoveTutorCompatibility = false,
+    bool FullBeachTutorCompatibility = false)
 {
-    public bool HasBulkChanges => RemoveEvYields || SetFastGrowth || BaseExperiencePercent is not null || QuickHatch || SetCatchRate is not null || RemoveTutorCompatibility || FullTmCompatibility || FullHmCompatibility || FullMoveTutorCompatibility;
+    public bool HasBulkChanges => RemoveEvYields || SetFastGrowth || BaseExperiencePercent is not null || QuickHatch || SetCatchRate is not null || RemoveTutorCompatibility || FullTmCompatibility || FullHmCompatibility || FullMoveTutorCompatibility || FullBeachTutorCompatibility;
     public bool HasChanges => RandomizeAbilities || RandomizeHeldItems || RandomizeCatchRate || RandomizeTmCompatibility || RandomizeHmCompatibility || RandomizeTypeTutors || RandomizeMoveTutors || RandomizeStats || ShuffleStats || RandomizeTypes || RandomizeEggGroups || HasBulkChanges;
     public static PersonalOptions FromLegacy(bool abilities, bool heldItems) => new(RandomizeAbilities: abilities, RandomizeHeldItems: heldItems);
 }
@@ -60,7 +61,9 @@ public sealed record LearnsetOptions(
     bool StabFirst = true,
     bool OrderByPower = true,
     bool FourMovesAtLevel1 = false,
-    bool ExcludeFixedDamage = false)
+    bool ExcludeFixedDamage = false,
+    bool AllowHMs = false,
+    bool MetronomeMode = false)
 {
     public static LearnsetOptions FromLegacy(bool enabled) => new(Enabled: enabled);
 }
@@ -70,7 +73,8 @@ public sealed record EggMoveOptions(
     bool Expand = true,
     int MoveCount = 18,
     bool Stab = true,
-    decimal StabPercent = 32.1m);
+    decimal StabPercent = 32.1m,
+    bool AllowHMs = false);
 
 public sealed record MoveOptions(
     bool RandomizeType = false,
