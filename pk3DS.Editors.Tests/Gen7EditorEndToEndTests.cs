@@ -592,13 +592,17 @@ public class Gen7EditorEndToEndTests : IDisposable
     }
 
     [Fact]
-    public void MegaTrainerFormsAreRejectedForGen7()
+    public void MegaTrainerFormsCanBeEnabledForGen7()
     {
-        Assert.Throws<WorkspaceException>(() => RandomizerService.Randomize(new RandomizeRequest(
+        var result = RandomizerService.Randomize(new RandomizeRequest(
             _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
             RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
             Trainers: new TrainerRandomizerOptions(
-                Enabled: true, RandomizeSpecies: true, AllowMegaForms: true))));
+                Enabled: true, RandomizeSpecies: true, RandomizeLevels: true, LevelMultiplier: 1.5m,
+                RandomizeClasses: true, AllowMegaForms: true)));
+
+        AssertArchiveContainsChangedFiles(result);
+        ExportAssertions.AssertChangedFileDiffers(result, _workspace, "a/1/0/6");
     }
 
     [Fact]

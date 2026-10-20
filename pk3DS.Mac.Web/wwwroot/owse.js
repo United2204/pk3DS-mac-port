@@ -8,8 +8,11 @@ let mapPropertiesChanged = false;
 let matrixValuesChanged = false;
 let currentGen7Zone;
 let currentGen7Entities;
+let currentGen7MapResources;
 let gen7EntitiesLoading = false;
 let gen7EntitiesRequest = 0;
+let gen7MapResourcesLoading = false;
+let gen7MapResourcesRequest = 0;
 
 async function post(url, body = {}) {
   const response = await fetch(url, {
@@ -51,6 +54,7 @@ function clearEntry() {
   msg('script-result', '');
   currentGen7Zone = undefined;
   $('gen7-zone-fields').classList.add('is-hidden');
+  $('gen7-map-resource-fields').classList.add('is-hidden');
   $('gen7-parent-map').disabled = true;
   $('gen7-world-index').disabled = true;
   $('gen7-area-index').disabled = true;
@@ -73,6 +77,13 @@ function clearEntry() {
   $('gen7-ea-table').replaceChildren();
   $('gen7-et-table').replaceChildren();
   msg('gen7-entity-result', '');
+  currentGen7MapResources = undefined;
+  gen7MapResourcesRequest += 1;
+  gen7MapResourcesLoading = false;
+  $('load-gen7-map-resources').disabled = true;
+  $('export-gen7-map-resources').disabled = true;
+  $('gen7-map-resource-summary').replaceChildren();
+  msg('gen7-map-resource-result', '');
   currentMap = undefined;
   mapPropertiesChanged = false;
   matrixValuesChanged = false;
@@ -93,6 +104,10 @@ function clearEntry() {
   $('map-preview').removeAttribute('src');
   $('map-preview-meta').textContent = '';
   msg('map-preview-result', '');
+  msg('map-batch-result', '');
+  msg('script-batch-result', '');
+  msg('gen7-script-batch-result', '');
+  msg('zone-batch-result', '');
   msg('map-result', '');
   msg('result', '');
 }
@@ -202,10 +217,11 @@ function formatGen7EntityBlock(block) {
 function isConfirmedGen7EntityEntry(block, entry) {
   const confirmed = {
     EP: ['EP primaria'],
-    EM: ['EM principal'],
+    EM: ['EM principal', 'EM tipo 3'],
     EI: ['EI tipo 10'],
-    PR: ['PR tipo 203', 'PR tipo 204'],
-    EB: ['EB tipo 2'],
+    PR: ['PR tipo 203', 'PR tipo 204', 'PR tipo 364'],
+    EB: ['EB tipo 2', 'EB tipo 11'],
+    EG: ['EG tipo 8'],
     ES: ['ES tipo 4'],
     EA: ['EA tipo 5', 'EA tipo 6'],
     ET: ['ET tipo 7', 'ET tipo 9 (tabla de puntos)'],
@@ -218,11 +234,13 @@ function gen7EntityDiagnosticReason(block, entry) {
     return entry.schema;
   const key = `${block.identifier}:${entry.recordKind ?? 'none'}`;
   const reasons = {
-    'EM:3': 'EM tipo 3: tabla anidada variable entre zonas',
     'ET:9': 'ET tipo 9: tabla variable de puntos XYZ',
     'FS:12': 'FS tipo 12: grupos internos variables; solo lectura',
     'FS:13': 'FS tipo 13: estructura variable entre zonas',
-    'PR:364': 'PR tipo 364: registros internos con offsets variables',
+    'PR:364': 'PR tipo 364: el bloque no coincide con el perfil retail confirmado',
+    'EB:11': 'EB tipo 11: marcadores, longitud exacta o coordenadas fuera del perfil confirmado',
+    'EG:8': 'EG tipo 8: marcadores o coordenadas fuera del perfil confirmado',
+    'ES:0': 'ES tipo 0: tabla de descriptores visible; payload variable en crudo',
   };
   if (reasons[key]) return reasons[key];
   if (block.identifier === 'ES') return 'ES: variante corta o stride no confirmado';
@@ -282,6 +300,74 @@ function renderGen7EntityDiagnostics(data) {
   box.append(table);
 }
 
+function formatGen7RawWord(value) {
+  const unsigned = Number(value) >>> 0;
+  return `0x${unsigned.toString(16).padStart(8, '0').toUpperCase()}`;
+}
+
+function renderGen7EsKind0Details(data) {
+  const box = $('gen7-es-kind0-details');
+  box.replaceChildren();
+  const entries = [];
+  for (const block of data.blocks ?? []) {
+    if (block.identifier !== 'ES') continue;
+    for (const entry of block.entries ?? []) {
+      if (entry.recordKind === 0 && Array.isArray(entry.esKind0Descriptors))
+        entries.push({ block, entry });
+    }
+  }
+  if (!entries.length) {
+    const empty = document.createElement('span');
+    empty.className = 'muted';
+    empty.textContent = 'No se encontraron tablas ES tipo 0 con offsets validados en esta zona.';
+    box.append(empty);
+    return;
+  }
+
+  for (const { block, entry } of entries) {
+    const details = document.createElement('details');
+    details.className = 'owse-es-kind0-details';
+    const summary = document.createElement('summary');
+    summary.textContent = `ED[${block.blockIndex ?? '?'}] ES · entrada #${entry.entryIndex} · ${entry.esKind0Descriptors.length} descriptor(es) · ${entry.bytes} bytes`;
+    details.append(summary);
+
+    const table = document.createElement('table');
+    table.className = 'owse-entity-table';
+    const head = document.createElement('tr');
+    ['Descriptor', 'Offset absoluto', 'Bytes payload', 'Tipo', 'Count', 'Estructura observada', 'Palabras descriptor (raw)', 'Inicio hexadecimal'].forEach(label => {
+      const cell = document.createElement('th');
+      cell.textContent = label;
+      head.append(cell);
+    });
+    const thead = document.createElement('thead');
+    thead.append(head);
+    table.append(thead);
+    const body = document.createElement('tbody');
+    for (const descriptor of entry.esKind0Descriptors) {
+      const row = document.createElement('tr');
+      const values = [
+        String(descriptor.descriptorIndex),
+        `0x${Number(descriptor.payloadOffset).toString(16).toUpperCase()} (${descriptor.payloadOffset})`,
+        String(descriptor.payloadBytes),
+        descriptor.payloadType === null || descriptor.payloadType === undefined ? '—' : String(descriptor.payloadType),
+        descriptor.pointCount === null || descriptor.pointCount === undefined ? '—' : String(descriptor.pointCount),
+        descriptor.segmentLayout || '—',
+        [descriptor.rawWord1, descriptor.rawWord2, descriptor.rawWord3].map(formatGen7RawWord).join(' '),
+        descriptor.previewHex ?? '—',
+      ];
+      values.forEach(value => {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.append(cell);
+      });
+      body.append(row);
+    }
+    table.append(body);
+    details.append(table);
+    box.append(details);
+  }
+}
+
 function render(data) {
   currentScript = data;
   metadata(data);
@@ -323,6 +409,19 @@ function renderGen7ZoneEditor(data) {
   $('export-zone7').disabled = !enabled;
   $('load-gen7-entities').disabled = !enabled;
   $('export-gen7-raw-entities').disabled = true;
+  const worldIndex = data.zone?.worldIndex;
+  const mapResourcesVisible = enabled && Number.isInteger(worldIndex) && worldIndex >= 0;
+  const mapResourcesEnabled = mapResourcesVisible && catalog?.gameVersion === 'USUM';
+  $('gen7-map-resource-fields').classList.toggle('is-hidden', !mapResourcesVisible);
+  $('load-gen7-map-resources').disabled = !mapResourcesEnabled;
+  $('export-gen7-map-resources').disabled = !mapResourcesEnabled;
+  currentGen7MapResources = undefined;
+  $('gen7-map-resource-summary').replaceChildren();
+  msg('gen7-map-resource-result', mapResourcesVisible && !mapResourcesEnabled
+    ? 'Este perfil de recursos sólo está confirmado para un dump retail de USUM.'
+    : '');
+  gen7MapResourcesRequest += 1;
+  gen7MapResourcesLoading = false;
   if (!enabled) {
     $('gen7-entity-fields').classList.add('is-hidden');
     $('export-gen7-entities').disabled = true;
@@ -348,7 +447,7 @@ function renderGen7ZoneEditor(data) {
   msg('gen7-zone-result', `Zona ${data.zone.zoneIndex} lista.`, 'neutral');
 }
 
-function renderGen7PositionTable(box, positions, label, includeBlock = false) {
+function renderGen7PositionTable(box, positions, label, includeBlock = false, includeKind = false) {
   box.replaceChildren();
   if (!positions.length) {
     const empty = document.createElement('span');
@@ -361,7 +460,7 @@ function renderGen7PositionTable(box, positions, label, includeBlock = false) {
   table.className = 'owse-entity-table';
   const header = document.createElement('tr');
   const columns = includeBlock
-    ? ['#', 'Bloque ED', 'Contenedor', 'Registro', 'X', 'Y', 'Z']
+    ? ['#', 'Bloque ED', 'Contenedor', 'Registro', ...(includeKind ? ['Tipo'] : []), 'X', 'Y', 'Z']
     : ['#', 'Contenedor', 'Registro', 'X', 'Y', 'Z'];
   columns.forEach(text => {
     const cell = document.createElement('th');
@@ -378,7 +477,7 @@ function renderGen7PositionTable(box, positions, label, includeBlock = false) {
     indexCell.textContent = String(index);
     row.append(indexCell);
     const indexKeys = includeBlock
-      ? ['blockEntry', 'containerEntry', 'recordIndex']
+      ? ['blockEntry', 'containerEntry', 'recordIndex', ...(includeKind ? ['recordKind'] : [])]
       : ['containerEntry', 'recordIndex'];
     for (const key of indexKeys) {
       const cell = document.createElement('td');
@@ -409,6 +508,7 @@ function renderGen7Entities(data) {
   const eiPositions = data.eiPositions ?? [];
   const prPositions = data.prPositions ?? [];
   const ebPositions = data.ebPositions ?? [];
+  const egPositions = data.egPositions ?? [];
   const esPositions = data.esPositions ?? [];
   const eaPositions = data.eaPositions ?? [];
   const etPositions = data.etPositions ?? [];
@@ -416,10 +516,11 @@ function renderGen7Entities(data) {
   const blocks = (data.blocks ?? []).map(formatGen7EntityBlock);
   renderRows(summary, [
     ['Posiciones EP', data.positions.length],
-    ['Posiciones EM principales', emPositions.length],
+    ['Posiciones EM', emPositions.length],
     ['Posiciones EI tipo 10', eiPositions.length],
     ['Posiciones PR tipos 203/204', prPositions.length],
-    ['Posiciones EB primarias', ebPositions.length],
+    ['Posiciones EB tipos 2/11', ebPositions.length],
+    ['Posiciones EG tipo 8', egPositions.length],
     ['Posiciones ES primarias', esPositions.length],
     ['Posiciones EA tipo 5/6', eaPositions.length],
     ['Posiciones ET tipos 7/9', etPositions.length],
@@ -429,16 +530,126 @@ function renderGen7Entities(data) {
   renderGen7PositionTable($('gen7-em-table'), emPositions, 'EM');
   renderGen7PositionTable($('gen7-ei-table'), eiPositions, 'EI', true);
   renderGen7PositionTable($('gen7-pr-table'), prPositions, 'PR', true);
-  renderGen7PositionTable($('gen7-eb-table'), ebPositions, 'EB', true);
+  renderGen7PositionTable($('gen7-eb-table'), ebPositions, 'EB', true, true);
+  renderGen7PositionTable($('gen7-eg-table'), egPositions, 'EG', true);
   renderGen7PositionTable($('gen7-es-table'), esPositions, 'ES', true);
+  renderGen7EsKind0Details(data);
   renderGen7PositionTable($('gen7-ea-table'), eaPositions, 'EA', true);
   renderGen7PositionTable($('gen7-et-table'), etPositions, 'ET', true);
   renderGen7EntityDiagnostics(data);
   $('load-gen7-entities').textContent = 'Volver a leer';
   $('gen7-entity-fields').classList.remove('is-hidden');
-  $('export-gen7-entities').disabled = !(data.positions.length || emPositions.length || eiPositions.length || prPositions.length || ebPositions.length || esPositions.length || eaPositions.length || etPositions.length);
+  $('export-gen7-entities').disabled = !(data.positions.length || emPositions.length || eiPositions.length || prPositions.length || ebPositions.length || egPositions.length || esPositions.length || eaPositions.length || etPositions.length);
   $('export-gen7-raw-entities').disabled = false;
-  msg('gen7-entity-result', data.diagnostics || 'Posiciones EP, EM, EI, PR, EB, ES, EA (tipos 5/6) y ET (tipos 7/9) cargadas. Las variantes sin esquema confirmado quedan en diagnóstico.', data.diagnostics ? 'neutral' : 'success');
+  msg('gen7-entity-result', data.diagnostics || 'Posiciones EP, EM (tipos 1/3), EI, PR, EB (tipos 2/11), EG tipo 8, ES, EA (tipos 5/6) y ET (tipos 7/9) cargadas. Las variantes sin esquema confirmado quedan en diagnóstico.', data.diagnostics ? 'neutral' : 'success');
+}
+
+function renderGen7MapResources(data) {
+  currentGen7MapResources = data;
+  const box = $('gen7-map-resource-summary');
+  box.replaceChildren();
+  const resources = data.resources ?? [];
+  const roots = resources.filter(resource => resource.depth === 0);
+  for (const resource of roots) {
+    const card = document.createElement('section');
+    card.className = 'owse-card';
+    const heading = document.createElement('h2');
+    heading.textContent = `Entrada ${resource.slotOffset}: ${resource.signature} · ${resource.bytes.toLocaleString()} bytes`;
+    const metadata = document.createElement('div');
+    metadata.className = 'owse-meta';
+    renderRows(metadata, [
+      ['Índice en encdata', resource.fileIndex],
+      ['Cabecera (hex)', resource.headerHex || '(vacía)'],
+      ['Subarchivos Mini', resource.isMiniArchive ? resource.miniEntryCount : 'no detectados'],
+    ]);
+    const nested = resources.filter(node => node.slotOffset === resource.slotOffset && node.depth > 0);
+    const tree = document.createElement('pre');
+    tree.className = 'owse-code';
+    const visibleTree = nested.slice(0, 200).map(node =>
+      `${'  '.repeat(node.depth)}${node.relativePath} · ${node.signature} · ${node.bytes.toLocaleString()} bytes${node.isMiniArchive ? ` · Mini (${node.miniEntryCount})` : ''}`);
+    if (nested.length > visibleTree.length)
+      visibleTree.push(`… ${nested.length - visibleTree.length} nodos más; se conservan en la exportación.`);
+    tree.textContent = visibleTree.length ? visibleTree.join('\n') : '(sin subarchivos Mini validados)';
+    const strings = document.createElement('pre');
+    strings.className = 'owse-code';
+    strings.textContent = resource.printableStrings?.length
+      ? resource.printableStrings.join('\n')
+      : '(sin cadenas ASCII imprimibles)';
+    const note = document.createElement('p');
+    note.className = 'muted';
+    note.textContent = 'Las cadenas son pistas de inspección; no describen necesariamente la estructura del archivo.';
+    const treeHeading = document.createElement('h3');
+    treeHeading.textContent = `Subarchivos detectados (${nested.length})`;
+    const stringsHeading = document.createElement('h3');
+    stringsHeading.textContent = 'Cadenas ASCII del bloque';
+    card.append(heading, metadata, treeHeading, tree, stringsHeading, strings, note);
+    box.append(card);
+  }
+  if (!box.childElementCount) {
+    const empty = document.createElement('span');
+    empty.className = 'muted';
+    empty.textContent = 'No hay bloques candidatos para este mundo.';
+    box.append(empty);
+  }
+  const nestedCount = resources.length - roots.length;
+  const diagnostic = data.diagnostics ? ` Diagnóstico: ${data.diagnostics}` : '';
+  msg('gen7-map-resource-result', `${roots.length} bloques y ${nestedCount} subarchivos Mini inspeccionados. ${data.note}${diagnostic}`, data.diagnostics ? 'neutral' : 'success');
+}
+
+async function loadGen7MapResources() {
+  if (gen7MapResourcesLoading) return;
+  if (catalog?.gameVersion !== 'USUM') {
+    msg('gen7-map-resource-result', 'Este perfil de recursos sólo está confirmado para un dump retail de USUM.', 'neutral');
+    return;
+  }
+  const worldIndex = currentGen7Zone?.worldIndex;
+  if (!Number.isInteger(worldIndex) || worldIndex < 0) {
+    msg('gen7-map-resource-result', 'Primero abre una zona Gen. VII con mundo asignado.', 'error');
+    return;
+  }
+  const requestId = ++gen7MapResourcesRequest;
+  gen7MapResourcesLoading = true;
+  $('load-gen7-map-resources').disabled = true;
+  try {
+    msg('gen7-map-resource-result', 'Leyendo los recursos del mundo…');
+    const data = await post('/api/editors/owse/gen7/map-resources', {
+      workspacePath: $('workspace').value, worldIndex, language: 2,
+    });
+    if (requestId !== gen7MapResourcesRequest) return;
+    renderGen7MapResources(data);
+  } catch (error) {
+    if (requestId !== gen7MapResourcesRequest) return;
+    currentGen7MapResources = undefined;
+    $('gen7-map-resource-summary').replaceChildren();
+    msg('gen7-map-resource-result', error.message, 'error');
+  } finally {
+    if (requestId === gen7MapResourcesRequest) {
+      gen7MapResourcesLoading = false;
+      $('load-gen7-map-resources').disabled = !currentGen7Zone || currentGen7Zone.worldIndex < 0;
+    }
+  }
+}
+
+async function exportGen7MapResources() {
+  try {
+    if (catalog?.gameVersion !== 'USUM') {
+      throw Error('Este perfil de recursos sólo está confirmado para un dump retail de USUM.');
+    }
+    const worldIndex = currentGen7Zone?.worldIndex;
+    if (!Number.isInteger(worldIndex) || worldIndex < 0) {
+      throw Error('Primero abre una zona Gen. VII con mundo asignado.');
+    }
+    const output = await post('/api/workspace/pick-output');
+    if (!output.path) return;
+    msg('gen7-map-resource-result', 'Exportando las entradas crudas de encdata…');
+    const result = await post('/api/editors/owse/gen7/map-resources/export', {
+      workspacePath: $('workspace').value, outputDirectory: output.path, worldIndex, language: 2,
+    });
+    const diagnostic = result.diagnostics ? ` Diagnóstico: ${result.diagnostics}` : '';
+    msg('gen7-map-resource-result', `Listo. Se guardaron ${result.files.length} archivos (${result.totalBytes.toLocaleString()} bytes contando contenedores y subarchivos) y el manifiesto en ${result.outputDirectory}.${diagnostic}`, result.diagnostics ? 'neutral' : 'success');
+  } catch (error) {
+    msg('gen7-map-resource-result', error.message, 'error');
+  }
 }
 
 async function loadGen7Entities() {
@@ -448,7 +659,7 @@ async function loadGen7Entities() {
   $('load-gen7-entities').disabled = true;
   try {
     if (!currentScript) throw Error('Primero abrí un script Gen. VII.');
-    msg('gen7-entity-result', 'Leyendo posiciones EP, EM, EI, PR, EB, ES, EA y ET…');
+    msg('gen7-entity-result', 'Leyendo posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET…');
     const data = await post('/api/editors/owse/gen7/entities', {
       workspacePath: $('workspace').value, worldIndex: currentScript.worldIndex, language: 2,
     });
@@ -497,42 +708,47 @@ function readGen7PositionInputs(positions, tableId, label) {
 }
 
 function readGen7EntityPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.positions, 'gen7-ep-table', 'EP');
 }
 
 function readGen7EmPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.emPositions ?? [], 'gen7-em-table', 'EM');
 }
 
 function readGen7EbPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.ebPositions ?? [], 'gen7-eb-table', 'EB');
 }
 
+function readGen7EgPositions() {
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
+  return readGen7PositionInputs(currentGen7Entities.egPositions ?? [], 'gen7-eg-table', 'EG');
+}
+
 function readGen7EiPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.eiPositions ?? [], 'gen7-ei-table', 'EI');
 }
 
 function readGen7PrPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.prPositions ?? [], 'gen7-pr-table', 'PR');
 }
 
 function readGen7EsPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.esPositions ?? [], 'gen7-es-table', 'ES');
 }
 
 function readGen7EaPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.eaPositions ?? [], 'gen7-ea-table', 'EA');
 }
 
 function readGen7EtPositions() {
-  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, ES, EA y ET.');
+  if (!currentGen7Entities) throw Error('Primero leé las posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET.');
   return readGen7PositionInputs(currentGen7Entities.etPositions ?? [], 'gen7-et-table', 'ET');
 }
 
@@ -544,14 +760,15 @@ async function exportGen7Entities() {
     const eiPositions = readGen7EiPositions();
     const prPositions = readGen7PrPositions();
     const ebPositions = readGen7EbPositions();
+    const egPositions = readGen7EgPositions();
     const esPositions = readGen7EsPositions();
     const eaPositions = readGen7EaPositions();
     const etPositions = readGen7EtPositions();
     const output = await post('/api/workspace/pick-output');
-    msg('gen7-entity-result', 'Exportando posiciones EP, EM, EI, PR, EB, ES, EA y ET…');
+    msg('gen7-entity-result', 'Exportando posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET…');
     const result = await post('/api/editors/owse/gen7/entities/export', {
       workspacePath: $('workspace').value, outputDirectory: output.path, titleId: null,
-      worldIndex: currentScript.worldIndex, positions, emPositions, ebPositions, esPositions, eaPositions, etPositions, eiPositions, prPositions, language: 2,
+      worldIndex: currentScript.worldIndex, positions, emPositions, ebPositions, egPositions, esPositions, eaPositions, etPositions, eiPositions, prPositions, language: 2,
     });
     msg('gen7-entity-result', `Listo. ZIP: ${result.zipPath}`, 'success');
   } catch (error) {
@@ -559,13 +776,13 @@ async function exportGen7Entities() {
   }
 }
 
-function renderMap(data) {
+function renderMap(data, preservedChanges = null) {
   currentMap = data;
-  mapPropertiesChanged = false;
-  matrixValuesChanged = false;
+  mapPropertiesChanged = preservedChanges?.mapPropertiesChanged ?? false;
+  matrixValuesChanged = preservedChanges?.matrixValuesChanged ?? false;
   $('map-fields').classList.remove('is-hidden');
   $('load-map').disabled = false;
-  $('export-map').disabled = true;
+  $('export-map').disabled = !mapPropertiesChanged && !matrixValuesChanged;
   const gridReady = data.properties.length > 0 && data.width > 0 && data.height > 0;
   $('apply-map-cell').disabled = !gridReady;
   $('map-x').disabled = !gridReady;
@@ -610,7 +827,9 @@ function renderMap(data) {
     $('map-preview-meta').textContent = '';
     msg('map-preview-result', preview?.diagnostics || 'Este mapa no tiene entradas GR visualizables.', 'neutral');
   }
-  msg('map-result', data.diagnostics || 'Mapa cargado. Seleccioná una celda para editarla.', data.diagnostics ? 'neutral' : 'success');
+  msg('map-result', data.diagnostics || (mapPropertiesChanged || matrixValuesChanged
+    ? 'Vista actualizada; conservé los cambios locales sin exportar.'
+    : 'Mapa cargado. Seleccioná una celda para editarla.'), data.diagnostics ? 'neutral' : 'success');
 }
 
 function renderEntityTable(title, collection, fields) {
@@ -751,7 +970,14 @@ async function load() {
     fillGroups();
     clearEntry();
     const isGen6 = catalog.gameVersion === 'XY' || catalog.gameVersion === 'ORAS';
+    const isGen7 = ['SM', 'USUM', 'US', 'UM', 'SN', 'MN'].includes(catalog.gameVersion);
     $('gen6-editor').classList.toggle('is-hidden', !isGen6);
+    $('gen7-script-export').classList.toggle('is-hidden', !isGen7);
+    $('export-all-scripts-gen7').disabled = !isGen7;
+    $('export-all-zones').disabled = !isGen6;
+    $('export-all-maps').disabled = !isGen6;
+    $('export-all-scripts').disabled = !isGen6;
+    $('map-entity-overlay').disabled = !isGen6;
     zone = undefined;
     renderEntities();
     msg('status', `${catalog.gameVersion} cargado. ${groups.length} grupo(s) de scripts detectado(s).`, groups.length ? 'success' : 'neutral');
@@ -762,6 +988,12 @@ async function load() {
     fillGroups();
     renderEntities();
     $('gen6-editor').classList.add('is-hidden');
+    $('gen7-script-export').classList.add('is-hidden');
+    $('export-all-scripts-gen7').disabled = true;
+    $('export-all-zones').disabled = true;
+    $('export-all-maps').disabled = true;
+    $('export-all-scripts').disabled = true;
+    $('map-entity-overlay').disabled = true;
     clearEntry();
     msg('status', error.message, 'error');
   }
@@ -801,15 +1033,29 @@ async function loadZone() {
   }
 }
 
-async function loadMap() {
+async function loadMap(preserveEdits = false) {
+  const previousMap = preserveEdits && currentMap?.zoneIndex === zone?.zoneIndex ? currentMap : undefined;
+  const preservedChanges = previousMap
+    ? { mapPropertiesChanged, matrixValuesChanged }
+    : null;
   try {
     if (!zone) throw Error('Primero abrí una zona Gen. VI.');
     msg('map-result', 'Leyendo grilla de movimiento…');
     const data = await post('/api/editors/owse/gen6/map', {
       workspacePath: $('workspace').value, zoneIndex: zone.zoneIndex, language: 2,
+      includeEntityOverlay: $('map-entity-overlay').checked,
     });
-    renderMap(data);
+    if (previousMap) {
+      data.properties = previousMap.properties;
+      data.matrixValues = previousMap.matrixValues;
+    }
+    renderMap(data, preservedChanges);
   } catch (error) {
+    if (previousMap) {
+      renderMap(previousMap, preservedChanges);
+      msg('map-result', error.message, 'error');
+      return;
+    }
     currentMap = undefined;
     $('export-map').disabled = true;
     $('apply-map-cell').disabled = true;
@@ -987,6 +1233,107 @@ async function exportMap() {
   }
 }
 
+async function exportAllGen6Zones() {
+  const button = $('export-all-zones');
+  try {
+    if (!['XY', 'ORAS'].includes(catalog?.gameVersion))
+      throw Error('Cargá primero un workspace X/Y o Rubí Omega/Zafiro Alfa.');
+    const output = await post('/api/workspace/pick-output');
+    button.disabled = true;
+    button.textContent = 'Exportando zonas…';
+    msg('zone-batch-result', 'Generando un informe por zona; las zonas incompletas quedarán detalladas en el manifiesto.');
+    const result = await post('/api/editors/owse/gen6/zones/export', {
+      workspacePath: $('workspace').value,
+      outputDirectory: output.path,
+      language: 2,
+    });
+    const skipped = result.skipped?.length ?? 0;
+    const summary = `Listo: ${result.zones.length} informe(s) de ${result.totalZones} zonas; ${skipped} omitida(s). Salida: ${result.outputDirectory}. Manifiesto: ${result.manifestFile}`;
+    msg('zone-batch-result', summary, skipped ? 'neutral' : 'success');
+  } catch (error) {
+    msg('zone-batch-result', error.message, 'error');
+  } finally {
+    button.textContent = 'Exportar zonas y entidades';
+    button.disabled = !['XY', 'ORAS'].includes(catalog?.gameVersion);
+  }
+}
+
+async function exportAllGen6Maps() {
+  const button = $('export-all-maps');
+  try {
+    if (!['XY', 'ORAS'].includes(catalog?.gameVersion))
+      throw Error('Cargá primero un workspace X/Y o Rubí Omega/Zafiro Alfa.');
+    const output = await post('/api/workspace/pick-output');
+    button.disabled = true;
+    button.textContent = 'Exportando mapas…';
+    msg('map-batch-result', 'Reconstruyendo los mapas interpretables; las zonas omitidas quedarán detalladas en el manifiesto.');
+    const result = await post('/api/editors/owse/gen6/maps/export', {
+      workspacePath: $('workspace').value,
+      outputDirectory: output.path,
+      includeEntityOverlay: $('map-entity-overlay').checked,
+      language: 2,
+    });
+    const skipped = result.skipped?.length ?? 0;
+    const summary = `Listo: ${result.maps.length} PNG de ${result.totalZones} zonas; ${skipped} omitida(s). Salida: ${result.outputDirectory}. Manifiesto: ${result.manifestFile}`;
+    msg('map-batch-result', summary, skipped ? 'neutral' : 'success');
+  } catch (error) {
+    msg('map-batch-result', error.message, 'error');
+  } finally {
+    button.textContent = 'Exportar todos los mapas';
+    button.disabled = !['XY', 'ORAS'].includes(catalog?.gameVersion);
+  }
+}
+
+async function exportAllGen6Scripts() {
+  const button = $('export-all-scripts');
+  try {
+    if (!['XY', 'ORAS'].includes(catalog?.gameVersion))
+      throw Error('Cargá primero un workspace X/Y o Rubí Omega/Zafiro Alfa.');
+    const output = await post('/api/workspace/pick-output');
+    button.disabled = true;
+    button.textContent = 'Exportando scripts…';
+    msg('script-batch-result', 'Generando informes de los scripts de zona y mapa; los formatos no legibles quedarán detallados en el manifiesto.');
+    const result = await post('/api/editors/owse/gen6/scripts/export', {
+      workspacePath: $('workspace').value,
+      outputDirectory: output.path,
+      language: 2,
+    });
+    const skipped = result.skipped?.length ?? 0;
+    const summary = `Listo: ${result.scripts.length} informe(s) de ${result.totalZones} zonas; ${skipped} omitido(s). Salida: ${result.outputDirectory}. Manifiesto: ${result.manifestFile}`;
+    msg('script-batch-result', summary, skipped ? 'neutral' : 'success');
+  } catch (error) {
+    msg('script-batch-result', error.message, 'error');
+  } finally {
+    button.textContent = 'Exportar scripts Gen. VI';
+    button.disabled = !['XY', 'ORAS'].includes(catalog?.gameVersion);
+  }
+}
+
+async function exportAllGen7Scripts() {
+  const button = $('export-all-scripts-gen7');
+  try {
+    if (!['SM', 'USUM', 'US', 'UM', 'SN', 'MN'].includes(catalog?.gameVersion))
+      throw Error('Cargá primero un workspace Sol/Luna o Ultrasol/Ultraluna.');
+    const output = await post('/api/workspace/pick-output');
+    button.disabled = true;
+    button.textContent = 'Exportando scripts…';
+    msg('gen7-script-batch-result', 'Generando informes ZS/ZI; los grupos dañados y los archivos finales sin grupo completo se detallarán en el manifiesto.');
+    const result = await post('/api/editors/owse/gen7/scripts/export', {
+      workspacePath: $('workspace').value,
+      outputDirectory: output.path,
+      language: 2,
+    });
+    const skipped = result.skipped?.length ?? 0;
+    const summary = `Listo: ${result.totalScripts} informe(s) de ${result.totalWorlds} mundos; ${skipped} grupo(s) omitido(s). Salida: ${result.outputDirectory}. Manifiesto: ${result.manifestFile}`;
+    msg('gen7-script-batch-result', summary, skipped || result.unassignedFileCount ? 'neutral' : 'success');
+  } catch (error) {
+    msg('gen7-script-batch-result', error.message, 'error');
+  } finally {
+    button.textContent = 'Exportar scripts Gen. VII';
+    button.disabled = !['SM', 'USUM', 'US', 'UM', 'SN', 'MN'].includes(catalog?.gameVersion);
+  }
+}
+
 $('browse').onclick = async () => {
   try {
     $('workspace').value = (await post('/api/workspace/pick')).path;
@@ -999,13 +1346,20 @@ $('load').onclick = load;
 $('open').onclick = open;
 $('load-zone').onclick = loadZone;
 $('load-map').onclick = loadMap;
+$('map-entity-overlay').onchange = () => { if (currentMap) loadMap(true); };
 $('export-zone').onclick = exportZone;
 $('export-script').onclick = exportScript;
 $('export-zone7').onclick = exportGen7Zone;
 $('load-gen7-entities').onclick = loadGen7Entities;
 $('export-gen7-entities').onclick = exportGen7Entities;
 $('export-gen7-raw-entities').onclick = exportGen7RawEntities;
+$('load-gen7-map-resources').onclick = loadGen7MapResources;
+$('export-gen7-map-resources').onclick = exportGen7MapResources;
 $('export-map').onclick = exportMap;
+$('export-all-zones').onclick = exportAllGen6Zones;
+$('export-all-maps').onclick = exportAllGen6Maps;
+$('export-all-scripts').onclick = exportAllGen6Scripts;
+$('export-all-scripts-gen7').onclick = exportAllGen7Scripts;
 $('apply-map-cell').onclick = applyMapCell;
 $('apply-matrix-cell').onclick = applyMatrixCell;
 $('group').onchange = () => { syncScriptLimit(); zone = undefined; clearEntry(); renderEntities(); };

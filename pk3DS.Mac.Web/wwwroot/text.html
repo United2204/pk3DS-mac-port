@@ -34,10 +34,16 @@
         <div class="section-heading"><span class="section-number">3</span><div><p class="kicker">SALIDA</p><h2 id="text-export-heading">Exportar</h2></div></div>
         <p class="section-copy">Se genera un ZIP LayeredFS con solo el archivo de texto modificado.</p>
         <div class="ready-row"><div><b id="export-summary">Sin cambios para exportar</b><small>El archivo original no se modifica.</small></div><button id="export" class="primary" type="button" disabled>Exportar <span aria-hidden="true">→</span></button></div>
+        <div class="ready-row"><div><b>Importar o exportar todas las tablas</b><small>El TXT conserva el formato UTF-16LE que usa pk3DS para Windows. Importar genera un ZIP sin modificar el workspace.</small></div><div class="text-archive-actions"><button id="export-all-text" class="secondary-button" type="button" disabled>Exportar TXT</button><button id="import-all-text" class="secondary-button" type="button" disabled>Importar TXT</button><input id="import-text-file" type="file" accept=".txt,text/plain" hidden></div></div>
+        <div class="ready-row"><div><b>Randomizar texto</b><small>Smart shuffle conserva líneas con variables entre corchetes; el modo puro puede romperlas. Game Text siempre muestra una advertencia.</small></div><div class="text-archive-actions"><select id="randomize-scope" aria-label="Alcance de la randomización"><option value="current">Tabla abierta</option><option value="all">Todas las tablas</option></select><label class="check-field"><input id="smart-shuffle" type="checkbox" checked><span>Smart shuffle</span></label><button id="randomize-text" class="secondary-button" type="button" disabled>Randomizar →</button></div></div>
         <p id="export-status" class="status neutral" role="status" aria-live="polite">Carga una tabla y modifica al menos una línea.</p>
+        <div id="text-recovery-downloads" hidden>
+          <button id="download-text-errata" class="secondary-button" type="button">Descargar text_errata.txt</button>
+          <button id="download-text-failed" class="secondary-button" type="button">Descargar text_failed.txt</button>
+        </div>
       </section>
     </main>
     <footer>pk3DS Mac trabaja de forma local. Ningún archivo se sube a internet.</footer>
-    <script src="text.js?v=3"></script>
+    <script src="text.js?v=5"></script>
   </body>
 </html>

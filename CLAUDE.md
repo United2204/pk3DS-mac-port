@@ -75,11 +75,17 @@ Lo específico de plataforma va detrás de una interfaz: hoy solo `IFolderPicker
 Las herramientas de proyecto siguen el mismo límite: `ProjectTools.ExtractProject` extrae CXI/3DS o
 CIA desencriptado (el primer NCCH) a un workspace nuevo, `ProjectTools.BuildFileSystems` construye `romfs.bin` y/o `exefs.bin` en una
 carpeta de salida separada, y `ProjectTools.CreateRedirectPatch` genera el `.code.bin` y el árbol
-`a0/` del parche de redirección sin tocar el origen. La operación usa el empaquetador legacy bajo un
-lock porque `RomFS.BuildRomFS` mantiene estado estático; nunca debe escribir dentro de `RomFS` o
-`ExeFS` de origen. `CreateRedirectPatch` no debe presentarse como creador de `.cia`: todavía no
-existe un ensamblador local de TMD/ticket/certificados y firma interna; `RebuildCia` usa primero el
-`makerom` macOS arm64 incluido y acepta un ejecutable externo indicado por el usuario como reemplazo.
+`a0/` con un manifiesto ligado al juego, al Title ID cuando hay exheader y a los hashes de origen.
+`ProjectTools.RebuildCia` puede integrar ese parche en un staging aislado sin tocar el workspace
+original. La operación usa el empaquetador legacy bajo un lock porque `RomFS.BuildRomFS` mantiene
+estado estático; nunca debe escribir dentro de `RomFS` o `ExeFS` de origen. La integración no aporta
+firmas retail: `RebuildCia` usa el `makerom` macOS arm64 incluido con firmas ignoradas y acepta un
+ejecutable externo indicado por el usuario como reemplazo; el resultado no se garantiza en consola
+sin parchear.
+`RomFsProjectTools` desempaqueta `romfs.bin` con validación de IVFC, secciones, registros, nombres,
+rutas y rangos a una carpeta de staging; al empaquetar revisa el árbol y rechaza enlaces simbólicos.
+`ExeFsProjectTools` mantiene sus validaciones portables de slots, rangos y hashes. Ambas herramientas
+standalone conservan los orígenes y no sobrescriben las salidas.
 `ProjectTools.PackGarc` debe copiar
 la carpeta de entrada a una staging antes de llamar a `GARC.PackGARC`, porque el empaquetador legacy
 puede comprimir y renombrar entradas `dec_` durante el proceso. `ProjectTools.PackDarc` y
@@ -133,9 +139,6 @@ guarda primero un backup en `.pk3ds-backups` y conserva LZSS cuando corresponde.
 Al inspeccionar un archivo retail también conserva los bytes que envuelven la cabecera `darc`;
 `Replace`, `ReplaceGarc` y `Apply` vuelven a anteponer el prefijo y a agregar el sufijo al DARC
 reconstruido, incluso en las entradas OR/AS comprimidas.
-Al inspeccionar un archivo retail también conserva los bytes que preceden a la cabecera `darc`;
-`Replace`, `ReplaceGarc` y `Apply` los vuelven a anteponer al DARC reconstruido, incluso en las
-entradas OR/AS comprimidas.
 
 `ProjectTools.InspectSmdh`, `UpdateSmdh`, `ImportSmdh` y `ExportSmdh` trabajan con `ExeFS/icon.bin`
 mediante `SMDHPortable`, sin `System.Drawing`. La edición conserva los bytes desconocidos, expone los
@@ -164,8 +167,19 @@ Los perfiles retail confirmados de `ED` están documentados en `OWSE_ED_STRUCTUR
 registros fijos, `EA` tipo 6 usa descriptores con punteros a payloads, `ET` tipo 9 usa descriptores
 absolutos con tablas variables de puntos XYZ y `EI` tipo 10 usa registros de stride `0x5C`.
 `PR` tipos 203/204 tienen un único vector XYZ en `0x08` y preservan el payload variable posterior.
-`EM` tipo 3, `PR` tipo 364, las variantes cortas de `ES` y los demás
-campos no confirmados siguen siendo sólo diagnóstico/raw.
+`EM` tipo 3 permite editar XYZ dentro de registros de stride `0x58`, valida la tabla y conserva
+punteros/payloads. `EB` tipo 11 exige longitud exacta y marcador en cada registro. `EG` tipo 8
+edita XYZ en registros `0x4C`, valida sus marcadores y conserva íntegra la cola variable opaca.
+`PR` tipo 364 permite editar los vectores de su perfil retail confirmado, con
+dos registros `0x34` en una entrada de `0x21C` bytes y offsets validados por registro; el resto de
+la cola se preserva. `ES` tipo 0 muestra descriptores, offsets y perfiles estructurales confirmados
+en modo de solo lectura. Las variantes cortas de `ES` y los demás campos sin semántica confirmada
+siguen siendo sólo diagnóstico/raw.
+
+`WorkspaceBackupTools` guarda una línea base append-only dentro de `.pk3ds-backups` para los
+GARCs configurados en el idioma seleccionado, archivos ExeFS y CRO/CRS/CRR. La restauración es
+selectiva, valida el manifest y los hashes, conserva una copia del estado actual y reemplaza los
+destinos de forma atómica; no sobrescribe respaldos existentes.
 
 Los GARCs de Gen. VII que pueden contener entradas LZSS (como `pickup`) deben abrirse con
 `GameConfig.GetlzGARCData`, asignar la entrada modificada y llamar a `Save()`. `GetGARCData` solo

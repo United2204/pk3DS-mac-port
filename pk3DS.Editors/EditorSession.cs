@@ -71,6 +71,41 @@ public static class EditorSession
         return titleId;
     }
 
+    /// <summary>Creates a unique batch-export destination outside the source RomFS/ExeFS.</summary>
+    internal static string ResolveBatchExportDirectory(GameWorkspace workspace, string? requested, string folderName)
+    {
+        var baseDirectory = string.IsNullOrWhiteSpace(requested)
+            ? workspace.RootPath
+            : Path.GetFullPath(requested.Trim());
+        if (File.Exists(baseDirectory))
+            throw new WorkspaceException("La carpeta base de exportación ya existe como archivo.");
+        if (IsPathInside(baseDirectory, workspace.RomFsPath)
+            || (workspace.ExeFsPath is not null && IsPathInside(baseDirectory, workspace.ExeFsPath)))
+            throw new WorkspaceException("La exportación no puede guardarse dentro del RomFS ni del ExeFS de origen.");
+
+        Directory.CreateDirectory(baseDirectory);
+        var name = $"{folderName}-{DateTime.Now:yyyyMMdd-HHmmss}";
+        var output = Path.Combine(baseDirectory, name);
+        if (Directory.Exists(output) || File.Exists(output))
+            output = Path.Combine(baseDirectory, $"{name}-{Guid.NewGuid():N}");
+        return output;
+    }
+
+    private static bool IsPathInside(string candidate, string root)
+    {
+        var fullRoot = Path.GetFullPath(root);
+        var fullPath = Path.GetFullPath(candidate);
+        var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(fullPath, fullRoot, comparison))
+            return true;
+        var rootPrefix = Path.EndsInDirectorySeparator(fullRoot)
+            ? fullRoot
+            : fullRoot + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(rootPrefix, comparison);
+    }
+
     /// <summary>
     /// Runs <paramref name="apply"/> against a scratch copy of the RomFS and packs the result.
     /// </summary>
@@ -254,8 +289,7 @@ public static class EditorSession
     {
         if (workspace.ExeFsPath is null)
             throw new WorkspaceException("Falta ExeFS. Extraé el code.bin del dump para editar este módulo.");
-        return Directory.EnumerateFiles(workspace.ExeFsPath)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase))
+        return GameWorkspace.FindCodeFile(workspace.ExeFsPath)
             ?? throw new WorkspaceException("No encuentro code.bin dentro de ExeFS.");
     }
 

@@ -16,8 +16,6 @@ public class FormRandomizer(GameConfig game)
 
         switch (species)
         {
-            case 658 when !AllowMega:
-                return 0;
             case 664:
             case 665:
             case 666: // Vivillon evo chain
@@ -28,7 +26,7 @@ public class FormRandomizer(GameConfig game)
 
         if (AllowAlolanForm && Legal.EvolveToAlolanForms.Contains(species))
             return (int)(Util.Random32() % 2);
-        if (!Legal.BattleExclusiveForms.Contains(species) || AllowMega)
+        if (!Legal.Mega_ORAS.Contains((ushort)species) || AllowMega)
             return (int)(Util.Random32() % stats[species].FormeCount); // Slot-Random
         return 0;
     }

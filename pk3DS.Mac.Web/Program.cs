@@ -8,6 +8,7 @@ using pk3DS.Mac.Web;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<IFolderPicker, MacFolderPicker>();
 builder.Services.AddSingleton<IFilePicker, MacFilePicker>();
+builder.Services.AddSingleton<ExtractionJobService>();
 
 var app = builder.Build();
 var address = GetLocalAddress();

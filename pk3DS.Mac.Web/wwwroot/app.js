@@ -21,7 +21,9 @@ function moduleAvailable(id) {
 function setDependentState(key, enabled) {
   document.querySelectorAll(`[data-requires="${key}"]`).forEach((element) => {
     element.classList.toggle('is-disabled', !enabled);
-    element.querySelectorAll('input').forEach((control) => { control.disabled = !enabled; });
+    element.querySelectorAll('input').forEach((control) => {
+      control.disabled = !enabled || control.dataset.gameSpecificDisabled === 'true';
+    });
   });
 }
 function activeCount(selector) { return [...document.querySelectorAll(selector)].filter((control) => control.checked && !control.disabled).length; }
@@ -33,11 +35,30 @@ function setGameSpecificState(id, enabled, message) {
   const input = byId(id);
   const card = input?.closest('.check-card, .toggle, .option-group') || input;
   if (!input || !card) return;
+  input.dataset.gameSpecificDisabled = String(!enabled);
   input.disabled = !enabled;
   if (!enabled) input.checked = false;
   card.classList.toggle('is-disabled', !enabled);
   card.setAttribute('aria-disabled', String(!enabled));
   card.title = enabled ? '' : message;
+}
+function setTrainerMoveOptionState(id, enabled) {
+  const input = byId(id);
+  const card = input?.closest('.check-card, .field');
+  if (!input || !card) return;
+  const disabled = !checked('trainer-randomizer') || !enabled;
+  input.disabled = disabled;
+  card.classList.toggle('is-disabled', disabled);
+  card.setAttribute('aria-disabled', String(disabled));
+}
+function updateTrainerMoveOptions() {
+  const randomMoves = checked('trainer-moves');
+  const currentMoves = checked('trainer-current-moves');
+  setTrainerMoveOptionState('trainer-exclude-fixed-damage', randomMoves || currentMoves);
+  setTrainerMoveOptionState('trainer-ensure-damaging', randomMoves);
+  setTrainerMoveOptionState('trainer-ensure-stab', randomMoves);
+  setTrainerMoveOptionState('trainer-damaging-count', randomMoves && checked('trainer-ensure-damaging'));
+  setTrainerMoveOptionState('trainer-stab-count', randomMoves && checked('trainer-ensure-stab'));
 }
 function updateGameSpecificOptions() {
   const version = inspectedGame?.gameVersion;
@@ -69,14 +90,20 @@ function updateGameSpecificOptions() {
   setGameSpecificState('wild-hordes', generation6, 'Las hordas son exclusivas de los encuentros Gen. VI.');
   setGameSpecificState('trainer-randomizer', (generation6 || generation7) && moduleAvailable('trainers'), 'Los equipos requieren trclass, trdata, trpoke y gametext del juego.');
   setGameSpecificState('trainer-prizes', generation6 && moduleAvailable('trainers'), 'Los premios aleatorios de entrenadores solo están disponibles en Gen. VI.');
+  setGameSpecificState('trainer-fill-gen6', !inspectedGame || (generation6 && moduleAvailable('trainers')), 'Los equipos importantes de seis Pokémon solo están definidos para Gen. VI.');
   setGameSpecificState('trainer-important-teams', generation7 && moduleAvailable('trainers'), 'Los equipos importantes de seis Pokémon solo están definidos para Gen. VII.');
   setGameSpecificState('trainer-high-power', moduleAvailable('levelup'), 'Los ataques potentes requieren el GARC levelup.');
   setGameSpecificState('trainer-current-moves', moduleAvailable('levelup'), 'Los movimientos por nivel requieren el GARC levelup.');
   setGameSpecificState('trainer-natures', generation7 && moduleAvailable('trainers'), 'Las naturalezas aleatorias solo están disponibles en Gen. VII.');
   setGameSpecificState('trainer-shiny', generation7 && moduleAvailable('trainers'), 'El shiny de los equipos solo está disponible en Gen. VII.');
+  setGameSpecificState('trainer-shedinja', generation7 && moduleAvailable('trainers'), 'Gen. VI incluye Shedinja automáticamente; esta selección solo aplica a Gen. VII.');
+  setGameSpecificState('trainer-only-singles', generation6 && moduleAvailable('trainers'), 'El filtro de combates individuales solo está disponible para las clases de Gen. VI.');
   setGameSpecificState('trainer-type-themes', (generation6 || generation7) && moduleAvailable('trainers') && moduleAvailable('personal'), 'Los temas por tipo requieren los equipos y el GARC personal.');
   setGameSpecificState('trainer-gym-themes', generation6 && moduleAvailable('trainers') && moduleAvailable('personal'), 'Los temas de entrenadores de gimnasio solo están disponibles en Gen. VI y requieren el GARC personal.');
-  setGameSpecificState('trainer-mega-forms', generation6 && moduleAvailable('trainers') && moduleAvailable('personal'), 'Las formas Mega aleatorias solo están disponibles en equipos de Gen. VI y requieren el GARC personal.');
+  setGameSpecificState('trainer-gym-elite-only', generation6 && moduleAvailable('trainers') && moduleAvailable('personal'), 'El filtro de gimnasios y Alto Mando solo está disponible en Gen. VI.');
+  setGameSpecificState('trainer-story-megas', !inspectedGame || (generation6 && moduleAvailable('trainers') && moduleAvailable('personal')), 'Las Megaevoluciones de historia solo están disponibles en equipos de Gen. VI.');
+  setGameSpecificState('trainer-mega-forms', (generation6 || generation7) && moduleAvailable('trainers') && moduleAvailable('personal'), 'Las formas Mega aleatorias requieren un equipo Gen. VI/VII y el GARC personal.');
+  setGameSpecificState('trainer-gen-7', !inspectedGame || (generation7 && moduleAvailable('trainers')), 'Gen. VII no está disponible en los juegos Gen. VI.');
 }
 function updateUi() {
   updateGameSpecificOptions();
@@ -98,6 +125,7 @@ function updateUi() {
   setDependentState('trainer-shiny', checked('trainer-shiny'));
   setDependentState('trainer-species', checked('trainer-species'));
   setDependentState('trainer-type-themes', checked('trainer-type-themes'));
+  updateTrainerMoveOptions();
   byId('base-exp-percent').disabled = !checked('base-exp');
   byId('fixed-catch-rate-value').disabled = !checked('fixed-catch-rate');
   const evolutionMode = getEvolutionMode();
@@ -110,7 +138,7 @@ function updateUi() {
   const hasMoves = moveCount > 0;
   const hasEvolutions = evolutionMode !== 'None';
   const hasWild = checked('wild') && (checked('wild-species') || checked('wild-levels'));
-  const hasTrainerRandomizer = checked('trainer-randomizer') && (checked('trainer-species') || checked('trainer-match-bst') || checked('trainer-legendary') || checked('trainer-mythical') || checked('trainer-shedinja') || checked('trainer-levels') || checked('trainer-classes') || checked('trainer-composition') || checked('trainer-items') || checked('trainer-abilities') || checked('trainer-moves') || checked('trainer-current-moves') || checked('trainer-metronome') || checked('trainer-ai') || checked('trainer-max-ivs') || checked('trainer-force-evolved') || checked('trainer-prizes') || checked('trainer-important-teams') || checked('trainer-high-power') || checked('trainer-natures') || checked('trainer-shiny') || checked('trainer-type-themes') || checked('trainer-mega-forms') || checked('trainer-gym-themes'));
+  const hasTrainerRandomizer = checked('trainer-randomizer') && (checked('trainer-species') || checked('trainer-match-bst') || checked('trainer-legendary') || checked('trainer-mythical') || checked('trainer-shedinja') || checked('trainer-levels') || checked('trainer-classes') || checked('trainer-composition') || checked('trainer-items') || checked('trainer-abilities') || checked('trainer-moves') || checked('trainer-current-moves') || checked('trainer-metronome') || checked('trainer-ai') || checked('trainer-max-ivs') || checked('trainer-force-evolved') || checked('trainer-prizes') || checked('trainer-fill-gen6') || checked('trainer-important-teams') || checked('trainer-high-power') || checked('trainer-natures') || checked('trainer-shiny') || checked('trainer-type-themes') || checked('trainer-mega-forms') || checked('trainer-story-megas') || checked('trainer-gym-elite-only') || checked('trainer-gym-themes'));
   const groupCount = Number(hasPersonalChanges) + Number(hasLearnsets) + Number(hasEggMoves) + Number(hasMoves) + Number(hasEvolutions) + Number(hasWild) + Number(hasTrainerRandomizer);
   byId('personal-state').textContent = hasPersonalChanges ? `${personalCount} ${personalCount === 1 ? 'opción' : 'opciones'}` : 'Sin cambios';
   byId('moves-state').textContent = hasMoves ? `${moveCount} ${moveCount === 1 ? 'opción' : 'opciones'}` : 'Sin cambios';
@@ -132,16 +160,17 @@ function updateUi() {
 }
 function resetOptions() {
   document.querySelectorAll('#changes input[type="checkbox"]').forEach((control) => { control.checked = false; });
-  ['abilities', 'wonder-guard', 'stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe', 'learnsets', 'expand', 'spread', 'stab', 'power-order', 'egg-expand', 'egg-stab', 'evo-bst', 'wild-species', 'wild-bst', 'trainer-species', 'trainer-ignore-special'].forEach((id) => { byId(id).checked = true; });
+  ['abilities', 'wonder-guard', 'stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe', 'learnsets', 'expand', 'spread', 'stab', 'power-order', 'egg-expand', 'egg-stab', 'evo-bst', 'wild-species', 'wild-bst', 'trainer-species', 'trainer-ignore-special', 'trainer-legendary', 'trainer-mythical', 'trainer-story-megas', 'trainer-gen-1', 'trainer-gen-2', 'trainer-gen-3', 'trainer-gen-4', 'trainer-gen-5', 'trainer-gen-6', 'trainer-gen-7', 'trainer-exclude-fixed-damage', 'trainer-ensure-damaging', 'trainer-ensure-stab'].forEach((id) => { byId(id).checked = true; });
   Object.assign(byId('stat-deviation'), { value: 25 }); Object.assign(byId('same-type'), { value: 50 }); Object.assign(byId('same-egg'), { value: 50 });
   Object.assign(byId('move-count'), { value: 25 }); Object.assign(byId('max-level'), { value: 75 }); Object.assign(byId('stab-percent'), { value: 52.3 });
   Object.assign(byId('egg-move-count'), { value: 18 }); Object.assign(byId('egg-stab-percent'), { value: 32.1 });
   Object.assign(byId('wild-level-multiplier'), { value: 1.00 });
   Object.assign(byId('trainer-level-multiplier'), { value: 1.00 });
-  Object.assign(byId('trainer-force-evolved-level'), { value: 30 });
+  Object.assign(byId('trainer-force-evolved-level'), { value: 50 });
   Object.assign(byId('trainer-prize-chance'), { value: 15 });
   Object.assign(byId('trainer-min-team-size'), { value: 1 }); Object.assign(byId('trainer-max-team-size'), { value: 6 });
-  Object.assign(byId('trainer-high-power-level'), { value: 30 });
+  Object.assign(byId('trainer-high-power-level'), { value: 50 });
+  Object.assign(byId('trainer-damaging-count'), { value: 2 }); Object.assign(byId('trainer-stab-count'), { value: 2 });
   Object.assign(byId('trainer-shiny-chance'), { value: 3 });
   Object.assign(byId('base-exp-percent'), { value: 100 }); Object.assign(byId('fixed-catch-rate-value'), { value: 45 });
   updateUi();
@@ -184,10 +213,15 @@ byId('reset-options').addEventListener('click', resetOptions);
 byId('randomize').addEventListener('click', async () => {
   const button = byId('randomize'); button.disabled = true; setStatus(result, 'Elige una carpeta para guardar el LayeredFS…');
   try {
+    const seedText = byId('randomizer-seed').value.trim();
+    const seed = seedText ? Number(seedText) : null;
+    if (seedText && (!Number.isInteger(seed) || seed < -2147483648 || seed > 2147483647))
+      throw new Error('La semilla debe ser un entero de 32 bits.');
     const output = await post('/api/workspace/pick-output');
     setStatus(result, 'Generando archivos y empaquetando LayeredFS…');
     const data = await post('/api/jobs/randomize', {
       workspacePath: workspace.value, outputDirectory: output.path, titleId: inspectedGame.titleId, language: 2,
+      seed,
       randomizeAbilities: checked('abilities'), randomizeHeldItems: checked('held-items'), randomizeLearnsets: checked('learnsets'),
       personal: { randomizeAbilities: checked('abilities'), allowWonderGuard: checked('wonder-guard'), randomizeHeldItems: checked('held-items'), randomizeCatchRate: checked('catch-rate'), randomizeTmCompatibility: checked('tm'), randomizeHmCompatibility: checked('hm'), randomizeTypeTutors: checked('type-tutors'), randomizeMoveTutors: checked('move-tutors'), randomizeStats: checked('stats'), shuffleStats: checked('shuffle-stats'), statsToRandomize: ['stat-hp', 'stat-atk', 'stat-def', 'stat-spa', 'stat-spd', 'stat-spe'].map(checked), statDeviation: number('stat-deviation'), randomizeTypes: checked('types'), sameTypeChance: number('same-type'), randomizeEggGroups: checked('egg-groups'), sameEggGroupChance: number('same-egg'), removeEvYields: checked('no-evs'), setFastGrowth: checked('fast-growth'), baseExperiencePercent: checked('base-exp') ? number('base-exp-percent') : null, quickHatch: checked('quick-hatch'), setCatchRate: checked('fixed-catch-rate') ? number('fixed-catch-rate-value') : null, removeTutorCompatibility: checked('remove-tutors'), fullTmCompatibility: checked('full-tm'), fullHmCompatibility: checked('full-hm'), fullMoveTutorCompatibility: checked('full-tutor') },
       learnsets: { enabled: checked('learnsets'), expand: checked('expand'), moveCount: number('move-count'), spread: checked('spread'), maxLevel: number('max-level'), stab: checked('stab'), stabPercent: number('stab-percent'), orderByPower: checked('power-order'), fourMovesAtLevel1: checked('four-level-one'), excludeFixedDamage: checked('no-fixed') },
@@ -195,9 +229,9 @@ byId('randomize').addEventListener('click', async () => {
       moves: { randomizeType: checked('move-types'), randomizeCategory: checked('move-categories'), metronomeMode: checked('metronome-mode') },
       evolutions: { mode: getEvolutionMode(), matchBst: checked('evo-bst'), matchExperience: checked('evo-exp'), matchType: checked('evo-type'), includeLegendary: checked('evo-legendary'), includeMythical: checked('evo-mythical') },
       wild: { enabled: checked('wild'), randomizeSpecies: checked('wild-species'), randomizeLevels: checked('wild-levels'), levelMultiplier: number('wild-level-multiplier'), homogeneousHordes: checked('wild-hordes'), matchBst: checked('wild-bst'), includeLegendary: checked('wild-legendary'), includeMythical: checked('wild-mythical') },
-      trainers: { enabled: checked('trainer-randomizer'), randomizeSpecies: checked('trainer-species'), randomizeLevels: checked('trainer-levels'), levelMultiplier: number('trainer-level-multiplier'), randomizeClasses: checked('trainer-classes'), randomizeComposition: checked('trainer-composition'), minTeamSize: number('trainer-min-team-size'), maxTeamSize: number('trainer-max-team-size'), ignoreSpecialClasses: checked('trainer-ignore-special'), onlySinglesForClasses: checked('trainer-only-singles'), randomizeItems: checked('trainer-items'), randomizeAbilities: checked('trainer-abilities'), randomizeMoves: checked('trainer-moves'), useCurrentLearnsetMoves: checked('trainer-current-moves'), metronomeMoves: checked('trainer-metronome'), maximizeAI: checked('trainer-ai'), maximizeIVs: checked('trainer-max-ivs'), forceFullyEvolved: checked('trainer-force-evolved'), fullyEvolvedLevel: number('trainer-force-evolved-level'), randomizePrizes: checked('trainer-prizes'), prizeChance: number('trainer-prize-chance'), fillImportantGen7Teams: checked('trainer-important-teams'), forceHighPower: checked('trainer-high-power'), highPowerLevel: number('trainer-high-power-level'), randomizeNature: checked('trainer-natures'), randomizeShiny: checked('trainer-shiny'), shinyChance: number('trainer-shiny-chance'), randomizeTypeThemes: checked('trainer-type-themes'), allowMegaForms: checked('trainer-mega-forms'), includeGymTrainerThemes: checked('trainer-gym-themes'), matchBst: checked('trainer-match-bst'), includeLegendary: checked('trainer-legendary'), includeMythical: checked('trainer-mythical'), includeShedinja: checked('trainer-shedinja') },
+      trainers: { enabled: checked('trainer-randomizer'), randomizeSpecies: checked('trainer-species'), randomizeLevels: checked('trainer-levels'), levelMultiplier: number('trainer-level-multiplier'), randomizeClasses: checked('trainer-classes'), randomizeComposition: checked('trainer-composition'), minTeamSize: number('trainer-min-team-size'), maxTeamSize: number('trainer-max-team-size'), ignoreSpecialClasses: checked('trainer-ignore-special'), onlySinglesForClasses: checked('trainer-only-singles'), randomizeItems: checked('trainer-items'), randomizeAbilities: checked('trainer-abilities'), randomizeMoves: checked('trainer-moves'), useCurrentLearnsetMoves: checked('trainer-current-moves'), metronomeMoves: checked('trainer-metronome'), excludeFixedDamageMoves: checked('trainer-exclude-fixed-damage'), ensureDamagingMoves: checked('trainer-ensure-damaging'), damagingMoveCount: number('trainer-damaging-count'), ensureStabMoves: checked('trainer-ensure-stab'), stabMoveCount: number('trainer-stab-count'), maximizeAI: checked('trainer-ai'), maximizeIVs: checked('trainer-max-ivs'), forceFullyEvolved: checked('trainer-force-evolved'), fullyEvolvedLevel: number('trainer-force-evolved-level'), randomizePrizes: checked('trainer-prizes'), fillImportantGen6Teams: checked('trainer-fill-gen6'), fillImportantGen7Teams: checked('trainer-important-teams'), forceHighPower: checked('trainer-high-power'), highPowerLevel: number('trainer-high-power-level'), randomizeNature: checked('trainer-natures'), randomizeShiny: checked('trainer-shiny'), shinyChance: number('trainer-shiny-chance'), randomizeTypeThemes: checked('trainer-type-themes'), allowMegaForms: checked('trainer-mega-forms'), includeGymTrainerThemes: checked('trainer-gym-themes'), gymEliteOnlyThemes: checked('trainer-gym-elite-only'), ensureStoryMegaEvolutions: checked('trainer-story-megas'), matchBst: checked('trainer-match-bst'), includeLegendary: checked('trainer-legendary'), includeMythical: checked('trainer-mythical'), includeShedinja: checked('trainer-shedinja'), allowGen1: byId('trainer-gen-1').checked, allowGen2: byId('trainer-gen-2').checked, allowGen3: byId('trainer-gen-3').checked, allowGen4: byId('trainer-gen-4').checked, allowGen5: byId('trainer-gen-5').checked, allowGen6: byId('trainer-gen-6').checked, allowGen7: byId('trainer-gen-7').checked },
     });
-    setStatus(result, `Listo. ZIP: ${data.zipPath} · Archivos modificados: ${data.changedFiles.join(', ')}`, 'success');
+    setStatus(result, `Listo. ZIP: ${data.zipPath} · Archivos modificados: ${data.changedFiles.join(', ')}${seed === null ? '' : ` · Semilla: ${seed}`}`, 'success');
   } catch (error) { setStatus(result, error.message, 'error'); }
   finally { updateUi(); }
 });

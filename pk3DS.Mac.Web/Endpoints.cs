@@ -14,10 +14,36 @@ public static class Endpoints
         var workspace = app.MapGroup("/api/workspace");
 
         workspace.MapPost("/inspect", (WorkspaceRequest request) => Results.Ok(WorkspaceInspector.Inspect(request)));
+        workspace.MapPost("/backups", (WorkspaceBackupsRequest request) =>
+            Results.Ok(WorkspaceBackupTools.List(request)));
+        workspace.MapPost("/backups/create", (CreateWorkspaceBackupRequest request) =>
+            Results.Ok(WorkspaceBackupTools.CreateBaseline(request)));
+        workspace.MapPost("/backups/restore", (RestoreWorkspaceBackupRequest request) =>
+            Results.Ok(WorkspaceBackupTools.Restore(request)));
         workspace.MapPost("/build-filesystems", (BuildFileSystemsRequest request) =>
             Results.Ok(ProjectTools.BuildFileSystems(request)));
         workspace.MapPost("/extract", (ExtractProjectRequest request) =>
             Results.Ok(ProjectTools.ExtractProject(request)));
+        workspace.MapPost("/extract/jobs", (ExtractProjectRequest request, ExtractionJobService jobs) =>
+        {
+            var job = jobs.Start(request);
+            return job is null
+                ? Results.Conflict(new { error = "Ya hay una extracción en curso. Esperá a que termine antes de iniciar otra." })
+                : Results.Accepted(job.StatusUrl, job);
+        });
+        workspace.MapGet("/extract/jobs/{jobId}", (string jobId, ExtractionJobService jobs) =>
+        {
+            var job = jobs.Get(jobId);
+            return job is null ? Results.NotFound() : Results.Ok(job);
+        });
+        workspace.MapPost("/unpack-exefs", (ExeFsUnpackRequest request) =>
+            Results.Ok(ExeFsProjectTools.Unpack(request)));
+        workspace.MapPost("/pack-exefs", (ExeFsPackRequest request) =>
+            Results.Ok(ExeFsProjectTools.Pack(request)));
+        workspace.MapPost("/unpack-romfs", (RomFsUnpackRequest request) =>
+            Results.Ok(RomFsProjectTools.Unpack(request)));
+        workspace.MapPost("/pack-romfs", (RomFsPackRequest request) =>
+            Results.Ok(RomFsProjectTools.Pack(request)));
         workspace.MapPost("/rebuild-rom", (RebuildRomRequest request) =>
             Results.Ok(ProjectTools.RebuildRom(request)));
         workspace.MapPost("/rebuild-crr", (RebuildCrrRequest request) =>
@@ -26,6 +52,8 @@ public static class Endpoints
             Results.Ok(ProjectTools.RebuildCia(request)));
         workspace.MapPost("/redirect-patch", (RedirectPatchRequest request) =>
             Results.Ok(ProjectTools.CreateRedirectPatch(request)));
+        workspace.MapPost("/redirect-patch/options", (WorkspaceRequest request) =>
+            Results.Ok(ProjectTools.GetRedirectPatchOptions(request)));
         workspace.MapPost("/unpack-auto", (AutoUnpackRequest request) =>
             Results.Ok(ProjectTools.UnpackAuto(request)));
         workspace.MapPost("/pack-auto", (AutoPackRequest request) =>
@@ -62,6 +90,8 @@ public static class Endpoints
             Results.Ok(ProjectTools.PackMini(request)));
         workspace.MapPost("/convert-image", (ConvertImageRequest request) =>
             Results.Ok(ProjectTools.ConvertImage(request)));
+        workspace.MapPost("/preview-image", (PreviewImageRequest request) =>
+            Results.Ok(ProjectTools.PreviewImage(request)));
         workspace.MapPost("/smdh/inspect", (SmdhInspectRequest request) =>
             Results.Ok(ProjectTools.InspectSmdh(request)));
         workspace.MapPost("/smdh/export", (SmdhExportRequest request) =>
@@ -82,14 +112,25 @@ public static class Endpoints
             Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona la carpeta extraída del juego"))));
         workspace.MapPost("/pick-output", (IFolderPicker picker) =>
             Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona dónde guardar la salida"))));
+        workspace.MapPost("/pick-redirect-patch", (IFolderPicker picker) =>
+            Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona la carpeta del parche de redirección"))));
         workspace.MapPost("/pick-file", (IFilePicker picker) =>
-            Results.Ok(new PickFileResponse(picker.PickFile("Selecciona un archivo CXI, 3DS o CIA"))));
+            Results.Ok(new PickFileResponse(picker.PickFile(
+                "Selecciona un archivo CXI, 3DS o CIA", "cxi", "3ds", "cia"))));
         workspace.MapPost("/pick-archive", (IFilePicker picker) =>
             Results.Ok(new PickFileResponse(picker.PickFile("Selecciona un archivo GAR, GARC, Mini, ALYT, Shuffle ARC, DARC, SARC o FARC"))));
         workspace.MapPost("/pick-tool", (IFilePicker picker) =>
             Results.Ok(new PickFileResponse(picker.PickFile("Selecciona el ejecutable makerom"))));
         workspace.MapPost("/pick-image", (IFilePicker picker) =>
             Results.Ok(new PickFileResponse(picker.PickFile("Selecciona una imagen PNG, BCLIM o BFLIM"))));
+        workspace.MapPost("/pick-exefs-file", (IFilePicker picker) =>
+            Results.Ok(new PickFileResponse(picker.PickFile("Selecciona un archivo exefs.bin"))));
+        workspace.MapPost("/pick-exefs-folder", (IFolderPicker picker) =>
+            Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona la carpeta con los archivos ExeFS"))));
+        workspace.MapPost("/pick-romfs-file", (IFilePicker picker) =>
+            Results.Ok(new PickFileResponse(picker.PickFile("Selecciona un archivo romfs.bin"))));
+        workspace.MapPost("/pick-romfs-folder", (IFolderPicker picker) =>
+            Results.Ok(new PickFolderResponse(picker.PickFolder("Selecciona la carpeta raíz del RomFS"))));
         workspace.MapPost("/pick-smdh", (IFilePicker picker) =>
             Results.Ok(new PickFileResponse(picker.PickFile("Selecciona un archivo SMDH icon.bin"))));
         workspace.MapPost("/pick-any-file", (IFilePicker picker) =>
@@ -102,7 +143,9 @@ public static class Endpoints
 
         editors.MapPost("/text/catalog", (TextCatalogRequest r) => Results.Ok(TextEditor.GetCatalog(r)));
         editors.MapPost("/text/table", (TextTableRequest r) => Results.Ok(TextEditor.GetTable(r)));
+        editors.MapPost("/text/all", (TextAllTablesRequest r) => Results.Ok(TextEditor.GetAllTables(r)));
         editors.MapPost("/text/export", (TextExportRequest r) => Results.Ok(TextEditor.Export(r)));
+        editors.MapPost("/text/export-all", (TextArchiveExportRequest r) => Results.Ok(TextEditor.ExportAll(r)));
 
         editors.MapPost("/levelup/catalog", (LearnsetCatalogRequest r) => Results.Ok(LearnsetEditor.GetCatalog(r)));
         editors.MapPost("/levelup/table", (LearnsetTableRequest r) => Results.Ok(LearnsetEditor.GetTable(r)));
@@ -129,10 +172,12 @@ public static class Endpoints
         editors.MapPost("/wild/areas", (WildAreaCatalogRequest r) => Results.Ok(WildEditor.GetCatalog(r)));
         editors.MapPost("/wild/table", (WildTableRequest r) => Results.Ok(WildEditor.GetTable(r)));
         editors.MapPost("/wild/export", (WildExportRequest r) => Results.Ok(WildEditor.Export(r)));
+        editors.MapPost("/wild/gen7/reports/export", (WildGen7BatchReportRequest r) => Results.Ok(WildEditor.ExportBatchReport(r)));
 
         editors.MapPost("/wild/gen6/areas", (WildGen6CatalogRequest r) => Results.Ok(WildGen6Editor.GetCatalog(r)));
         editors.MapPost("/wild/gen6/table", (WildGen6TableRequest r) => Results.Ok(WildGen6Editor.GetTable(r)));
         editors.MapPost("/wild/gen6/export", (WildGen6ExportRequest r) => Results.Ok(WildGen6Editor.Export(r)));
+        editors.MapPost("/wild/gen6/reports/export", (WildGen6BatchReportRequest r) => Results.Ok(WildGen6Editor.ExportBatchReport(r)));
 
         editors.MapPost("/owse/catalog", (OverworldCatalogRequest r) => Results.Ok(OverworldEditor.GetCatalog(r)));
         editors.MapPost("/owse/entry", (OverworldScriptEntryRequest r) => Results.Ok(OverworldEditor.GetEntry(r)));
@@ -145,8 +190,14 @@ public static class Endpoints
         editors.MapPost("/owse/gen7/entities", (OverworldGen7EntityRequest r) => Results.Ok(OverworldEditor.GetGen7Entities(r)));
         editors.MapPost("/owse/gen7/entities/export", (OverworldGen7EntityExportRequest r) => Results.Ok(OverworldEditor.ExportGen7Entities(r)));
         editors.MapPost("/owse/gen7/entities/raw-export", (OverworldGen7EntityRawExportRequest r) => Results.Ok(OverworldEditor.ExportGen7EntityRaw(r)));
+        editors.MapPost("/owse/gen7/map-resources", (OverworldGen7MapResourceRequest r) => Results.Ok(OverworldEditor.GetGen7MapResources(r)));
+        editors.MapPost("/owse/gen7/map-resources/export", (OverworldGen7MapResourceExportRequest r) => Results.Ok(OverworldEditor.ExportGen7MapResources(r)));
         editors.MapPost("/owse/gen6/map", (OverworldGen6MapRequest r) => Results.Ok(OverworldEditor.GetGen6Map(r)));
         editors.MapPost("/owse/gen6/map/export", (OverworldGen6MapExportRequest r) => Results.Ok(OverworldEditor.ExportMap(r)));
+        editors.MapPost("/owse/gen6/maps/export", (OverworldGen6MapBatchExportRequest r) => Results.Ok(OverworldEditor.ExportGen6Maps(r)));
+        editors.MapPost("/owse/gen6/zones/export", (OverworldGen6ZoneBatchExportRequest r) => Results.Ok(OverworldEditor.ExportGen6Zones(r)));
+        editors.MapPost("/owse/gen6/scripts/export", (OverworldGen6ScriptBatchExportRequest r) => Results.Ok(OverworldEditor.ExportGen6Scripts(r)));
+        editors.MapPost("/owse/gen7/scripts/export", (OverworldGen7ScriptBatchExportRequest r) => Results.Ok(OverworldEditor.ExportGen7Scripts(r)));
 
         editors.MapPost("/static/catalog", (StaticCatalogRequest r) => Results.Ok(StaticEditor.GetCatalog(r)));
         editors.MapPost("/static/entry", (StaticEntryRequest r) => Results.Ok(StaticEditor.GetEntry(r)));
@@ -155,10 +206,13 @@ public static class Endpoints
         editors.MapPost("/static/gen6/catalog", (StaticGen6CatalogRequest r) => Results.Ok(StaticGen6Editor.GetCatalog(r)));
         editors.MapPost("/static/gen6/entry", (StaticGen6EntryRequest r) => Results.Ok(StaticGen6Editor.GetEntry(r)));
         editors.MapPost("/static/gen6/export", (StaticGen6ExportRequest r) => Results.Ok(StaticGen6Editor.Export(r)));
+        editors.MapPost("/static/gen6/randomize", (StaticGen6RandomizeRequest r) => Results.Ok(StaticGen6Randomizer.Randomize(r)));
+        editors.MapPost("/static/gen7/randomize", (StaticGen7RandomizeRequest r) => Results.Ok(StaticGen7Randomizer.Randomize(r)));
 
         editors.MapPost("/gift/gen6/catalog", (GiftGen6CatalogRequest r) => Results.Ok(GiftGen6Editor.GetCatalog(r)));
         editors.MapPost("/gift/gen6/entry", (GiftGen6EntryRequest r) => Results.Ok(GiftGen6Editor.GetEntry(r)));
         editors.MapPost("/gift/gen6/export", (GiftGen6ExportRequest r) => Results.Ok(GiftGen6Editor.Export(r)));
+        editors.MapPost("/gift/gen6/randomize", (GiftGen6RandomizeRequest r) => Results.Ok(GiftGen6Randomizer.Randomize(r)));
 
         editors.MapPost("/tutors/gen6/table", (TutorGen6TableRequest r) => Results.Ok(TutorGen6Editor.GetTable(r)));
         editors.MapPost("/tutors/gen6/export", (TutorGen6ExportRequest r) => Results.Ok(TutorGen6Editor.Export(r)));
@@ -189,6 +243,7 @@ public static class Endpoints
 
         editors.MapPost("/starters/table", (StarterTableRequest r) => Results.Ok(StarterEditor.GetTable(r)));
         editors.MapPost("/starters/export", (StarterExportRequest r) => Results.Ok(StarterEditor.Export(r)));
+        editors.MapPost("/starters/randomize", (StarterRandomizeRequest r) => Results.Ok(StarterGen6Randomizer.Randomize(r)));
 
         editors.MapPost("/tutors/table", (TutorTableRequest r) => Results.Ok(TutorEditor.GetTable(r)));
         editors.MapPost("/tutors/export", (TutorExportRequest r) => Results.Ok(TutorEditor.Export(r)));
@@ -208,6 +263,8 @@ public static class Endpoints
         editors.MapPost("/titlescreen/replace", (TitleScreenReplaceRequest r) => Results.Ok(TitleScreenEditor.Replace(r)));
         editors.MapPost("/titlescreen/replace-garc", (TitleScreenReplaceRequest r) => Results.Ok(TitleScreenEditor.ReplaceGarc(r)));
         editors.MapPost("/titlescreen/apply", (TitleScreenApplyRequest r) => Results.Ok(TitleScreenEditor.Apply(r)));
+        editors.MapPost("/titlescreen/replace-garc-batch", (TitleScreenBatchReplaceRequest r) => Results.Ok(TitleScreenEditor.ReplaceGarcBatch(r)));
+        editors.MapPost("/titlescreen/apply-batch", (TitleScreenBatchApplyRequest r) => Results.Ok(TitleScreenEditor.ApplyBatch(r)));
         editors.MapPost("/titlescreen/backups", (TitleScreenBackupsRequest r) => Results.Ok(TitleScreenEditor.GetBackups(r)));
         editors.MapPost("/titlescreen/restore", (TitleScreenRestoreRequest r) => Results.Ok(TitleScreenEditor.RestoreBackup(r)));
     }

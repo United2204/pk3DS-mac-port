@@ -5,6 +5,15 @@ public enum TextArchiveKind { Game, Story }
 public sealed record TextCatalogRequest(string WorkspacePath, TextArchiveKind Kind = TextArchiveKind.Game, int? Language = null);
 public sealed record TextTableRequest(string WorkspacePath, TextArchiveKind Kind, int TableIndex, int? Language = null);
 public sealed record TextExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, TextArchiveKind Kind, int TableIndex, string[] Lines, int? Language = null);
+public sealed record TextAllTablesRequest(string WorkspacePath, TextArchiveKind Kind = TextArchiveKind.Game, int? Language = null);
+public sealed record TextAllTablesResponse(TextArchiveKind Kind, string[][] Tables);
+public sealed record TextArchiveExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, TextArchiveKind Kind, string[][] Tables, int? Language = null);
+public sealed record TextArchiveExportResponse(
+    string OutputFolder,
+    string ZipPath,
+    string[] ChangedFiles,
+    int[] FailedTableIndices,
+    string[] Errata);
 public sealed record TextTableSummary(int Index, string Name, int LineCount);
 public sealed record TextCatalogResponse(string GameVersion, TextArchiveKind Kind, TextTableSummary[] Tables);
 public sealed record TextTableResponse(TextArchiveKind Kind, int TableIndex, string[] Lines);
@@ -60,6 +69,25 @@ public sealed record WildEncounterCompanionSlot(int Species, int Form);
 public sealed record WildEncounterTable(int MinLevel, int MaxLevel, WildEncounterSlot[] Slots, WildEncounterCompanionSlot[][]? SosSlots = null, WildEncounterCompanionSlot[]? WeatherSlots = null);
 public sealed record WildTableResponse(int FileNumber, string AreaName, int TableIndex, WildEncounterTable Day, WildEncounterTable Night, NamedEntry[] Species);
 public sealed record WildExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int FileNumber, int TableIndex, WildEncounterTable Day, WildEncounterTable Night, int? Language = null);
+public sealed record WildGen7BatchReportRequest(string WorkspacePath, string? OutputDirectory, int? Language = null);
+public sealed record WildGen7TablePairReport(
+    int TableIndex, string HeaderHex, WildEncounterTable Day, WildEncounterTable Night,
+    string DayRawHex, string NightRawHex);
+public sealed record WildGen7AreaReportDocument(
+    string GameVersion, int AreaIndex, int FileNumber, string AreaName, string[] ZoneNames,
+    bool? HasTables, WildGen7TablePairReport[] Tables, string? Diagnostics = null);
+public sealed record WildGen7BatchReportFile(
+    int AreaIndex, int FileNumber, string AreaName, string FileName,
+    int Bytes, int TableCount, bool? HasTables);
+public sealed record WildGen7AreaWithoutTables(
+    int AreaIndex, int FileNumber, string AreaName, string Reason, string? ReportFile = null);
+public sealed record WildGen7SkippedArea(
+    int AreaIndex, int FileNumber, string AreaName, string Diagnostics, string? ReportFile = null);
+public sealed record WildGen7BatchReportResponse(
+    string GameVersion, string OutputDirectory, string ManifestFile, int TotalAreas,
+    WildGen7BatchReportFile[] Reports, WildGen7AreaWithoutTables[] AreasWithoutTables,
+    WildGen7SkippedArea[] Skipped, int UnassignedFileCount, int[] UnassignedFileIndices,
+    long TotalBytes, string? Diagnostics = null);
 
 // OWSE / scripts del mundo, Gen VI/VII ---------------------------------------
 public sealed record OverworldCatalogRequest(string WorkspacePath, int? Language = null);
@@ -69,7 +97,10 @@ public sealed record OverworldScriptEntryRequest(string WorkspacePath, string Gr
 public sealed record OverworldGen7EntityEntrySummary(
     int EntryIndex, int Bytes, int? RecordCount = null, int? RecordKind = null,
     string? PreviewHex = null, string? Schema = null, int? RecordStride = null,
-    int? PositionOffset = null);
+    int? PositionOffset = null, OverworldGen7EsKind0DescriptorSummary[]? EsKind0Descriptors = null);
+public sealed record OverworldGen7EsKind0DescriptorSummary(
+    int DescriptorIndex, int PayloadOffset, int RawWord1, int RawWord2, int RawWord3,
+    int PayloadBytes, int? PayloadType, int? PointCount, string SegmentLayout, string? PreviewHex);
 public sealed record OverworldGen7EntityBlockSummary(
     string Identifier, int Bytes, int EntryCount, bool IsMiniArchive,
     OverworldGen7EntityEntrySummary[]? Entries = null, int? BlockIndex = null);
@@ -91,7 +122,8 @@ public sealed record OverworldFurnitureEntry(int Script, int X, int Y, int Width
 public sealed record OverworldNpcEntry(
     int Id, int Model, int SpawnFlag, int Script, int FaceDirection, int SightRange,
     int X, int Y, int MovePermissions, int MovePermissions2);
-public sealed record OverworldWarpEntry(int DestinationMap, int DestinationTileIndex, int X, int Y);
+public sealed record OverworldWarpEntry(
+    int DestinationMap, int DestinationTileIndex, int X, int Y, int Width = 0, int Height = 0);
 public sealed record OverworldTriggerEntry(int Script, int Constant, int Type, int Flags, int X, int Y, int Width, int Height);
 public sealed record OverworldGen6ZoneMetadata(
     int MapArea, int MapMatrix, int TextFile, int ScriptFile, int ParentMap, int Weather,
@@ -110,6 +142,25 @@ public sealed record OverworldGen6ZoneResponse(
     OverworldFurnitureEntry[] Furniture, OverworldNpcEntry[] Npcs, OverworldWarpEntry[] Warps,
     OverworldTriggerEntry[] Triggers, OverworldTriggerEntry[] UnknownTriggers,
     OverworldGen6ZoneMetadata? Metadata = null);
+public sealed record OverworldGen6ZoneBatchExportRequest(
+    string WorkspacePath, string? OutputDirectory, int? Language = null);
+public sealed record OverworldGen6ZoneExportDocument(
+    int ZoneIndex, int SourceFileIndex, string LocationName, OverworldZoneSummary Summary,
+    string ZoneDataHex, OverworldGen6ZoneMetadata? Metadata,
+    OverworldFurnitureEntry[] Furniture, string[] FurnitureRawHex,
+    OverworldNpcEntry[] Npcs, string[] NpcRawHex,
+    OverworldWarpEntry[] Warps, string[] WarpRawHex,
+    OverworldTriggerEntry[] Triggers, string[] TriggerRawHex,
+    string[] UnknownEntityRawHex, string? Diagnostics = null);
+public sealed record OverworldGen6ZoneExportedFile(
+    int ZoneIndex, int SourceFileIndex, string LocationName, string FileName, int Bytes,
+    int FurnitureCount, int NpcCount, int WarpCount, int TriggerCount,
+    int UnknownEntityCount, string? Diagnostics = null);
+public sealed record OverworldGen6ZoneSkippedFile(int ZoneIndex, string LocationName, string Diagnostics);
+public sealed record OverworldGen6ZoneBatchExportResponse(
+    string GameVersion, string OutputDirectory, string ManifestFile, int TotalZones,
+    OverworldGen6ZoneExportedFile[] Zones, OverworldGen6ZoneSkippedFile[] Skipped,
+    long TotalBytes, string? Diagnostics = null);
 public sealed record OverworldGen6ExportRequest(
     string WorkspacePath, string? OutputDirectory, string? TitleId, int ZoneIndex,
     OverworldFurnitureEntry[]? Furniture, OverworldNpcEntry[]? Npcs, OverworldWarpEntry[]? Warps,
@@ -131,7 +182,9 @@ public sealed record OverworldGen7ZoneExportRequest(
 public sealed record OverworldGen7PositionEntry(int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EmPositionEntry(int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EiPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
-public sealed record OverworldGen7EbPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
+public sealed record OverworldGen7EbPositionEntry(
+    int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z, int RecordKind = 2);
+public sealed record OverworldGen7EgPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EsPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EaPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EtPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
@@ -143,14 +196,16 @@ public sealed record OverworldGen7EntityResponse(
     OverworldGen7EsPositionEntry[] EsPositions, OverworldGen7EaPositionEntry[] EaPositions,
     OverworldGen7EtPositionEntry[] EtPositions, OverworldGen7EntityBlockSummary[] Blocks,
     string? Diagnostics = null, OverworldGen7EiPositionEntry[]? EiPositions = null,
-    OverworldGen7PrPositionEntry[]? PrPositions = null);
+    OverworldGen7PrPositionEntry[]? PrPositions = null,
+    OverworldGen7EgPositionEntry[]? EgPositions = null);
 public sealed record OverworldGen7EntityExportRequest(
     string WorkspacePath, string? OutputDirectory, string? TitleId, int WorldIndex,
     OverworldGen7PositionEntry[]? Positions, OverworldGen7EmPositionEntry[]? EmPositions = null,
     OverworldGen7EbPositionEntry[]? EbPositions = null, OverworldGen7EsPositionEntry[]? EsPositions = null,
     OverworldGen7EaPositionEntry[]? EaPositions = null, OverworldGen7EtPositionEntry[]? EtPositions = null,
     int? Language = null, OverworldGen7EiPositionEntry[]? EiPositions = null,
-    OverworldGen7PrPositionEntry[]? PrPositions = null);
+    OverworldGen7PrPositionEntry[]? PrPositions = null,
+    OverworldGen7EgPositionEntry[]? EgPositions = null);
 public sealed record OverworldGen7EntityRawExportRequest(
     string WorkspacePath, string? OutputDirectory, int WorldIndex, int? Language = null);
 public sealed record OverworldGen7EntityRawFile(
@@ -159,7 +214,22 @@ public sealed record OverworldGen7EntityRawExportResponse(
     string GameVersion, int WorldIndex, int SourceFileIndex, string SourceGarc,
     string OutputDirectory, string ManifestFile, OverworldGen7EntityRawFile[] Files,
     long TotalBytes, string? Diagnostics = null);
-public sealed record OverworldGen6MapRequest(string WorkspacePath, int ZoneIndex, int? Language = null);
+public sealed record OverworldGen7MapResourceRequest(string WorkspacePath, int WorldIndex, int? Language = null);
+public sealed record OverworldGen7MapResourceEntry(
+    int FileIndex, int SlotOffset, string RelativePath, int Depth, string Signature, int Bytes,
+    bool IsMiniArchive, int? MiniEntryCount, string HeaderHex, string[] PrintableStrings);
+public sealed record OverworldGen7MapResourceResponse(
+    string GameVersion, int WorldIndex, string SourceGarc, OverworldGen7MapResourceEntry[] Resources,
+    string Note, string? Diagnostics = null);
+public sealed record OverworldGen7MapResourceExportRequest(
+    string WorkspacePath, string? OutputDirectory, int WorldIndex, int? Language = null);
+public sealed record OverworldGen7MapResourceExportedFile(
+    int FileIndex, int SlotOffset, string RelativePath, string FileName, int Depth, string Signature, int Bytes);
+public sealed record OverworldGen7MapResourceExportResponse(
+    string GameVersion, int WorldIndex, string SourceGarc, string OutputDirectory, string ManifestFile,
+    OverworldGen7MapResourceExportedFile[] Files, long TotalBytes, string Note, string? Diagnostics = null);
+public sealed record OverworldGen6MapRequest(
+    string WorkspacePath, int ZoneIndex, int? Language = null, bool IncludeEntityOverlay = true);
 public sealed record OverworldGen6MapPreview(
     string? PngBase64, int Width, int Height, string? Diagnostics = null);
 public sealed record OverworldGen6MapResponse(
@@ -169,6 +239,54 @@ public sealed record OverworldGen6MapResponse(
 public sealed record OverworldGen6MapExportRequest(
     string WorkspacePath, string? OutputDirectory, string? TitleId, int ZoneIndex,
     uint[]? Properties, ushort[]? MatrixValues = null, int? Language = null);
+public sealed record OverworldGen6MapBatchExportRequest(
+    string WorkspacePath, string? OutputDirectory, bool IncludeEntityOverlay = true, int? Language = null);
+public sealed record OverworldGen6MapExportedFile(
+    int ZoneIndex, string LocationName, int MapArea, int MapMatrix, string FileName,
+    int Width, int Height, int Bytes, ushort[] MapEntries, string? Diagnostics = null);
+public sealed record OverworldGen6MapSkippedFile(int ZoneIndex, string LocationName, string Diagnostics);
+public sealed record OverworldGen6MapBatchExportResponse(
+    string GameVersion, string OutputDirectory, string ManifestFile, int TotalZones,
+    OverworldGen6MapExportedFile[] Maps, OverworldGen6MapSkippedFile[] Skipped,
+    long TotalBytes, string? Diagnostics = null);
+public sealed record OverworldGen6ScriptBatchExportRequest(
+    string WorkspacePath, string? OutputDirectory, int? Language = null);
+public sealed record OverworldGen6ScriptExportedFile(
+    int ZoneIndex, string LocationName, string Group, string FileName,
+    int RawBytes, int InstructionCount, int Bytes, string? Diagnostics = null);
+public sealed record OverworldGen6ScriptSkippedFile(
+    int ZoneIndex, string LocationName, string Group, string Diagnostics);
+public sealed record OverworldGen6ScriptExportDocument(
+    int ZoneIndex, string LocationName, string Group, int RawBytes,
+    uint Magic, bool Debug, int ScriptInstructionStart, int ScriptMovementStart,
+    int FinalOffset, int AllocatedMemory, int CompressedBytes, int DecompressedBytes,
+    uint[] ScriptInstructions, uint[] MovementInstructions,
+    string[] ScriptInstructionHex, string[] MovementInstructionHex,
+    string[] ParsedScriptLines, string[] ParsedMovementLines,
+    string[] RawHex, string? Diagnostics);
+public sealed record OverworldGen6ScriptBatchExportResponse(
+    string GameVersion, string OutputDirectory, string ManifestFile, int TotalZones,
+    OverworldGen6ScriptExportedFile[] Scripts, OverworldGen6ScriptSkippedFile[] Skipped,
+    long TotalBytes, string? Diagnostics = null);
+public sealed record OverworldGen7ScriptBatchExportRequest(
+    string WorkspacePath, string? OutputDirectory, int? Language = null);
+public sealed record OverworldGen7ScriptExportedFile(
+    int WorldIndex, int ScriptIndex, string LocationName, string Group, string FileName,
+    int RawBytes, int InstructionCount, int Bytes, string? Diagnostics = null);
+public sealed record OverworldGen7ScriptSkippedFile(
+    int WorldIndex, string LocationName, string Group, string Diagnostics);
+public sealed record OverworldGen7ScriptExportDocument(
+    int WorldIndex, int ScriptIndex, string LocationName, string Group, int RawBytes,
+    uint Magic, bool Debug, int ScriptInstructionStart, int ScriptMovementStart,
+    int FinalOffset, int AllocatedMemory, int CompressedBytes, int DecompressedBytes,
+    uint[] ScriptInstructions, uint[] MovementInstructions,
+    string[] ScriptInstructionHex, string[] MovementInstructionHex,
+    string[] ParsedScriptLines, string[] ParsedMovementLines,
+    string[] RawHex, string? Diagnostics);
+public sealed record OverworldGen7ScriptBatchExportResponse(
+    string GameVersion, string OutputDirectory, string ManifestFile, int TotalWorlds,
+    int TotalScripts, int UnassignedFileCount, OverworldGen7ScriptExportedFile[] Scripts,
+    OverworldGen7ScriptSkippedFile[] Skipped, long TotalBytes, string? Diagnostics = null);
 
 // Wild encounters, Gen VI -----------------------------------------------------
 public sealed record WildGen6CatalogRequest(string WorkspacePath, int? Language = null);
@@ -179,6 +297,21 @@ public sealed record WildGen6Slot(int Species, int Form, int MinLevel, int MaxLe
 public sealed record WildGen6Group(string Name, WildGen6Slot[] Slots);
 public sealed record WildGen6TableResponse(int FileIndex, string AreaName, WildGen6Group[] Groups, NamedEntry[] Species);
 public sealed record WildGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int FileIndex, WildGen6Group[] Groups, int? Language = null);
+public sealed record WildGen6BatchReportRequest(string WorkspacePath, string? OutputDirectory, int? Language = null);
+public sealed record WildGen6AreaReportDocument(
+    string GameVersion, int FileIndex, int LocationIndex, string AreaName, bool? HasEncounters,
+    WildGen6Group[] Groups, string? Diagnostics = null);
+public sealed record WildGen6BatchReportFile(
+    int FileIndex, int LocationIndex, string AreaName, string FileName,
+    int Bytes, int SlotCount, int GroupCount, bool? HasEncounters);
+public sealed record WildGen6NoEncounterArea(
+    int FileIndex, int LocationIndex, string AreaName, string Reason, string? ReportFile = null);
+public sealed record WildGen6SkippedArea(
+    int FileIndex, int LocationIndex, string AreaName, string Diagnostics, string? ReportFile = null);
+public sealed record WildGen6BatchReportResponse(
+    string GameVersion, string OutputDirectory, string ManifestFile, int TotalAreas,
+    WildGen6BatchReportFile[] Reports, WildGen6NoEncounterArea[] AreasWithoutEncounters,
+    WildGen6SkippedArea[] Skipped, long TotalBytes, string? Diagnostics = null);
 
 // Static encounters, Gen VII --------------------------------------------------
 public sealed record StaticCatalogRequest(string WorkspacePath, int? Language = null);
@@ -196,6 +329,68 @@ public sealed record StaticGen6EntryRequest(string WorkspacePath, int EntryIndex
 public sealed record StaticGen6Entry(int Species, int Form, int Level, int HeldItem, int Gender, int Ability, bool ShinyLock, bool IV3);
 public sealed record StaticGen6EntryResponse(int EntryIndex, StaticGen6Entry Entry);
 public sealed record StaticGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int EntryIndex, StaticGen6Entry? Entry, int? Language = null);
+public sealed record StaticGen6RandomizeRequest(
+    string WorkspacePath,
+    string? OutputDirectory,
+    string? TitleId,
+    int? Language = null,
+    bool AllowGen1 = true,
+    bool AllowGen2 = true,
+    bool AllowGen3 = true,
+    bool AllowGen4 = true,
+    bool AllowGen5 = true,
+    bool AllowGen6 = true,
+    bool IncludeMythical = true,
+    bool IncludeLegendary = true,
+    bool MatchBst = false,
+    bool ReplaceLegendary = true,
+    bool AllowMegaForms = false,
+    bool RandomizeHeldItems = true,
+    bool RandomizeLevels = true,
+    decimal LevelMultiplier = 1.0m,
+    bool RemoveShinyLocks = false,
+    bool RandomizeAbilities = false,
+    bool ForceFullyEvolved = false,
+    int FullyEvolvedLevel = 50,
+    int? Seed = null);
+
+public sealed record StaticGen7RandomizeRequest(
+    string WorkspacePath,
+    string? OutputDirectory,
+    string? TitleId,
+    int? Language = null,
+    bool RandomizeStartersOnly = false,
+    bool AllowGen1 = true,
+    bool AllowGen2 = true,
+    bool AllowGen3 = true,
+    bool AllowGen4 = true,
+    bool AllowGen5 = true,
+    bool AllowGen6 = true,
+    bool AllowGen7 = true,
+    bool IncludeMythical = true,
+    bool IncludeLegendary = true,
+    bool MatchBst = false,
+    bool ReplaceLegendary = true,
+    bool AllowMegaForms = false,
+    bool RandomizeHeldItems = true,
+    bool RandomizeLevels = true,
+    decimal LevelMultiplier = 1.0m,
+    bool RemoveShinyLocks = true,
+    bool RandomizeAbilities = false,
+    bool RandomizeAura = false,
+    bool RandomizeSpecialMoves = false,
+    bool MetronomeMode = false,
+    bool ForceFullyEvolved = false,
+    int FullyEvolvedLevel = 50,
+    bool ForceFullyEvolvedTotems = false,
+    bool BasicStarter = true,
+    int? Seed = null,
+    bool UpdateStarterText = false);
+public sealed record StaticGen7RandomizeResponse(
+    string OutputFolder,
+    string ZipPath,
+    string[] ChangedFiles,
+    bool StarterTextUpdated);
 
 // Gift Pokémon, Gen VI CRO ----------------------------------------------------
 public sealed record GiftGen6CatalogRequest(string WorkspacePath, int? Language = null);
@@ -204,6 +399,30 @@ public sealed record GiftGen6EntryRequest(string WorkspacePath, int EntryIndex, 
 public sealed record GiftGen6Entry(int Species, int Form, int Level, int HeldItem, int Gender, int Ability, int Nature, bool ShinyLock, int[] IVs);
 public sealed record GiftGen6EntryResponse(int EntryIndex, GiftGen6Entry Entry);
 public sealed record GiftGen6ExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, int EntryIndex, GiftGen6Entry? Entry, int? Language = null);
+public sealed record GiftGen6RandomizeRequest(
+    string WorkspacePath,
+    string? OutputDirectory,
+    string? TitleId,
+    int? Language = null,
+    bool AllowGen1 = true,
+    bool AllowGen2 = true,
+    bool AllowGen3 = true,
+    bool AllowGen4 = true,
+    bool AllowGen5 = true,
+    bool AllowGen6 = true,
+    bool IncludeMythical = true,
+    bool IncludeLegendary = true,
+    bool MatchBst = false,
+    bool ReplaceMegaGifts = false,
+    bool AllowMegaForms = false,
+    bool RandomizeHeldItems = true,
+    bool RandomizeLevels = true,
+    decimal LevelMultiplier = 1.0m,
+    bool RemoveShinyLocks = false,
+    bool RandomizeAbilities = false,
+    bool ForceFullyEvolved = false,
+    int FullyEvolvedLevel = 50,
+    int? Seed = null);
 
 // Move Tutors, Gen VI ExeFS ---------------------------------------------------
 public sealed record TutorGen6Group(string Name, int[] Moves);
@@ -260,6 +479,16 @@ public sealed record StarterGroup(string Name, int[] Species);
 public sealed record StarterTableRequest(string WorkspacePath, int? Language = null);
 public sealed record StarterTableResponse(string GameVersion, StarterGroup[] Groups, NamedEntry[] Species, string Warning);
 public sealed record StarterExportRequest(string WorkspacePath, string? OutputDirectory, string? TitleId, StarterGroup[] Groups, int? Language = null);
+public sealed record StarterRandomizeRequest(
+    string WorkspacePath,
+    string? OutputDirectory,
+    string? TitleId,
+    int? Language = null,
+    bool BasicStarter = true,
+    bool KeepSameGen = false,
+    bool IncludeLegendary = false,
+    bool IncludeMythical = false,
+    int? Seed = null);
 
 // Move Tutors, Gen VII CRO ----------------------------------------------------
 public sealed record TutorTableRequest(string WorkspacePath, int? Language = null);

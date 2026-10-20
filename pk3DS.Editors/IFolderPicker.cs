@@ -13,5 +13,5 @@ public interface IFolderPicker
 public interface IFilePicker
 {
     /// <summary>Prompts for a file, or throws <see cref="WorkspaceException"/> if none was chosen.</summary>
-    string PickFile(string prompt);
+    string PickFile(string prompt, params string[] allowedExtensions);
 }

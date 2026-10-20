@@ -14,7 +14,8 @@ public sealed record RandomizeRequest(
     MoveOptions? Moves = null,
     EvolutionOptions? Evolutions = null,
     WildRandomizerOptions? Wild = null,
-    TrainerRandomizerOptions? Trainers = null);
+    TrainerRandomizerOptions? Trainers = null,
+    int? Seed = null);
 
 public sealed record PersonalOptions(
     bool RandomizeAbilities = false,
@@ -123,24 +124,39 @@ public sealed record TrainerRandomizerOptions(
     bool MaximizeAI = false,
     bool MaximizeIVs = false,
     bool ForceFullyEvolved = false,
-    decimal FullyEvolvedLevel = 30,
+    decimal FullyEvolvedLevel = 50,
     bool RandomizePrizes = false,
     decimal PrizeChance = 15,
     bool FillImportantGen7Teams = false,
     bool ForceHighPower = false,
-    decimal HighPowerLevel = 30,
+    decimal HighPowerLevel = 50,
     bool RandomizeNature = false,
     bool RandomizeShiny = false,
     decimal ShinyChance = 3,
     bool RandomizeTypeThemes = false,
     bool AllowMegaForms = false,
     bool IncludeGymTrainerThemes = false,
+    bool GymEliteOnlyThemes = false,
+    bool EnsureStoryMegaEvolutions = false,
+    bool FillImportantGen6Teams = false,
     bool MatchBst = false,
-    bool IncludeLegendary = false,
-    bool IncludeMythical = false,
+    bool IncludeLegendary = true,
+    bool IncludeMythical = true,
     bool IncludeShedinja = false,
     bool UseCurrentLearnsetMoves = false,
-    bool MetronomeMoves = false)
+    bool MetronomeMoves = false,
+    bool AllowGen1 = true,
+    bool AllowGen2 = true,
+    bool AllowGen3 = true,
+    bool AllowGen4 = true,
+    bool AllowGen5 = true,
+    bool AllowGen6 = true,
+    bool AllowGen7 = true,
+    bool ExcludeFixedDamageMoves = true,
+    bool EnsureDamagingMoves = true,
+    int DamagingMoveCount = 2,
+    bool EnsureStabMoves = true,
+    int StabMoveCount = 2)
 {
-    public bool HasChanges => Enabled && (RandomizeSpecies || RandomizeLevels || RandomizeClasses || RandomizeComposition || RandomizeItems || RandomizeAbilities || RandomizeMoves || MaximizeAI || MaximizeIVs || ForceFullyEvolved || RandomizePrizes || FillImportantGen7Teams || ForceHighPower || RandomizeNature || RandomizeShiny || RandomizeTypeThemes || AllowMegaForms || IncludeGymTrainerThemes || UseCurrentLearnsetMoves || MetronomeMoves || (RandomizeSpecies && (MatchBst || IncludeLegendary || IncludeMythical || IncludeShedinja)));
+    public bool HasChanges => Enabled && (RandomizeSpecies || RandomizeLevels || RandomizeClasses || RandomizeComposition || RandomizeItems || RandomizeAbilities || RandomizeMoves || MaximizeAI || MaximizeIVs || ForceFullyEvolved || RandomizePrizes || FillImportantGen6Teams || FillImportantGen7Teams || ForceHighPower || RandomizeNature || RandomizeShiny || RandomizeTypeThemes || AllowMegaForms || IncludeGymTrainerThemes || GymEliteOnlyThemes || UseCurrentLearnsetMoves || MetronomeMoves || (RandomizeSpecies && (MatchBst || IncludeLegendary || IncludeMythical || IncludeShedinja || EnsureStoryMegaEvolutions)));
 }

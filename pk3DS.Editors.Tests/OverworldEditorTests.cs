@@ -655,7 +655,7 @@ public sealed class OverworldEditorTests : IDisposable
     }
 
     [Fact]
-    public void Gen6OrasStartsZonesAtTheSecondEncdataFile()
+    public void Gen6OrasReadsZonesFromTheCompressedAreaRange()
     {
         using var oras = new SyntheticOrasWorkspace();
         oras.WriteOverworldFixture();

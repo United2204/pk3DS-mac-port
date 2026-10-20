@@ -2,7 +2,9 @@ using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Windows.Forms;
 using pk3DS.Core;
 using pk3DS.Core.CTR;
@@ -16,12 +18,42 @@ public static class ProjectTools
 {
     private const uint NcchMagic = 0x4843434E;
     private const uint NcsdMagic = 0x4453434E;
+    private const long MaxImagePreviewInputBytes = 32L * 1024 * 1024;
+    private const long MaxImagePreviewPixels = 4L * 1024 * 1024;
+    private const int MaxImagePreviewPngBytes = 16 * 1024 * 1024;
 
     // RomFS.BuildRomFS uses legacy static state and a temporary filename. Serialising calls keeps
     // two simultaneous web requests from interleaving their metadata or temporary output.
     private static readonly object RomFsBuildLock = new();
     private static readonly object GarcToolLock = new();
     private static readonly object CiaBuildLock = new();
+    private static readonly HashSet<string> XyGarcShuffleBanlist = new(StringComparer.Ordinal)
+    {
+        "a005", "a007", "a012", "a041", "a042", "a072", "a073", "a074", "a075", "a076",
+        "a078", "a079", "a080", "a081", "a082", "a083", "a084", "a085", "a086", "a087",
+        "a101", "a165", "a218",
+    };
+    private static readonly HashSet<string> OrasGarcShuffleBanlist = new(StringComparer.Ordinal)
+    {
+        "a005", "a008", "a013", "a039", "a040", "a071", "a072", "a073", "a074", "a075",
+        "a076", "a078", "a079", "a080", "a081", "a082", "a083", "a084", "a085", "a086",
+        "a100", "a152", "a195",
+    };
+
+    private const string RedirectPatchManifestName = "redirect-manifest.json";
+    private const string RedirectPatchManifestFormat = "pk3DS redirect patch v2";
+
+    private sealed record ShuffleGarcContext(GameVersion? GameVersion, string? GarcId);
+
+    private sealed record RedirectPatchFileManifest(string Path, string SourcePath, string Sha256);
+    private sealed record RedirectPatchManifest(
+        string Format,
+        string GameVersion,
+        string? TitleId,
+        string SourceCodeSha256,
+        string PatchedCodeSha256,
+        int RedirectedPathCount,
+        RedirectPatchFileManifest[] Files);
 
     public static BuildFileSystemsResponse BuildFileSystems(BuildFileSystemsRequest request)
     {
@@ -59,8 +91,7 @@ public static class ProjectTools
             if (exeFsSources is not null)
             {
                 stagedExeFsFile = Path.Combine(stagingDirectory, "exefs.bin");
-                if (!ExeFS.PackExeFS(exeFsSources, stagedExeFsFile))
-                    throw new WorkspaceException("No pude empaquetar el ExeFS. Revisá que sus archivos sean legibles.");
+                ExeFsProjectTools.Pack(new ExeFsPackRequest(workspace.ExeFsPath!, stagedExeFsFile));
             }
 
             Directory.CreateDirectory(outputDirectory);
@@ -98,8 +129,10 @@ public static class ProjectTools
         }
     }
 
-    public static ExtractProjectResponse ExtractProject(ExtractProjectRequest request)
+    public static ExtractProjectResponse ExtractProject(
+        ExtractProjectRequest request, Action<ExtractProjectProgress>? reportProgress = null)
     {
+        reportProgress?.Invoke(new ExtractProjectProgress("Validando el archivo…", 0, 0));
         if (string.IsNullOrWhiteSpace(request.InputPath))
             throw new WorkspaceException("Elegí un archivo .cxi, .3ds o .cia para extraer.");
 
@@ -108,6 +141,7 @@ public static class ProjectTools
             throw new WorkspaceException("El archivo indicado no existe.");
 
         var format = DetectFormat(input);
+        var ncchOffset = ValidateNcchBeforeExtraction(input, format);
         var output = ResolveExtractionOutput(input, request.OutputDirectory);
         var parent = Directory.GetParent(output)!.FullName;
         Directory.CreateDirectory(parent);
@@ -115,16 +149,27 @@ public static class ProjectTools
         Directory.CreateDirectory(staging);
         try
         {
+            reportProgress?.Invoke(new ExtractProjectProgress("Preparando la extracción…", 0, 0));
             var progress = new ProgressBar();
             var log = new RichTextBox();
+            var progressMessage = "Extrayendo el contenido…";
             try
             {
-                if (format == "CXI")
-                    new NCCH().ExtractNCCHFromFile(input, staging, log, progress);
-                else if (format == "3DS")
-                    new NCSD().ExtractFilesFromNCSD(input, staging, log, progress);
-                else
-                    ExtractFromCia(input, staging, log, progress);
+                // Extract the first NCCH directly from its enclosing file. This avoids copying
+                // a full-size 3DS partition to a temporary CXI before extracting its files.
+                new NCCH().ExtractNCCHFromFile(
+                    input,
+                    staging,
+                    log,
+                    progress,
+                    ncchOffset,
+                    message =>
+                    {
+                        progressMessage = message;
+                        reportProgress?.Invoke(new ExtractProjectProgress(message, 0, 0));
+                    },
+                    (current, total) => reportProgress?.Invoke(new ExtractProjectProgress(
+                        progressMessage, current, total)));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or EndOfStreamException or InvalidDataException or OverflowException)
             {
@@ -134,6 +179,7 @@ public static class ProjectTools
             // An empty destination is safe to reuse, but Move cannot replace an
             // existing directory. Remove only the directory we already verified
             // is empty, immediately before promoting the completed staging tree.
+            reportProgress?.Invoke(new ExtractProjectProgress("Publicando el workspace…", 0, 0));
             if (Directory.Exists(output))
                 Directory.Delete(output);
             Directory.Move(staging, output);
@@ -176,8 +222,7 @@ public static class ProjectTools
             var romFsFile = Path.Combine(stagingDirectory, "romfs.bin");
             var exeFsFile = Path.Combine(stagingDirectory, "exefs.bin");
             BuildRomFs(workspace.RomFsPath, romFsFile);
-            if (!ExeFS.PackExeFS(exeFsSources, exeFsFile))
-                throw new WorkspaceException("No pude empaquetar el ExeFS. Revisá que sus archivos sean legibles.");
+            ExeFsProjectTools.Pack(new ExeFsPackRequest(workspace.ExeFsPath, exeFsFile));
 
             var serial = string.IsNullOrWhiteSpace(request.SerialText)
                 ? new Exheader(workspace.ExheaderPath).GetPokemonSerial()
@@ -277,7 +322,9 @@ public static class ProjectTools
         // Serialising CIA builds prevents two rapid clicks from racing past the existence check
         // and turning the second File.Move into an unrelated generic 500 error.
         lock (CiaBuildLock)
-            return RebuildCiaCore(request);
+            return string.IsNullOrWhiteSpace(request.RedirectPatchDirectory)
+                ? RebuildCiaCore(request)
+                : RebuildCiaWithRedirectPatchCore(request);
     }
 
     private static RebuildCiaResponse RebuildCiaCore(RebuildCiaRequest request)
@@ -303,6 +350,10 @@ public static class ProjectTools
             if (!File.Exists(stagedCia))
                 throw new WorkspaceException("makerom terminó sin generar el archivo CIA.");
 
+            // makerom's exit code alone does not prove that the produced sections can be read
+            // by this application's extractor. Validate the staged artifact before publishing it.
+            _ = ValidateNcchBeforeExtraction(stagedCia, "CIA");
+
             Directory.CreateDirectory(Path.GetDirectoryName(outputFile)!);
             try
             {
@@ -318,7 +369,7 @@ public static class ProjectTools
                 new FileInfo(outputFile).Length,
                 request.Trimmed,
                 makerom,
-                "CIA desencriptado generado mediante makerom ignorando las firmas retail del contenido reconstruido; el workspace original no se modifica.");
+                "CIA desencriptado generado y validado estructuralmente (cabecera, secciones NCCH, exheader, ExeFS y RomFS); makerom ignora las firmas retail del contenido reconstruido, así que no se garantiza su aceptación en una consola sin parchear. El workspace original no se modifica.");
         }
         finally
         {
@@ -327,27 +378,475 @@ public static class ProjectTools
         }
     }
 
+    private static RebuildCiaResponse RebuildCiaWithRedirectPatchCore(RebuildCiaRequest request)
+    {
+        var sourceWorkspace = GameWorkspace.Open(request.WorkspacePath);
+        if (sourceWorkspace.ExeFsPath is null || sourceWorkspace.ExheaderPath is null)
+            throw new WorkspaceException("Falta ExeFS o exheader.bin. Se requiere un workspace completo para integrar el parche.");
+        if (IsReparsePoint(sourceWorkspace.ExheaderPath))
+            throw new WorkspaceException("No se puede integrar el parche porque exheader.bin es un enlace simbólico.");
+
+        string sourceExheaderHash;
+        try
+        {
+            sourceExheaderHash = GetSha256(sourceWorkspace.ExheaderPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            throw new WorkspaceException($"No pude leer exheader.bin para validar el workspace: {exception.Message}");
+        }
+
+        var outputFile = ResolveCiaOutputFile(sourceWorkspace, request.OutputFile);
+        var makerom = ResolveMakeromPath(sourceWorkspace, request.MakeromPath);
+        string patchDirectory;
+        try
+        {
+            patchDirectory = Path.GetFullPath(request.RedirectPatchDirectory!.Trim());
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            throw new WorkspaceException($"La ruta de la carpeta del parche no es válida: {exception.Message}");
+        }
+        if (!Directory.Exists(patchDirectory) || IsReparsePoint(patchDirectory))
+            throw new WorkspaceException("No encuentro la carpeta del parche de redirección seleccionada.");
+
+        var codeSource = ResolveWorkspaceCodeFile(sourceWorkspace);
+        RedirectPatchManifest patchManifest;
+        try
+        {
+            patchManifest = ReadAndValidateRedirectPatch(patchDirectory, sourceWorkspace, codeSource);
+        }
+        catch (WorkspaceException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or ArgumentException or NotSupportedException or System.Security.SecurityException or CryptographicException)
+        {
+            throw new WorkspaceException($"No pude validar el manifiesto y los archivos del parche: {exception.Message}");
+        }
+        var stagingParent = Directory.GetParent(sourceWorkspace.RootPath)?.FullName ?? sourceWorkspace.RootPath;
+        var stagingDirectory = Path.Combine(stagingParent, $".pk3ds-redirect-cia-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(stagingDirectory);
+            var stagedWorkspaceRoot = Path.Combine(stagingDirectory, "workspace");
+            var stagedRomFsPath = Path.Combine(stagedWorkspaceRoot, "RomFS");
+            var stagedExeFsPath = Path.Combine(stagedWorkspaceRoot, "ExeFS");
+            Directory.CreateDirectory(stagedWorkspaceRoot);
+
+            CloneDirectoryForWorkspace(sourceWorkspace.RomFsPath, stagedRomFsPath);
+            CloneFlatDirectoryForWorkspace(sourceWorkspace.ExeFsPath, stagedExeFsPath,
+                replacedSourceFile: codeSource,
+                replacementFile: Path.Combine(patchDirectory, ".code.bin"));
+            ValidateWorkspaceClone(sourceWorkspace.RomFsPath, stagedRomFsPath, recursive: true);
+            ValidateWorkspaceClone(
+                sourceWorkspace.ExeFsPath,
+                stagedExeFsPath,
+                recursive: false,
+                replacedFileName: Path.GetFileName(codeSource),
+                replacedFileSha256: patchManifest.PatchedCodeSha256);
+            var stagedExheader = Path.Combine(stagedWorkspaceRoot, Path.GetFileName(sourceWorkspace.ExheaderPath));
+            File.Copy(sourceWorkspace.ExheaderPath, stagedExheader);
+            if (!string.Equals(GetSha256(stagedExheader), sourceExheaderHash, StringComparison.OrdinalIgnoreCase))
+                throw new WorkspaceException("exheader.bin cambió mientras se preparaba el workspace temporal.");
+            ValidateStagedRedirectSources(stagedRomFsPath, stagedExeFsPath, codeSource, patchManifest);
+            CopyRedirectPatchFiles(patchDirectory, stagedRomFsPath, patchManifest.Files);
+            ValidateStagedRedirectOverlay(stagedRomFsPath, patchManifest.Files);
+
+            var result = RebuildCiaCore(request with
+            {
+                WorkspacePath = stagedWorkspaceRoot,
+                OutputFile = outputFile,
+                MakeromPath = makerom,
+                RedirectPatchDirectory = null,
+            });
+            return result with
+            {
+                Note = $"{result.Note} Se integró el parche de redirección ({patchManifest.RedirectedPathCount} ruta(s), {patchManifest.Files.Length} archivo(s) en a0/).",
+            };
+        }
+        catch (WorkspaceException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or ArgumentException or Win32Exception or CryptographicException)
+        {
+            throw new WorkspaceException($"No pude preparar el workspace temporal para integrar el parche: {exception.Message}");
+        }
+        finally
+        {
+            if (Directory.Exists(stagingDirectory))
+                Directory.Delete(stagingDirectory, recursive: true);
+        }
+    }
+
+    private static string ResolveWorkspaceCodeFile(GameWorkspace workspace)
+    {
+        if (workspace.ExeFsPath is null)
+            throw new WorkspaceException("Falta ExeFS. Extraé el code.bin antes de usar el parche de redirección.");
+
+        return GameWorkspace.FindCodeFile(workspace.ExeFsPath)
+            ?? throw new WorkspaceException("No encuentro code.bin en el ExeFS.");
+    }
+
+    private static RedirectPatchManifest ReadAndValidateRedirectPatch(
+        string patchDirectory,
+        GameWorkspace workspace,
+        string codeSource)
+    {
+        var manifestPath = Path.Combine(patchDirectory, RedirectPatchManifestName);
+        if (!File.Exists(manifestPath) || IsReparsePoint(manifestPath))
+            throw new WorkspaceException("La carpeta no contiene un manifiesto de parche creado por esta aplicación.");
+
+        RedirectPatchManifest? manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<RedirectPatchManifest>(File.ReadAllText(manifestPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new WorkspaceException($"No pude leer el manifiesto del parche: {exception.Message}");
+        }
+
+        if (manifest is null || manifest.Format != RedirectPatchManifestFormat
+            || manifest.GameVersion != workspace.Version.ToString()
+            || !string.Equals(manifest.TitleId, workspace.TitleId, StringComparison.OrdinalIgnoreCase)
+            || manifest.RedirectedPathCount <= 0
+            || manifest.RedirectedPathCount != manifest.Files?.Length
+            || manifest.Files is null or { Length: 0 })
+            throw new WorkspaceException("El manifiesto del parche no coincide con un perfil válido para este juego.");
+
+        var sourceHash = GetSha256(codeSource);
+        if (!string.Equals(sourceHash, manifest.SourceCodeSha256, StringComparison.OrdinalIgnoreCase))
+            throw new WorkspaceException("El parche se creó con otro code.bin. Volvé a generarlo desde este workspace.");
+
+        var codePatch = Path.Combine(patchDirectory, ".code.bin");
+        if (!File.Exists(codePatch) || IsReparsePoint(codePatch)
+            || !string.Equals(GetSha256(codePatch), manifest.PatchedCodeSha256, StringComparison.OrdinalIgnoreCase))
+            throw new WorkspaceException("El code.bin del parche falta o cambió después de crearlo.");
+
+        var expectedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in manifest.Files)
+        {
+            if (file is null)
+                throw new WorkspaceException("El manifiesto del parche contiene una entrada vacía.");
+
+            var relative = NormalizeRedirectPatchFilePath(file.Path);
+            if (!expectedFiles.Add(relative))
+                throw new WorkspaceException("El manifiesto del parche contiene rutas duplicadas.");
+
+            var sourceRelative = NormalizeRedirectSourcePath(file.SourcePath);
+            if (!string.Equals(GetRedirectedPath(sourceRelative), relative, StringComparison.OrdinalIgnoreCase))
+                throw new WorkspaceException("El manifiesto no conserva la relación entre la ruta original y su destino en a0/.");
+
+            var source = GetChildPath(patchDirectory, relative);
+            var original = GetChildPath(workspace.RomFsPath, sourceRelative);
+            if (!File.Exists(source) || IsReparsePoint(source)
+                || !File.Exists(original) || IsReparsePoint(original)
+                || !string.Equals(GetSha256(source), file.Sha256, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(GetSha256(original), file.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new WorkspaceException($"El archivo del parche {relative} falta o cambió después de crearlo.");
+        }
+
+        var a0Directory = Path.Combine(patchDirectory, "a0");
+        if (!Directory.Exists(a0Directory) || IsReparsePoint(a0Directory))
+            throw new WorkspaceException("El parche no contiene una carpeta a0 válida.");
+
+        var actualFiles = EnumerateRegularFiles(a0Directory)
+            .Select(path => Path.GetRelativePath(patchDirectory, path).Replace(Path.DirectorySeparatorChar, '/'))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!expectedFiles.SetEquals(actualFiles))
+            throw new WorkspaceException("El contenido de a0/ no coincide con el manifiesto del parche.");
+
+        return manifest;
+    }
+
+    private static void ValidateStagedRedirectSources(
+        string stagedRomFsPath,
+        string stagedExeFsPath,
+        string sourceCodePath,
+        RedirectPatchManifest manifest)
+    {
+        if (!File.Exists(sourceCodePath) || IsReparsePoint(sourceCodePath)
+            || !string.Equals(GetSha256(sourceCodePath), manifest.SourceCodeSha256, StringComparison.OrdinalIgnoreCase))
+            throw new WorkspaceException("El code.bin cambió mientras se preparaba el parche. Volvé a crearlo desde este workspace.");
+
+        var stagedCode = Path.Combine(stagedExeFsPath, Path.GetFileName(sourceCodePath));
+        if (!File.Exists(stagedCode)
+            || !string.Equals(GetSha256(stagedCode), manifest.PatchedCodeSha256, StringComparison.OrdinalIgnoreCase))
+            throw new WorkspaceException("El code.bin cambió mientras se preparaba el workspace temporal. Volvé a crear el parche.");
+
+        foreach (var file in manifest.Files)
+        {
+            var sourceRelative = NormalizeRedirectSourcePath(file.SourcePath);
+            var stagedSource = GetChildPath(stagedRomFsPath, sourceRelative);
+            if (!File.Exists(stagedSource)
+                || !string.Equals(GetSha256(stagedSource), file.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new WorkspaceException($"El workspace cambió mientras se preparaba el parche ({sourceRelative}). Volvé a crearlo.");
+        }
+    }
+
+    private static void ValidateStagedRedirectOverlay(
+        string stagedRomFsPath,
+        RedirectPatchFileManifest[] files)
+    {
+        foreach (var file in files)
+        {
+            var relative = NormalizeRedirectPatchFilePath(file.Path);
+            var stagedFile = GetChildPath(stagedRomFsPath, relative);
+            if (!File.Exists(stagedFile)
+                || !string.Equals(GetSha256(stagedFile), file.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new WorkspaceException($"No pude confirmar la copia del archivo de parche {relative}.");
+        }
+    }
+
+    private static string NormalizeRedirectPatchFilePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new WorkspaceException("El manifiesto del parche contiene una ruta vacía.");
+
+        var normalized = path.Trim().Replace('\\', '/');
+        var segments = normalized.Split('/');
+        if (!normalized.StartsWith("a0/", StringComparison.OrdinalIgnoreCase)
+            || Path.IsPathRooted(normalized)
+            || segments.Any(segment => segment is "" or "." or "..")
+            || normalized.Contains(':')
+            || normalized.Contains('\0'))
+            throw new WorkspaceException("El manifiesto del parche contiene una ruta fuera de a0/.");
+        return normalized;
+    }
+
+    private static string NormalizeRedirectSourcePath(string path)
+    {
+        var normalized = NormalizeRomFsPath(path);
+        var segments = normalized.Replace('\\', '/').Split('/');
+        if (segments.Any(segment => segment is "" or "." or ".."))
+            throw new WorkspaceException("El manifiesto del parche contiene una ruta original inválida.");
+        return normalized;
+    }
+
+    private static string GetSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static void CloneDirectoryForWorkspace(
+        string sourceDirectory,
+        string destinationDirectory,
+        string? replacedSourceFile = null,
+        string? replacementFile = null)
+    {
+        if (IsReparsePoint(sourceDirectory))
+            throw new WorkspaceException($"No se puede integrar el parche porque el workspace contiene un directorio enlazado: {sourceDirectory}");
+        Directory.CreateDirectory(destinationDirectory);
+        foreach (var entry in Directory.EnumerateFileSystemEntries(sourceDirectory, "*", SearchOption.TopDirectoryOnly)
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            if (IsReparsePoint(entry))
+                throw new WorkspaceException($"No se puede integrar el parche porque el workspace contiene un enlace simbólico: {entry}");
+
+            var destination = Path.Combine(destinationDirectory, Path.GetFileName(entry));
+            if (Directory.Exists(entry))
+            {
+                CloneDirectoryForWorkspace(entry, destination);
+                continue;
+            }
+
+            if (replacedSourceFile is not null
+                && string.Equals(Path.GetFullPath(entry), Path.GetFullPath(replacedSourceFile), StringComparison.Ordinal))
+            {
+                if (replacementFile is null)
+                    throw new WorkspaceException("No se indicó el code.bin del parche para el archivo reemplazado.");
+                File.Copy(replacementFile, destination);
+                continue;
+            }
+
+            CreateWorkspaceFileClone(entry, destination);
+        }
+    }
+
+    private static void CloneFlatDirectoryForWorkspace(
+        string sourceDirectory,
+        string destinationDirectory,
+        string? replacedSourceFile = null,
+        string? replacementFile = null)
+    {
+        if (IsReparsePoint(sourceDirectory))
+            throw new WorkspaceException($"No se puede integrar el parche porque el ExeFS es un directorio enlazado: {sourceDirectory}");
+        Directory.CreateDirectory(destinationDirectory);
+        foreach (var source in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.TopDirectoryOnly)
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            if (IsReparsePoint(source))
+                throw new WorkspaceException($"No se puede integrar el parche porque el ExeFS contiene un enlace simbólico: {source}");
+
+            var destination = Path.Combine(destinationDirectory, Path.GetFileName(source));
+            if (replacedSourceFile is not null
+                && string.Equals(Path.GetFullPath(source), Path.GetFullPath(replacedSourceFile), StringComparison.Ordinal))
+            {
+                if (replacementFile is null)
+                    throw new WorkspaceException("No se indicó el code.bin del parche para el archivo reemplazado.");
+                File.Copy(replacementFile, destination);
+            }
+            else
+            {
+                CreateWorkspaceFileClone(source, destination);
+            }
+        }
+    }
+
+    private static void CreateWorkspaceFileClone(string source, string destination)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            File.Copy(source, destination);
+            return;
+        }
+
+        // clonefile is fast and keeps staging on the same volume, but some external or
+        // non-APFS filesystems do not support it. A byte copy is slower but equally isolated.
+        if (CloneFileMac(source, destination, flags: 0) != 0)
+        {
+            if (File.Exists(destination))
+                File.Delete(destination);
+            File.Copy(source, destination);
+        }
+    }
+
+    private static void ValidateWorkspaceClone(
+        string sourceDirectory,
+        string stagedDirectory,
+        bool recursive,
+        string? replacedFileName = null,
+        string? replacedFileSha256 = null)
+    {
+        var sourceFiles = GetWorkspaceFileHashes(sourceDirectory, recursive);
+        var stagedFiles = GetWorkspaceFileHashes(stagedDirectory, recursive);
+        if (!sourceFiles.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(stagedFiles.Keys))
+            throw new WorkspaceException("El workspace cambió mientras se preparaba el staging de CIA.");
+
+        foreach (var (relativePath, sourceHash) in sourceFiles)
+        {
+            var expectedHash = string.Equals(Path.GetFileName(relativePath), replacedFileName, StringComparison.Ordinal)
+                ? replacedFileSha256
+                : sourceHash;
+            if (expectedHash is null
+                || !string.Equals(stagedFiles[relativePath], expectedHash, StringComparison.OrdinalIgnoreCase))
+                throw new WorkspaceException($"No pude confirmar la copia temporal del archivo {relativePath}.");
+        }
+    }
+
+    private static Dictionary<string, string> GetWorkspaceFileHashes(string directory, bool recursive)
+    {
+        if (!Directory.Exists(directory) || IsReparsePoint(directory))
+            throw new WorkspaceException($"No se puede verificar el staging desde la carpeta {directory}.");
+
+        var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+        void Visit(string currentDirectory)
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(currentDirectory, "*", SearchOption.TopDirectoryOnly)
+                         .OrderBy(path => path, StringComparer.Ordinal))
+            {
+                if (IsReparsePoint(entry))
+                    throw new WorkspaceException($"No se puede verificar el staging porque hay un enlace simbólico: {entry}");
+
+                if (Directory.Exists(entry))
+                {
+                    if (recursive)
+                        Visit(entry);
+                    continue;
+                }
+
+                var relativePath = Path.GetRelativePath(directory, entry).Replace(Path.DirectorySeparatorChar, '/');
+                hashes.Add(relativePath, GetSha256(entry));
+            }
+        }
+
+        Visit(directory);
+        return hashes;
+    }
+
+    private static void CopyRedirectPatchFiles(
+        string patchDirectory,
+        string stagedRomFsPath,
+        RedirectPatchFileManifest[] files)
+    {
+        foreach (var file in files)
+        {
+            var relative = NormalizeRedirectPatchFilePath(file.Path);
+            var source = GetChildPath(patchDirectory, relative);
+            var destination = GetChildPath(stagedRomFsPath, relative);
+            if (File.Exists(destination) || Directory.Exists(destination))
+                throw new WorkspaceException($"El RomFS ya contiene la ruta {relative}; no se sobrescribirá al integrar el parche.");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(source, destination);
+        }
+    }
+
+    private static string[] EnumerateRegularFiles(string directory)
+    {
+        var files = new List<string>();
+        foreach (var entry in Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.TopDirectoryOnly)
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            if (IsReparsePoint(entry))
+                throw new WorkspaceException($"La carpeta del parche contiene un enlace simbólico no admitido: {entry}");
+            if (Directory.Exists(entry))
+                files.AddRange(EnumerateRegularFiles(entry));
+            else if (File.Exists(entry))
+                files.Add(entry);
+        }
+        return [.. files];
+    }
+
+    private static bool IsReparsePoint(string path) =>
+        (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+
+    [DllImport("libSystem.B.dylib", EntryPoint = "clonefile", SetLastError = true)]
+    private static extern int CloneFileMac(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string source,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string destination,
+        int flags);
+
+    /// <summary>Returns the game-specific GARC catalog shown by the Windows Patch Manager.</summary>
+    public static RedirectPatchOptionsResponse GetRedirectPatchOptions(WorkspaceRequest request)
+    {
+        var workspace = GameWorkspace.Open(request.WorkspacePath);
+        var archives = GetGarcReferences(workspace.Version)
+            .Select(reference => reference.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new RedirectPatchOptionsResponse(workspace.Version.ToString(), archives);
+    }
+
     /// <summary>
-    /// Creates the redirect patch that the original Windows tool called “Redirect [CIA]”.
-    /// The result is intentionally a patch folder, not a fabricated CIA: assembling a CIA also
-    /// requires TMD, ticket, certificate and signing material that is not present in this port.
+    /// Creates a manifest-verified redirect patch compatible with the optional CIA overlay flow.
+    /// The resulting CIA uses ignored retail signatures and is not guaranteed to install on an
+    /// unpatched console.
     /// </summary>
     public static RedirectPatchResponse CreateRedirectPatch(RedirectPatchRequest request)
     {
         var workspace = GameWorkspace.Open(request.WorkspacePath);
         if (workspace.ExeFsPath is null)
             throw new WorkspaceException("Falta ExeFS. Extraé el code.bin antes de crear un parche.");
+        if (workspace.ExheaderPath is not null && IsReparsePoint(workspace.ExheaderPath))
+            throw new WorkspaceException("No se puede crear un parche desde un workspace cuyo exheader.bin es un enlace simbólico.");
 
-        var codeSource = Directory.GetFiles(workspace.ExeFsPath, "*", SearchOption.TopDirectoryOnly)
-            .FirstOrDefault(path => Path.GetFileName(path).Contains("code", StringComparison.OrdinalIgnoreCase));
-        if (codeSource is null)
-            throw new WorkspaceException("No encuentro .code.bin en el ExeFS.");
+        var titleId = workspace.TitleId;
+
+        var codeSource = ResolveWorkspaceCodeFile(workspace);
 
         var paths = ResolveRedirectFiles(workspace, request);
         if (paths.Count == 0)
             throw new WorkspaceException("Elegí al menos un GARC o una ruta de RomFS para redirigir.");
 
         var codeBytes = File.ReadAllBytes(codeSource);
+        var sourceCodeHash = Convert.ToHexString(SHA256.HashData(codeBytes));
         if (BLZCoder.TryDecode(codeBytes, out var decodedCode))
             codeBytes = decodedCode;
         var codeText = Encoding.Unicode.GetString(codeBytes);
@@ -404,6 +903,27 @@ public static class ProjectTools
                 copiedFiles.Add(path.RedirectedPath);
             }
 
+            var manifest = new RedirectPatchManifest(
+                RedirectPatchManifestFormat,
+                workspace.Version.ToString(),
+                titleId,
+                sourceCodeHash,
+                GetSha256(codeOutput),
+                redirected,
+                replacements
+                    .Select(path => new RedirectPatchFileManifest(
+                        path.RedirectedPath,
+                        path.RelativePath,
+                        GetSha256(GetChildPath(stagingDirectory, path.RedirectedPath))))
+                    .ToArray());
+            File.WriteAllText(
+                Path.Combine(stagingDirectory, RedirectPatchManifestName),
+                JsonSerializer.Serialize(manifest, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                }));
+
             Directory.Move(stagingDirectory, outputDirectory);
             return new RedirectPatchResponse(
                 workspace.Version.ToString(),
@@ -411,7 +931,9 @@ public static class ProjectTools
                 Path.Combine(outputDirectory, ".code.bin"),
                 copiedFiles.OrderBy(path => path, StringComparer.Ordinal).ToArray(),
                 redirected,
-                "Parche de redirección creado. Todavía hay que integrarlo en un CIA con herramientas de firma compatibles; el workspace original no se modifica.");
+                titleId is null
+                    ? "Parche de redirección creado con manifiesto de integridad, sin Title ID porque el workspace no tenía exheader.bin. Para integrarlo en un CIA, volvé a crearlo desde un workspace completo; el original no se modifica."
+                    : $"Parche de redirección creado con manifiesto de integridad, ligado al Title ID {titleId}. Podés elegir esta carpeta en la herramienta CIA; el workspace original no se modifica.");
         }
         finally
         {
@@ -751,6 +1273,10 @@ public static class ProjectTools
     public static ShuffleGarcResponse ShuffleGarc(ShuffleGarcRequest request)
     {
         var input = ResolveExistingFile(request.InputFile, "Elegí un archivo GARC para reordenar.");
+        var context = ResolveShuffleGarcContext(input, request.WorkspacePath);
+        if (IsSensitiveShuffleGarc(context.GameVersion, context.GarcId))
+            throw new WorkspaceException($"El GARC {context.GarcId} está protegido contra el reordenamiento en {context.GameVersion}; pk3DS Windows también lo bloquea por dependencias del juego.");
+
         var output = string.IsNullOrWhiteSpace(request.OutputFile)
             ? Path.Combine(Path.GetDirectoryName(input)!, $"{Path.GetFileNameWithoutExtension(input)}-shuffled.garc")
             : Path.GetFullPath(request.OutputFile.Trim());
@@ -843,10 +1369,82 @@ public static class ProjectTools
                 File.Delete(staging);
         }
 
+        var versionLabel = context.GameVersion?.ToString();
+        var protectionNote = GetShuffleGarcProtectionNote(context);
         return new ShuffleGarcResponse(
             input, output, seed, archive.fatb.Entries.Length, candidates.Length, changedEntries,
             outputBytes.LongLength,
-            "Referencias FATB reordenadas en una copia; el bloque FIMB y el GARC original permanecen intactos. Usá una copia de seguridad antes de probar archivos sensibles.");
+            $"Referencias FATB reordenadas en una copia; el bloque FIMB y el GARC original permanecen intactos. {protectionNote}",
+            versionLabel,
+            context.GarcId,
+            HasShuffleGarcBanlist(context.GameVersion) && context.GarcId is not null);
+    }
+
+    private static ShuffleGarcContext ResolveShuffleGarcContext(string input, string? workspacePath)
+    {
+        if (!string.IsNullOrWhiteSpace(workspacePath))
+        {
+            var workspace = GameWorkspace.Open(workspacePath);
+            return new ShuffleGarcContext(workspace.Version, GetRomFsGarcId(workspace.RomFsPath, input));
+        }
+
+        // Standalone shuffling remains available, but archives at the retail RomFS coordinate
+        // path can still be identified safely without asking the caller to supply profile data.
+        var directory = Path.GetDirectoryName(input);
+        if (directory is null)
+            return new ShuffleGarcContext(null, null);
+
+        var romFs = Directory.GetParent(directory)?.Parent?.Parent?.FullName;
+        if (romFs is null || GetRomFsGarcId(romFs, input) is not { } garcId)
+            return new ShuffleGarcContext(null, null);
+
+        try
+        {
+            return new ShuffleGarcContext(GameWorkspace.Open(romFs).Version, garcId);
+        }
+        catch (Exception ex) when (ex is WorkspaceException or IOException or UnauthorizedAccessException)
+        {
+            return new ShuffleGarcContext(null, null);
+        }
+    }
+
+    private static string? GetRomFsGarcId(string romFsPath, string input)
+    {
+        var aRoot = Path.Combine(romFsPath, "a");
+        var relative = Path.GetRelativePath(aRoot, input);
+        if (Path.IsPathRooted(relative) || relative == ".."
+            || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            return null;
+
+        var parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (parts.Length != 3 || parts.Any(part => part.Length != 1 || part[0] is < '0' or > '9'))
+            return null;
+        return $"a{parts[0]}{parts[1]}{parts[2]}";
+    }
+
+    private static bool HasShuffleGarcBanlist(GameVersion? gameVersion) =>
+        gameVersion is not null;
+
+    private static bool IsSensitiveShuffleGarc(GameVersion? gameVersion, string? garcId) =>
+        garcId is not null && (gameVersion switch
+        {
+            GameVersion.ORAS or GameVersion.ORASDEMO => OrasGarcShuffleBanlist.Contains(garcId),
+            null => false,
+            _ => XyGarcShuffleBanlist.Contains(garcId),
+        });
+
+    private static string GetShuffleGarcProtectionNote(ShuffleGarcContext context)
+    {
+        if (context.GameVersion is null)
+            return "No se pudo identificar el juego desde la ruta; las exclusiones sensibles de X/Y y OR/AS no se aplicaron a este GARC independiente.";
+        if (context.GameVersion is not null && context.GarcId is not null)
+        {
+            var profile = context.GameVersion is GameVersion.ORAS or GameVersion.ORASDEMO ? "ORAS" : "XY (perfil alternativo de Windows)";
+            return $"Se aplicó la lista sensible {profile} de Windows para {context.GameVersion} (GARC {context.GarcId}).";
+        }
+        if (context.GameVersion is not null)
+            return $"Se detectó {context.GameVersion}, pero el archivo no corresponde a una coordenada RomFS estándar; no se aplicó la lista de exclusión de Windows.";
+        return "No se pudo identificar el juego desde la ruta; no se aplicaron las exclusiones sensibles de Windows a este GARC independiente.";
     }
 
     private static bool SameFatbEntry(GARC.FATB_Entry left, GARC.FATB_Entry right)
@@ -1684,6 +2282,77 @@ public static class ProjectTools
         }
     }
 
+    public static PreviewImageResponse PreviewImage(PreviewImageRequest request)
+    {
+        var input = ResolveExistingFile(request.InputFile, "Elegí un archivo BCLIM o BFLIM para previsualizar.");
+        var inputFormat = GetImageFormat(input);
+        if (inputFormat == "PNG")
+            throw new WorkspaceException("La vista previa independiente admite archivos BCLIM o BFLIM.");
+
+        var inputLength = new FileInfo(input).Length;
+        if (inputLength > MaxImagePreviewInputBytes)
+            throw new WorkspaceException("El archivo supera el límite de 32 MiB para generar una vista previa.");
+
+        try
+        {
+            var data = File.ReadAllBytes(input);
+            if (data.LongLength > MaxImagePreviewInputBytes)
+                throw new WorkspaceException("El archivo supera el límite de 32 MiB para generar una vista previa.");
+
+            int width;
+            int height;
+            XLIMEncoding format;
+            byte[] rgba;
+            if (inputFormat == "BCLIM")
+            {
+                var image = BCLIMPortable.Read(data);
+                width = image.Width;
+                height = image.Height;
+                format = image.Format;
+                EnsureImagePreviewSize(width, height);
+                rgba = image.GetRgbaData();
+            }
+            else
+            {
+                var image = BFLIMPortable.Read(data);
+                width = image.Width;
+                height = image.Height;
+                format = image.Format;
+                EnsureImagePreviewSize(width, height);
+                rgba = image.GetRgbaData();
+            }
+
+            var png = PortablePng.EncodeRgba(rgba, width, height);
+            if (png.Length > MaxImagePreviewPngBytes)
+                throw new WorkspaceException("La imagen codificada supera el límite de 16 MiB para una vista previa web.");
+
+            return new PreviewImageResponse(
+                input,
+                inputFormat,
+                format.ToString(),
+                width,
+                height,
+                Convert.ToBase64String(png),
+                png.LongLength,
+                $"Vista previa {inputFormat} {format} generada en memoria; el archivo original no se modifica.");
+        }
+        catch (WorkspaceException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+            or InvalidDataException or EndOfStreamException or FormatException or OverflowException)
+        {
+            throw new WorkspaceException($"No pude previsualizar la imagen: {ex.Message}");
+        }
+    }
+
+    private static void EnsureImagePreviewSize(int width, int height)
+    {
+        if (width <= 0 || height <= 0 || (long)width * height > MaxImagePreviewPixels)
+            throw new WorkspaceException("La imagen supera el límite de 4 megapíxeles para generar una vista previa web.");
+    }
+
     public static ConvertImageResponse ConvertImage(ConvertImageRequest request)
     {
         var input = ResolveExistingFile(request.InputFile, "Elegí una imagen PNG, BCLIM o BFLIM para convertir.");
@@ -1788,13 +2457,15 @@ public static class ProjectTools
     {
         var workspace = GameWorkspace.Open(request.WorkspacePath);
         var smdh = ReadSmdh(workspace);
+        var bytes = ApplySmdhChanges(smdh, request.AppInfo, request.Settings,
+            request.SmallIconFile, request.LargeIconFile);
         var outputDirectory = ResolveOutputDirectory(workspace, request.OutputDirectory);
         Directory.CreateDirectory(outputDirectory);
 
         var smdhFile = Path.Combine(outputDirectory, "icon.bin");
         var smallIconFile = Path.Combine(outputDirectory, "small-icon.png");
         var largeIconFile = Path.Combine(outputDirectory, "large-icon.png");
-        File.WriteAllBytes(smdhFile, smdh.Write());
+        File.WriteAllBytes(smdhFile, bytes);
         File.WriteAllBytes(smallIconFile, PortablePng.EncodeRgba(
             smdh.GetSmallIconRgba(), SMDHPortable.SmallIconWidth, SMDHPortable.SmallIconHeight));
         File.WriteAllBytes(largeIconFile, PortablePng.EncodeRgba(
@@ -1814,46 +2485,8 @@ public static class ProjectTools
         var workspace = GameWorkspace.Open(request.WorkspacePath);
         var iconPath = FindSmdhPath(workspace);
         var smdh = ReadSmdh(workspace);
-        var appInfo = request.AppInfo ?? Array.Empty<SmdhApplicationInfoRequest>();
-        var slots = new HashSet<int>();
-        foreach (var info in appInfo)
-        {
-            if (info.Slot < 0 || info.Slot >= SMDHPortable.AppInfoCount || !slots.Add(info.Slot))
-                throw new WorkspaceException("Cada slot AppInfo debe estar entre 0 y 15 y aparecer una sola vez.");
-            smdh.AppInfo[info.Slot] = new SMDHApplicationInfo(
-                info.ShortDescription,
-                info.LongDescription,
-                info.Publisher);
-        }
-        if (request.Settings is not null)
-            ApplySmdhSettings(smdh.Settings, request.Settings);
-
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(request.SmallIconFile))
-                smdh.SetSmallIconRgba(ReadSmdhIcon(request.SmallIconFile, SMDHPortable.SmallIconWidth, SMDHPortable.SmallIconHeight));
-            if (!string.IsNullOrWhiteSpace(request.LargeIconFile))
-                smdh.SetLargeIconRgba(ReadSmdhIcon(request.LargeIconFile, SMDHPortable.LargeIconWidth, SMDHPortable.LargeIconHeight));
-        }
-        catch (WorkspaceException)
-        {
-            throw;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
-            or EndOfStreamException or InvalidDataException or FormatException or OverflowException)
-        {
-            throw new WorkspaceException($"No pude leer el icono PNG: {ex.Message}");
-        }
-
-        byte[] bytes;
-        try
-        {
-            bytes = smdh.Write();
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidDataException)
-        {
-            throw new WorkspaceException($"No pude validar los metadatos SMDH: {ex.Message}");
-        }
+        var bytes = ApplySmdhChanges(smdh, request.AppInfo, request.Settings,
+            request.SmallIconFile, request.LargeIconFile);
 
         var backupFile = Path.Combine(
             workspace.RootPath,
@@ -1876,6 +2509,54 @@ public static class ProjectTools
             backupFile,
             bytes.LongLength,
             "icon.bin actualizado; se guardó una copia de seguridad antes de escribir.");
+    }
+
+    private static byte[] ApplySmdhChanges(
+        SMDHPortable smdh,
+        SmdhApplicationInfoRequest[]? requestedAppInfo,
+        SmdhSettingsRequest? requestedSettings,
+        string? smallIconFile,
+        string? largeIconFile)
+    {
+        var appInfo = requestedAppInfo ?? Array.Empty<SmdhApplicationInfoRequest>();
+        var slots = new HashSet<int>();
+        foreach (var info in appInfo)
+        {
+            if (info is null || info.Slot < 0 || info.Slot >= SMDHPortable.AppInfoCount || !slots.Add(info.Slot))
+                throw new WorkspaceException("Cada slot AppInfo debe estar entre 0 y 15 y aparecer una sola vez.");
+            smdh.AppInfo[info.Slot] = new SMDHApplicationInfo(
+                info.ShortDescription,
+                info.LongDescription,
+                info.Publisher);
+        }
+        if (requestedSettings is not null)
+            ApplySmdhSettings(smdh.Settings, requestedSettings);
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(smallIconFile))
+                smdh.SetSmallIconRgba(ReadSmdhIcon(smallIconFile, SMDHPortable.SmallIconWidth, SMDHPortable.SmallIconHeight));
+            if (!string.IsNullOrWhiteSpace(largeIconFile))
+                smdh.SetLargeIconRgba(ReadSmdhIcon(largeIconFile, SMDHPortable.LargeIconWidth, SMDHPortable.LargeIconHeight));
+        }
+        catch (WorkspaceException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+            or EndOfStreamException or InvalidDataException or FormatException or OverflowException)
+        {
+            throw new WorkspaceException($"No pude leer el icono PNG: {ex.Message}");
+        }
+
+        try
+        {
+            return smdh.Write();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidDataException)
+        {
+            throw new WorkspaceException($"No pude validar los metadatos SMDH: {ex.Message}");
+        }
     }
 
     public static SmdhImportResponse ImportSmdh(SmdhImportRequest request)
@@ -2094,7 +2775,7 @@ public static class ProjectTools
         }
     }
 
-    private static void BuildRomFs(string sourceDirectory, string outputFile)
+    internal static void BuildRomFs(string sourceDirectory, string outputFile)
     {
         lock (RomFsBuildLock)
         {
@@ -2155,42 +2836,143 @@ public static class ProjectTools
             tmdSize <= 0x10000000 && metaSize <= 0x10000000 && contentSize > 0;
     }
 
-    private static void ExtractFromCia(
-        string input, string outputDirectory, RichTextBox log, ProgressBar progress)
+    private static long ValidateNcchBeforeExtraction(string input, string format)
     {
-        using var source = File.OpenRead(input);
-        var header = new byte[0x20];
+        try
+        {
+            using var source = File.OpenRead(input);
+            var location = format switch
+            {
+                "CXI" => (Offset: 0L, Size: source.Length),
+                "3DS" => ReadFirstNcsdNcch(source),
+                "CIA" => ReadFirstCiaNcch(source),
+                _ => throw new WorkspaceException("El formato del archivo no es compatible con la extracción."),
+            };
+
+            if (location.Offset < 0 || location.Size < 0x200 || location.Offset > source.Length - 0x200
+                || location.Size > source.Length - location.Offset)
+                throw new WorkspaceException("El primer NCCH está incompleto o fuera del archivo.");
+
+            source.Position = location.Offset;
+            Span<byte> header = stackalloc byte[0x200];
+            source.ReadExactly(header);
+            if (BinaryPrimitives.ReadUInt32LittleEndian(header[0x100..0x104]) != NcchMagic)
+                throw new WorkspaceException("No encuentro una cabecera NCCH válida en el primer contenido del archivo.");
+
+            var declaredSizeUnits = BinaryPrimitives.ReadUInt32LittleEndian(header[0x104..0x108]);
+            var declaredSize = checked((long)declaredSizeUnits * 0x200);
+            if (declaredSize < 0x200 || declaredSize > location.Size)
+                throw new WorkspaceException("La cabecera NCCH indica un tamaño incompleto o fuera de su partición.");
+
+            if ((header[0x18F] & 0x04) == 0)
+            {
+                throw new WorkspaceException(
+                    "El archivo contiene un NCCH cifrado. pk3DS Mac solo puede extraer CXI, 3DS o CIA descifrados; usá una copia descifrada y volvé a intentarlo.");
+            }
+
+            if (header[0x18E] != 0)
+                throw new WorkspaceException("El NCCH usa unidades de medios que este extractor no admite.");
+
+            var exheaderSize = BinaryPrimitives.ReadUInt32LittleEndian(header[0x180..0x184]);
+            var exheaderEnd = checked(0x200L + (2L * exheaderSize));
+            if (exheaderSize == 0 || exheaderEnd > declaredSize)
+                throw new WorkspaceException("La sección exheader del NCCH está incompleta o fuera de rango.");
+
+            ValidateNcchMediaRange(header, 0x190, 0x194, declaredSize, "plain");
+            ValidateNcchMediaRange(header, 0x198, 0x19C, declaredSize, "logo");
+            ValidateNcchMediaRange(header, 0x1A0, 0x1A4, declaredSize, "ExeFS");
+            ValidateNcchMediaRange(header, 0x1B0, 0x1B4, declaredSize, "RomFS");
+            if (BinaryPrimitives.ReadUInt32LittleEndian(header[0x1A4..0x1A8]) == 0
+                || BinaryPrimitives.ReadUInt32LittleEndian(header[0x1B4..0x1B8]) == 0)
+            {
+                throw new WorkspaceException("El NCCH no contiene un ExeFS y un RomFS completos para extraer.");
+            }
+
+            return location.Offset;
+        }
+        catch (WorkspaceException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or OverflowException)
+        {
+            throw new WorkspaceException($"No pude validar el archivo antes de extraerlo: {ex.Message}");
+        }
+    }
+
+    private static void ValidateNcchMediaRange(
+        ReadOnlySpan<byte> header, int offsetField, int sizeField, long declaredSize, string section)
+    {
+        var offsetUnits = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(offsetField, sizeof(uint)));
+        var sizeUnits = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(sizeField, sizeof(uint)));
+        if (sizeUnits == 0)
+            return;
+
+        var offset = checked((long)offsetUnits * 0x200);
+        var size = checked((long)sizeUnits * 0x200);
+        if (offset < 0x200 || offset > declaredSize || size > declaredSize - offset)
+            throw new WorkspaceException($"La sección {section} del NCCH está incompleta o fuera de rango.");
+    }
+
+    private static (long Offset, long Size) ReadFirstNcsdNcch(FileStream source)
+    {
+        if (source.Length < 0x200)
+            throw new WorkspaceException("El archivo NCSD está truncado.");
+
+        source.Position = 0;
+        Span<byte> header = stackalloc byte[0x200];
+        source.ReadExactly(header);
+        if (BinaryPrimitives.ReadUInt32LittleEndian(header[0x100..0x104]) != NcsdMagic)
+            throw new WorkspaceException("El archivo no contiene una cabecera NCSD válida.");
+
+        var offsetUnits = BinaryPrimitives.ReadUInt32LittleEndian(header[0x120..0x124]);
+        var sizeUnits = BinaryPrimitives.ReadUInt32LittleEndian(header[0x124..0x128]);
+        if (offsetUnits == 0 || sizeUnits == 0)
+            throw new WorkspaceException("El NCSD no contiene un primer NCCH para extraer.");
+
+        var offset = checked((long)offsetUnits * 0x200);
+        var size = checked((long)sizeUnits * 0x200);
+        if (offset > source.Length || size > source.Length - offset)
+            throw new EndOfStreamException("La primera partición indicada por el NCSD está truncada.");
+
+        return (offset, size);
+    }
+
+    private static (long Offset, long Size) ReadFirstCiaNcch(FileStream source)
+    {
+        source.Position = 0;
+        Span<byte> header = stackalloc byte[0x20];
         source.ReadExactly(header);
         if (!LooksLikeCia(header))
             throw new WorkspaceException("El CIA no tiene una cabecera válida.");
 
-        var headerSize = BitConverter.ToUInt32(header, 0x00);
-        var certificateSize = BitConverter.ToUInt32(header, 0x08);
-        var ticketSize = BitConverter.ToUInt32(header, 0x0C);
-        var tmdSize = BitConverter.ToUInt32(header, 0x10);
-        var contentSize = BitConverter.ToUInt64(header, 0x18);
+        var headerSize = BinaryPrimitives.ReadUInt32LittleEndian(header[0x00..0x04]);
+        var certificateSize = BinaryPrimitives.ReadUInt32LittleEndian(header[0x08..0x0C]);
+        var ticketSize = BinaryPrimitives.ReadUInt32LittleEndian(header[0x0C..0x10]);
+        var tmdSize = BinaryPrimitives.ReadUInt32LittleEndian(header[0x10..0x14]);
+        var contentSize = BinaryPrimitives.ReadUInt64LittleEndian(header[0x18..0x20]);
         var contentOffset = AlignCiaSection(headerSize);
         contentOffset = AddCiaSection(contentOffset, certificateSize);
         contentOffset = AddCiaSection(contentOffset, ticketSize);
         contentOffset = AddCiaSection(contentOffset, tmdSize);
 
-        if (contentSize > (ulong)Math.Max(0, source.Length - contentOffset))
+        if (contentOffset < 0 || contentOffset > source.Length || contentSize > (ulong)(source.Length - contentOffset))
             throw new EndOfStreamException("El contenido indicado por el CIA está truncado.");
         if (contentSize < 0x200)
-            throw new InvalidDataException("El primer contenido del CIA no puede ser un NCCH completo.");
+            throw new WorkspaceException("El primer contenido del CIA no puede ser un NCCH completo.");
         if (contentSize > (ulong)long.MaxValue)
-            throw new InvalidDataException("El contenido del CIA es demasiado grande para este sistema.");
+            throw new WorkspaceException("El primer contenido del CIA es demasiado grande para extraerlo en este sistema.");
 
         source.Position = checked(contentOffset + 0x100);
         Span<byte> magic = stackalloc byte[4];
         source.ReadExactly(magic);
-        if (BitConverter.ToUInt32(magic) != NcchMagic)
+        if (BinaryPrimitives.ReadUInt32LittleEndian(magic) != NcchMagic)
         {
             throw new WorkspaceException(
-                "El CIA no contiene un NCCH desencriptado en su primer contenido. Extraé un CIA desencriptado y completo.");
+                "El CIA no contiene un NCCH válido en su primer contenido. Extraé un CIA completo con el juego como primer contenido.");
         }
 
-        new NCCH().ExtractNCCHFromFile(input, outputDirectory, log, progress, contentOffset);
+        return (contentOffset, checked((long)contentSize));
     }
 
     private static long AlignCiaSection(uint value) => AlignCiaSection((long)value);
@@ -2539,7 +3321,11 @@ public static class ProjectTools
         if (string.IsNullOrWhiteSpace(path))
             throw new WorkspaceException("La ruta de RomFS está vacía.");
         var normalized = path.Trim().Replace('\\', '/').TrimStart('/');
-        if (!normalized.StartsWith("a/", StringComparison.OrdinalIgnoreCase))
+        var segments = normalized.Split('/');
+        if (!normalized.StartsWith("a/", StringComparison.OrdinalIgnoreCase)
+            || segments.Any(segment => segment is "" or "." or "..")
+            || normalized.Contains(':')
+            || normalized.Contains('\0'))
             throw new WorkspaceException($"La ruta ‘{path}’ no pertenece a la carpeta a del RomFS.");
         return normalized;
     }

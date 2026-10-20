@@ -71,12 +71,17 @@ internal static class ExportAssertions
 
     public static byte[] ReadGarcFile(ExportResult result, string changedFile, int fileIndex)
     {
+        return new GARC.MemGARC(ReadGarcArchive(result, changedFile)).GetFile(fileIndex);
+    }
+
+    public static byte[] ReadGarcArchive(ExportResult result, string changedFile)
+    {
         using var archive = ZipFile.OpenRead(result.ZipPath);
         var entry = archive.GetEntry(ArchivePathFor(changedFile))!;
         using var stream = entry.Open();
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
-        return new GARC.MemGARC(buffer.ToArray()).GetFile(fileIndex);
+        return buffer.ToArray();
     }
 
     public static void AssertExeFsContentDiffersFromSource(ExportResult result, SyntheticWorkspace workspace)

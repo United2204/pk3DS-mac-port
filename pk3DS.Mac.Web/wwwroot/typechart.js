@@ -21,7 +21,7 @@ function render() {
   }
   $('warning').textContent = table.warning; ui();
 }
-async function load() { try { game = await post('/api/workspace/inspect', { workspacePath: $('workspace').value }); $('open').disabled = false; $('editor').classList.remove('is-disabled'); $('status').textContent = `${game.gameVersion} cargado.`; } catch (error) { $('status').textContent = error.message; } ui(); }
+async function load() { $('cro-warning').hidden = true; try { game = await post('/api/workspace/inspect', { workspacePath: $('workspace').value }); $('cro-warning').hidden = !['XY', 'ORAS'].includes(game.gameVersion); $('open').disabled = false; $('editor').classList.remove('is-disabled'); $('status').textContent = `${game.gameVersion} cargado.`; } catch (error) { $('status').textContent = error.message; } ui(); }
 async function open() { try { table = await post('/api/editors/typechart/table', { workspacePath: $('workspace').value, language: 2 }); original = structuredClone(table); render(); } catch (error) { $('result').textContent = error.message; } }
 $('browse').onclick = async () => { try { $('workspace').value = (await post('/api/workspace/pick')).path; await load(); } catch (error) { $('status').textContent = error.message; } }; $('load').onclick = load; $('open').onclick = open;
 $('chart').onchange = event => { const index = event.target.dataset.index; if (index === undefined) return; table.chart[+index] = +event.target.value; ui(); };

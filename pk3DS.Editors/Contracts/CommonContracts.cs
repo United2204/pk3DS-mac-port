@@ -12,6 +12,39 @@ public sealed record ModuleAvailability(string Id, string Name, string Area, boo
 
 public sealed record WorkspaceRequest(string WorkspacePath);
 
+public sealed record WorkspaceBackupsRequest(string WorkspacePath);
+
+public sealed record WorkspaceBackupSummary(
+    string Id,
+    string Category,
+    string RelativePath,
+    long Bytes,
+    bool CurrentFileExists);
+
+public sealed record WorkspaceBackupsResponse(
+    string GameVersion,
+    bool BaselineExists,
+    WorkspaceBackupSummary[] Backups,
+    string Note);
+
+public sealed record CreateWorkspaceBackupRequest(string WorkspacePath, int? Language = null);
+
+public sealed record CreateWorkspaceBackupResponse(
+    string GameVersion,
+    int Created,
+    int Skipped,
+    string Note);
+
+public sealed record RestoreWorkspaceBackupRequest(
+    string WorkspacePath,
+    string[] BackupIds);
+
+public sealed record RestoreWorkspaceBackupResponse(
+    string GameVersion,
+    int Restored,
+    string SafetyBackupDirectory,
+    string Note);
+
 /// <summary>Builds standalone RomFS/ExeFS binaries from an extracted workspace.</summary>
 public sealed record BuildFileSystemsRequest(
     string WorkspacePath,
@@ -29,6 +62,9 @@ public sealed record BuildFileSystemsResponse(
     string Note);
 
 public sealed record ExtractProjectRequest(string InputPath, string? OutputDirectory = null);
+
+/// <summary>Coarse stage or byte progress reported by a project extraction.</summary>
+public sealed record ExtractProjectProgress(string Message, long Current, long Total);
 
 public sealed record ExtractProjectResponse(
     string Format,
@@ -70,7 +106,8 @@ public sealed record RebuildCiaRequest(
     string? OutputFile = null,
     bool Trimmed = true,
     string? SerialText = null,
-    string? MakeromPath = null);
+    string? MakeromPath = null,
+    string? RedirectPatchDirectory = null);
 
 public sealed record RebuildCiaResponse(
     string GameVersion,
@@ -88,6 +125,8 @@ public sealed record RedirectPatchRequest(
     bool IncludeAllLanguageVariants = false,
     string[]? AdditionalPaths = null,
     int? Language = null);
+
+public sealed record RedirectPatchOptionsResponse(string GameVersion, string[] Archives);
 
 public sealed record RedirectPatchResponse(
     string GameVersion,
@@ -158,7 +197,8 @@ public sealed record PackGarcResponse(
 public sealed record ShuffleGarcRequest(
     string InputFile,
     string? OutputFile = null,
-    int? Seed = null);
+    int? Seed = null,
+    string? WorkspacePath = null);
 
 public sealed record ShuffleGarcResponse(
     string InputFile,
@@ -168,7 +208,10 @@ public sealed record ShuffleGarcResponse(
     int ShuffledEntries,
     int ChangedEntries,
     long Bytes,
-    string Note);
+    string Note,
+    string? GameVersion = null,
+    string? GarcId = null,
+    bool SensitiveProtectionApplied = false);
 
 public sealed record UnpackDarcRequest(
     string InputFile,
@@ -315,6 +358,18 @@ public sealed record ConvertImageResponse(
     long Bytes,
     string Note);
 
+public sealed record PreviewImageRequest(string InputFile);
+
+public sealed record PreviewImageResponse(
+    string InputFile,
+    string InputFormat,
+    string PixelFormat,
+    int Width,
+    int Height,
+    string PngBase64,
+    long PngBytes,
+    string Note);
+
 public sealed record SmdhSettingsResponse(
     byte[] GameRatings,
     uint RegionLockout,
@@ -354,9 +409,18 @@ public sealed record SmdhInspectResponse(
     string Note,
     SmdhSettingsResponse? Settings = null);
 
+/// <summary>Exports the original SMDH with optional form edits, without changing the workspace.</summary>
+/// <param name="AppInfo">Optional AppInfo slots to replace in the exported copy.</param>
+/// <param name="SmallIconFile">Optional 24×24 PNG used only in the exported copy.</param>
+/// <param name="LargeIconFile">Optional 48×48 PNG used only in the exported copy.</param>
+/// <param name="Settings">Optional ApplicationSettings values used only in the exported copy.</param>
 public sealed record SmdhExportRequest(
     string WorkspacePath,
-    string? OutputDirectory = null);
+    string? OutputDirectory = null,
+    SmdhApplicationInfoRequest[]? AppInfo = null,
+    string? SmallIconFile = null,
+    string? LargeIconFile = null,
+    SmdhSettingsRequest? Settings = null);
 
 public sealed record SmdhExportResponse(
     string GameVersion,
@@ -549,6 +613,39 @@ public sealed record TitleScreenApplyResponse(
     string ReplacementFormat,
     string BclimFormat,
     bool Compressed,
+    string GarcPath,
+    string BackupFile,
+    long Bytes,
+    string Note);
+
+public sealed record TitleScreenBatchReplacement(
+    int FileNumber,
+    int AssetEntryIndex,
+    string ReplacementFile);
+
+public sealed record TitleScreenBatchReplaceRequest(
+    string WorkspacePath,
+    TitleScreenBatchReplacement[] Replacements,
+    string? OutputFile = null);
+
+public sealed record TitleScreenBatchReplaceResponse(
+    string GameVersion,
+    int Replacements,
+    int Archives,
+    bool CompressedArchives,
+    string OutputFile,
+    long Bytes,
+    string Note);
+
+public sealed record TitleScreenBatchApplyRequest(
+    string WorkspacePath,
+    TitleScreenBatchReplacement[] Replacements);
+
+public sealed record TitleScreenBatchApplyResponse(
+    string GameVersion,
+    int Replacements,
+    int Archives,
+    bool CompressedArchives,
     string GarcPath,
     string BackupFile,
     long Bytes,

@@ -120,7 +120,8 @@ public class NCCH
 
     public void ExtractNCCHFromFile(
         string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null,
-        ProgressBar PB_Show = null, long sourceOffset = 0)
+        ProgressBar PB_Show = null, long sourceOffset = 0,
+        Action<string> statusCallback = null, Action<long, long> progressCallback = null)
     {
         if (sourceOffset < 0)
             throw new ArgumentOutOfRangeException(nameof(sourceOffset));
@@ -146,15 +147,17 @@ public class NCCH
             _ = fs.Read(plainregion, 0, plainregion.Length);
         }
 
-        ExtractExheader(NCCH_PATH, outputDirectory, TB_Progress, sourceOffset);
-        ExtractExeFS(NCCH_PATH, outputDirectory, TB_Progress, sourceOffset);
-        ExtractRomFS(NCCH_PATH, outputDirectory, TB_Progress, PB_Show, sourceOffset);
+        ExtractExheader(NCCH_PATH, outputDirectory, TB_Progress, sourceOffset, statusCallback);
+        ExtractExeFS(NCCH_PATH, outputDirectory, TB_Progress, sourceOffset, statusCallback);
+        ExtractRomFS(NCCH_PATH, outputDirectory, TB_Progress, PB_Show, sourceOffset, statusCallback, progressCallback);
     }
 
     private void ExtractExheader(
-        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, long sourceOffset = 0)
+        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, long sourceOffset = 0,
+        Action<string> statusCallback = null)
     {
         string exheaderpath = Path.Combine(outputDirectory, "exheader.bin");
+        statusCallback?.Invoke("Extrayendo exheader.bin…");
         UpdateTB(TB_Progress, "Extracting exheader.bin from CXI...");
         byte[] exheaderbytes = new byte[Header.ExheaderSize * 2];
 
@@ -169,10 +172,12 @@ public class NCCH
     }
 
     private void ExtractExeFS(
-        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, long sourceOffset = 0)
+        string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null, long sourceOffset = 0,
+        Action<string> statusCallback = null)
     {
         string exefsbinpath = Path.Combine(outputDirectory, "exefs.bin");
         string exefspath = Path.Combine(outputDirectory, "exefs");
+        statusCallback?.Invoke("Extrayendo y desempaquetando ExeFS…");
         UpdateTB(TB_Progress, "Extracting exefs.bin from CXI...");
         byte[] exefsbytes = new byte[Header.ExefsSize * MEDIA_UNIT_SIZE];
 
@@ -189,8 +194,10 @@ public class NCCH
 
     private void ExtractRomFS(
         string NCCH_PATH, string outputDirectory, RichTextBox TB_Progress = null,
-        ProgressBar PB_Show = null, long sourceOffset = 0)
+        ProgressBar PB_Show = null, long sourceOffset = 0,
+        Action<string> statusCallback = null, Action<long, long> progressCallback = null)
     {
+        statusCallback?.Invoke("Copiando la sección RomFS al staging…");
         UpdateTB(TB_Progress, "Extracting romfs.bin from CXI...");
         string romfsbinpath = Path.Combine(outputDirectory, "romfs.bin");
         string romfspath = Path.Combine(outputDirectory, "romfs");
@@ -214,11 +221,13 @@ public class NCCH
                     PB_Show.Invoke((MethodInvoker)PB_Show.PerformStep);
                 }
                 else { PB_Show.PerformStep(); }
+                progressCallback?.Invoke((long)(i + 1) * MEDIA_UNIT_SIZE, (long)Header.RomfsSize * MEDIA_UNIT_SIZE);
             }
         }
 
         var romfs = new RomFS(romfsbinpath);
-        romfs.ExtractRomFS(romfspath, TB_Progress, PB_Show);
+        statusCallback?.Invoke("Desempaquetando los archivos del RomFS…");
+        romfs.ExtractRomFS(romfspath, TB_Progress, PB_Show, statusCallback, progressCallback);
         File.Delete(romfsbinpath);
     }
 

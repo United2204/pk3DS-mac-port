@@ -452,12 +452,12 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
         WriteGarc(EncDataGarc, files);
     }
 
-    private static byte[] BuildGen6EncounterFile(int seed)
+    private static byte[] BuildGen6EncounterFile(int seed, bool oras = false)
     {
         const int dataOffset = 0x20;
-        var data = new byte[dataOffset + (WildGen6Editor.GetSlotCount(oras: false) * 4)];
-        BitConverter.GetBytes(0x10).CopyTo(data, 0x10);
-        for (var index = 0; index < WildGen6Editor.GetSlotCount(oras: false); index++)
+        var data = new byte[dataOffset + (WildGen6Editor.GetSlotCount(oras) * 4)];
+        BitConverter.GetBytes(oras ? 0x12 : 0x10).CopyTo(data, 0x10);
+        for (var index = 0; index < WildGen6Editor.GetSlotCount(oras); index++)
         {
             var at = dataOffset + (index * 4);
             BitConverter.GetBytes((ushort)(((index + seed) % 8) + 1)).CopyTo(data, at);
@@ -594,17 +594,64 @@ public sealed class SyntheticXyWorkspace : SyntheticWorkspace
 public sealed class SyntheticOrasWorkspace : SyntheticWorkspace
 {
     private const int ArchiveFileCount = 299;
+    private const int OrasWildAreaCount = 536;
+    private const int OrasWildZoneDataFile = 536;
+    private const int OrasWildPackedFile = 537;
 
     public SyntheticOrasWorkspace()
-        : base(ArchiveFileCount, speciesCount: 1, moveCount: 1, itemCount: 1)
+        : base(ArchiveFileCount, speciesCount: 18, moveCount: 1, itemCount: 1)
     {
         // EditorSession initializes the shared Gen. VI tables before opening OWSE.
         WriteGarc(195, BuildPersonalFiles(PersonalInfoORAS.SIZE));
         WriteGarc(191, [Learnset((1, 1))]);
         WriteGarc(192, [new byte[EvolutionSet6.SIZE]]);
         WriteGarc(189, [Mini.PackMini([new byte[0x22]], "WD")]);
-        var gameText = BuildTextFiles(142, (90, "Zona", 4));
+        var gameText = BuildTextFiles(142, (90, "Zona", 4), (98, "Especie", 18));
         WriteGarc(72, gameText);
+    }
+
+    public void WriteWildFixture()
+    {
+        var files = Enumerable.Repeat(Array.Empty<byte>(), OrasWildPackedFile + 1).ToArray();
+        files[0] = CompressFixture(BuildOrasEncounterFile(seed: 1));
+        files[1] = CompressFixture(BuildOrasEncounterFile(seed: 2));
+        files[OrasWildZoneDataFile] = new byte[(OrasWildAreaCount * 56) + 0x20];
+
+        const int slotBytes = 61 * 4;
+        var packed = new byte[0xE + (2 * slotBytes)];
+        for (var area = 0; area < 2; area++)
+        {
+            var offset = area * slotBytes;
+            BitConverter.GetBytes(offset).CopyTo(packed, (area + 1) * sizeof(int));
+            var encounter = LZSSDecompress(files[area]);
+            var encounterOffset = BitConverter.ToInt32(encounter, 0x10) + 0xE;
+            Array.Copy(encounter, encounterOffset, packed, 0xE + offset, slotBytes);
+        }
+        files[OrasWildPackedFile] = packed;
+        WriteGarc(13, files);
+    }
+
+    private static byte[] BuildOrasEncounterFile(int seed)
+    {
+        const int dataOffset = 0x20;
+        var data = new byte[dataOffset + (WildGen6Editor.GetSlotCount(oras: true) * 4)];
+        BitConverter.GetBytes(0x12).CopyTo(data, 0x10);
+        for (var index = 0; index < WildGen6Editor.GetSlotCount(oras: true); index++)
+        {
+            var at = dataOffset + (index * 4);
+            BitConverter.GetBytes((ushort)(((index + seed) % 8) + 1)).CopyTo(data, at);
+            data[at + 2] = (byte)(5 + (index % 3));
+            data[at + 3] = (byte)(10 + (index % 5));
+        }
+        return data;
+    }
+
+    private static byte[] LZSSDecompress(byte[] data)
+    {
+        using var input = new MemoryStream(data);
+        using var output = new MemoryStream();
+        LZSS.Decompress(input, input.Length, output);
+        return output.ToArray();
     }
 
     public void WriteOverworldFixture()
@@ -623,8 +670,12 @@ public sealed class SyntheticOrasWorkspace : SyntheticWorkspace
         var zone = Mini.PackMini(
             [master, BuildGen6EntityFixture(), BuildScriptFixture(), new byte[0x10]], "ZO");
 
-        // OR/AS reserves encdata file 1 and starts zones at file 2.
-        WriteGarc(13, [master, [], zone]);
+        // OR/AS stores ZO files in the compressed 0–535 area range and zone metadata at 536.
+        var files = Enumerable.Repeat(Array.Empty<byte>(), OrasWildPackedFile + 1).ToArray();
+        files[0] = CompressFixture(zone);
+        files[OrasWildZoneDataFile] = master;
+        files[OrasWildPackedFile] = new byte[0xE + (OrasWildAreaCount * 61 * 4)];
+        WriteGarc(13, files);
     }
 
     public void WriteTitleScreenFixture()

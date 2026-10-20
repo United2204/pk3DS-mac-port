@@ -1,1 +1,135 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Encuentros estáticos · pk3DS Mac</title><link rel="stylesheet" href="app.css"></head><body><header class="site-header"><a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a><a class="header-link" href="index.html">Randomizador</a></header><main class="editor-main"><div class="intro editor-intro"><p class="eyebrow">EDITOR ROMFS</p><h1>Encuentros estáticos</h1><p>Encuentros fijos de Gen. VI y regalos, fijos e intercambios de Gen. VII.</p></div><section class="panel"><div class="path-input"><span>⌁</span><input id="workspace" placeholder="Carpeta completa del juego o RomFS"><button id="browse" class="secondary">Examinar…</button><button id="load">Cargar</button></div><p id="status" class="status neutral">Disponible para Gen. VI y Gen. VII.</p></section><section id="editor" class="panel is-disabled"><div class="text-toolbar"><label class="field">Grupo<select id="group" disabled></select></label><label class="field">Entrada<input id="entry" type="number" min="0" value="0" disabled></label><button id="open" class="secondary-button" disabled>Abrir</button></div><div id="fields" class="static-fields"></div></section><section class="panel output-panel text-export"><div class="ready-row"><div><b id="summary">Sin cambios para exportar</b><small>El juego original no se modifica.</small></div><button id="export" class="primary" disabled>Exportar →</button></div><p id="result" class="status neutral"></p></section></main><footer>pk3DS Mac trabaja de forma local.</footer><script src="static.js?v=4"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Encuentros estáticos · pk3DS Mac</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a>
+    <a class="header-link" href="index.html">Randomizador</a>
+  </header>
+  <main class="editor-main">
+    <div class="intro editor-intro">
+      <p class="eyebrow" id="source-label">EDITOR SEGÚN JUEGO</p>
+      <h1>Encuentros estáticos</h1>
+      <p>Encuentros fijos de Gen. VI y regalos, fijos e intercambios de Gen. VII.</p>
+    </div>
+    <section class="panel">
+      <div class="path-input">
+        <span>⌁</span>
+        <input id="workspace" placeholder="Carpeta completa del juego o RomFS">
+        <button id="browse" class="secondary">Examinar…</button>
+        <button id="load">Cargar</button>
+      </div>
+      <p id="status" class="status neutral">Disponible para Gen. VI y Gen. VII.</p>
+      <p id="cro-warning" class="status warning" role="note" hidden>Editar CRO puede bloquear el juego en consola si no se parchea el módulo RO; se requiere firmware personalizado como Luma3DS.</p>
+    </section>
+    <section id="editor" class="panel is-disabled">
+      <div class="text-toolbar">
+        <label class="field">Grupo<select id="group" disabled></select></label>
+        <label class="field">Entrada<input id="entry" type="number" min="0" value="0" disabled></label>
+        <button id="open" class="secondary-button" disabled>Abrir</button>
+      </div>
+      <div id="fields" class="static-fields"></div>
+    </section>
+    <section id="randomize6" class="panel is-disabled" hidden aria-labelledby="randomize6-title">
+      <h2 id="randomize6-title">Randomizar todos los encuentros de Gen. VI</h2>
+      <p id="randomize6-help">Crea un único parche de <code>DllField.cro</code> con las opciones de pk3DS para X/Y y OR/AS. El juego original no se modifica.</p>
+      <fieldset>
+        <legend>Generaciones disponibles</legend>
+        <label><input id="gen6-g1" type="checkbox" checked> Generación I</label>
+        <label><input id="gen6-g2" type="checkbox" checked> Generación II</label>
+        <label><input id="gen6-g3" type="checkbox" checked> Generación III</label>
+        <label><input id="gen6-g4" type="checkbox" checked> Generación IV</label>
+        <label><input id="gen6-g5" type="checkbox" checked> Generación V</label>
+        <label><input id="gen6-g6" type="checkbox" checked> Generación VI</label>
+      </fieldset>
+      <fieldset>
+        <legend>Especies y formas</legend>
+        <label><input id="gen6-legendary" type="checkbox" checked> Legendarios del juego</label>
+        <label><input id="gen6-mythical" type="checkbox" checked> Eventos y singulares</label>
+        <label><input id="gen6-bst" type="checkbox"> Mantener un BST parecido</label>
+        <label><input id="gen6-replace-legendary" type="checkbox" checked> Reemplazar legendarios y singulares por otro legendario o singular</label>
+        <label><input id="gen6-mega" type="checkbox"> Permitir formas Mega</label>
+      </fieldset>
+      <fieldset>
+        <legend>Campos del encuentro</legend>
+        <label><input id="gen6-items" type="checkbox" checked> Randomizar objetos equipados</label>
+        <label><input id="gen6-levels" type="checkbox" checked> Multiplicar niveles por <input id="gen6-level-multiplier" type="number" min="0" max="3" step="0.01" value="1.00" inputmode="decimal" aria-label="Multiplicador de nivel"></label>
+        <label><input id="gen6-remove-shiny" type="checkbox"> Quitar bloqueos shiny</label>
+        <label><input id="gen6-ability" type="checkbox"> Randomizar habilidad (1, 2 u oculta)</label>
+        <label><input id="gen6-force-evo" type="checkbox"> Forzar evolución final desde el nivel <input id="gen6-force-level" type="number" min="1" max="100" step="1" value="50" aria-label="Nivel para forzar evolución final"></label>
+      </fieldset>
+      <div class="field">
+        <label for="gen6-seed">Semilla opcional (entero con signo de 32 bits)</label>
+        <input id="gen6-seed" type="number" min="-2147483648" max="2147483647" step="1" inputmode="numeric" aria-describedby="randomize6-seed-help">
+        <small id="randomize6-seed-help">La misma semilla y las mismas opciones producen las mismas selecciones.</small>
+      </div>
+      <button id="randomize6-run" class="primary" disabled>Randomizar y exportar todos</button>
+      <p id="randomize6-result" class="status neutral" role="status" aria-live="polite"></p>
+    </section>
+    <section id="randomize7" class="panel is-disabled" hidden aria-labelledby="randomize7-title">
+      <h2 id="randomize7-title">Randomizar encuentros de Gen. VII</h2>
+      <p id="randomize7-help">Usa las opciones de pk3DS para los tres iniciales, regalos, encuentros fijos e intercambios. El juego original no se modifica.</p>
+      <fieldset>
+        <legend>Generaciones disponibles</legend>
+        <label><input id="gen7-g1" type="checkbox" checked> Generación I</label>
+        <label><input id="gen7-g2" type="checkbox" checked> Generación II</label>
+        <label><input id="gen7-g3" type="checkbox" checked> Generación III</label>
+        <label><input id="gen7-g4" type="checkbox" checked> Generación IV</label>
+        <label><input id="gen7-g5" type="checkbox" checked> Generación V</label>
+        <label><input id="gen7-g6" type="checkbox" checked> Generación VI</label>
+        <label><input id="gen7-g7" type="checkbox" checked> Generación VII</label>
+      </fieldset>
+      <fieldset>
+        <legend>Especies y formas</legend>
+        <label><input id="gen7-legendary" type="checkbox" checked> Legendarios del juego</label>
+        <label><input id="gen7-mythical" type="checkbox" checked> Eventos y singulares</label>
+        <label><input id="gen7-bst" type="checkbox"> Mantener un BST parecido</label>
+        <label><input id="gen7-replace-legendary" type="checkbox" checked> Reemplazar legendarios y singulares por otro legendario o singular</label>
+        <label><input id="gen7-mega" type="checkbox"> Permitir formas Mega</label>
+      </fieldset>
+      <fieldset>
+        <legend>Campos del encuentro</legend>
+        <label><input id="gen7-items" type="checkbox" checked> Randomizar objetos equipados</label>
+        <label><input id="gen7-levels" type="checkbox" checked> Multiplicar niveles por <input id="gen7-level-multiplier" type="number" min="0" max="3" step="0.01" value="1.00" inputmode="decimal" aria-label="Multiplicador de nivel"></label>
+        <label><input id="gen7-remove-shiny" type="checkbox" checked> Quitar bloqueos shiny</label>
+        <label><input id="gen7-ability" type="checkbox"> Randomizar habilidades (1, 2 u oculta)</label>
+        <label><input id="gen7-aura" type="checkbox"> Randomizar aura de los Pokémon tótem</label>
+        <label><input id="gen7-special-move" type="checkbox"> Randomizar movimiento especial de regalos</label>
+        <label><input id="gen7-mega-mode" type="checkbox"> Modo Metronome</label>
+      </fieldset>
+      <fieldset>
+        <legend>Ajustes adicionales</legend>
+        <label><input id="gen7-basic-starter" type="checkbox" checked> Iniciales básicos con dos evoluciones</label>
+        <label><input id="gen7-update-starter-text" type="checkbox"> Actualizar también el texto de historia de los iniciales</label>
+        <small>Solo se aplica al randomizar iniciales y al idioma seleccionado.</small>
+        <label><input id="gen7-force-totem" type="checkbox"> Forzar evolución final en Pokémon tótem</label>
+        <label><input id="gen7-force-evo" type="checkbox"> Forzar evolución final desde el nivel <input id="gen7-force-level" type="number" min="1" max="100" step="1" value="50" aria-label="Nivel para forzar evolución final"></label>
+      </fieldset>
+      <div class="field">
+        <label for="gen7-seed">Semilla opcional (entero con signo de 32 bits)</label>
+        <input id="gen7-seed" type="number" min="-2147483648" max="2147483647" step="1" inputmode="numeric" aria-describedby="randomize7-seed-help">
+        <small id="randomize7-seed-help">La misma semilla y las mismas opciones producen las mismas selecciones.</small>
+      </div>
+      <div class="ready-row">
+        <button id="randomize7-starters-run" class="secondary" disabled>Randomizar iniciales</button>
+        <button id="randomize7-all-run" class="primary" disabled>Randomizar todo</button>
+      </div>
+      <p id="randomize7-result" class="status neutral" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel output-panel text-export">
+      <div class="ready-row">
+        <div><b id="summary">Sin cambios para exportar</b><small>El juego original no se modifica.</small></div>
+        <button id="export" class="primary" disabled>Exportar →</button>
+      </div>
+      <p id="result" class="status neutral"></p>
+    </section>
+  </main>
+  <footer>pk3DS Mac trabaja de forma local.</footer>
+  <script src="static.js?v=8"></script>
+</body>
+</html>

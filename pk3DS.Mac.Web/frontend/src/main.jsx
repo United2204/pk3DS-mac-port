@@ -45,37 +45,40 @@ const editorPages = [
   { id: "eggmoves", availabilityId: "eggmove", label: "Egg Moves", legacy: "eggmoves.html", group: "RomFS", description: "Movimientos heredados mediante crianza." },
   { id: "evolutions", label: "Evolutions", legacy: "evolutions.html", group: "RomFS", description: "Métodos y especies resultantes." },
   { id: "wild", label: "Wild Encounters", legacy: "wild.html", group: "RomFS", description: "Encuentros salvajes por área." },
-  { id: "static", label: "Static Encounters", legacy: "static.html", group: "RomFS", description: "Regalos y encuentros fijos." },
+  { id: "static", label: "Static Encounters", legacy: "static.html", group: "Mixto", description: "CRO en Gen. VI; RomFS en Gen. VII." },
   { id: "trainers", label: "Trainers", legacy: "trainers.html", group: "RomFS", description: "Entrenadores, equipos y nombres." },
   { id: "text", label: "Game / Story Text", legacy: "text.html", group: "RomFS", description: "Tablas de texto del juego." },
   { id: "mega", label: "Mega Evolutions", legacy: "mega.html", group: "RomFS", description: "Datos de megaevolución." },
   { id: "owse", label: "OWSE / Scripts", legacy: "owse.html", group: "RomFS", description: "Inspección de scripts y zonas." },
   { id: "tm", label: "TMs / HMs", legacy: "tm.html", group: "ExeFS", description: "Compatibilidad y movimientos de campo." },
-  { id: "tutors", label: "Move Tutors", legacy: "tutors.html", group: "ExeFS", description: "Tutores de juegos Gen. VII." },
+  { id: "tutors", label: "Move Tutors", legacy: "tutors.html", group: "CRO", description: "Tutores Gen. VII almacenados en Shop.cro." },
   { id: "tutors6", label: "Move Tutors Gen. VI", legacy: "tutors6.html", group: "ExeFS", description: "Tutores de X/Y y OR/AS." },
-  { id: "marts", label: "Poké Mart", legacy: "marts.html", group: "ExeFS", description: "Inventarios de tiendas Gen. VII." },
+  { id: "marts", label: "Poké Mart", legacy: "marts.html", group: "CRO", description: "Tiendas Gen. VII almacenadas en Shop.cro." },
   { id: "marts6", label: "Poké Mart Gen. VI", legacy: "marts6.html", group: "ExeFS", description: "Inventarios de tiendas Gen. VI." },
   { id: "opowers", label: "O-Powers", legacy: "opowers.html", group: "ExeFS", description: "Valores de O-Powers." },
   { id: "shiny-rate", label: "Shiny Rate", legacy: "shiny-rate.html", group: "ExeFS", description: "Probabilidades y rerolls shiny." },
-  { id: "pickup", label: "Pickup", legacy: "pickup.html", group: "ExeFS", description: "Objetos obtenidos mediante Pickup." },
+  { id: "pickup", label: "Pickup", legacy: "pickup.html", group: "RomFS", description: "Objetos obtenidos mediante Pickup." },
   { id: "pickup6", label: "Pickup Gen. VI", legacy: "pickup6.html", group: "ExeFS", description: "Tablas de Pickup de X/Y y OR/AS." },
-  { id: "typechart", label: "Type Chart", legacy: "typechart.html", group: "CRO", description: "Matriz de efectividad de tipos." },
+  { id: "typechart", label: "Type Chart", legacy: "typechart.html", group: "Mixto", description: "CRO en Gen. VI; ExeFS en Gen. VII." },
   { id: "starters", availabilityId: "starter", label: "Starter Pokémon", legacy: "starters.html", group: "CRO", description: "Pokémon iniciales de Gen. VI." },
   { id: "gifts6", availabilityId: "gift6", label: "Gift Pokémon", legacy: "gifts6.html", group: "CRO", description: "Pokémon recibidos durante la historia." },
-  { id: "maison", label: "Maison / Tree / Royal", legacy: "maison.html", group: "CRO", description: "Equipos de Battle Maison, Tree y Royal." },
+  { id: "maison", label: "Maison / Tree / Royal", legacy: "maison.html", group: "RomFS", description: "Equipos de Battle Maison, Tree y Royal." },
 ];
 
 const projectTools = [
   { id: "extract", label: "Extraer juego", section: "extract", eyebrow: "ENTRADA", description: "Convertí un CXI, 3DS o CIA desencriptado en un workspace editable." },
   { id: "inspect", label: "Validar workspace", section: "inspect", eyebrow: "DIAGNÓSTICO", description: "Comprobá RomFS, ExeFS, exheader y módulos disponibles." },
+  { id: "backups", label: "Respaldar / restaurar originales", section: "workspace-backups", eyebrow: "SEGURIDAD", description: "Guardá una copia inicial de los archivos del workspace y restaurá una selección." },
   { id: "build", label: "Construir archivos", section: "build", eyebrow: "SALIDA", description: "Generá romfs.bin y exefs.bin sin tocar el origen." },
+  { id: "exefs", label: "Empaquetar / desempaquetar ExeFS", section: "exefs-tools", eyebrow: "EXEFS", description: "Trabajá con exefs.bin de forma independiente." },
+  { id: "romfs", label: "Empaquetar / desempaquetar RomFS", section: "romfs-tools", eyebrow: "ROMFS", description: "Trabajá con romfs.bin o una carpeta RomFS sin cargar un workspace." },
   { id: "rebuild", label: "Reconstruir ROM 3DS", section: "rebuild-rom", eyebrow: "EMPAQUETADO", description: "Armá una ROM recortada o con padding de tarjeta." },
   { id: "crr", label: "Verificar CRO / CRR", section: "rebuild-crr", eyebrow: "CRO / CRR", description: "Recalculá hashes y static.crr como parche LayeredFS." },
   { id: "cia", label: "Crear un CIA", section: "rebuild-cia", eyebrow: "EMPAQUETADO", description: "Convertí una ROM mediante makerom externo." },
   { id: "patch", label: "Crear parche LayeredFS", section: "patch", eyebrow: "PARCHE", description: "Prepará el contenido redirigido para Luma." },
   { id: "archives", label: "GAR / GARC / Mini / ALYT / Shuffle ARC / DARC / SARC / FARC", section: "garc", eyebrow: "FORMATOS", description: "Desempaquetá y empaquetá archivos internos." },
   { id: "images", label: "Convertir imágenes", section: "images", eyebrow: "IMÁGENES", description: "Convertí PNG, BCLIM y BFLIM sin modificar el original." },
-  { id: "smdh", label: "Icono SMDH", section: "smdh", eyebrow: "ICONO", description: "Inspeccioná, editá y exportá icon.bin." },
+  { id: "smdh", label: "Icono SMDH", section: "smdh", eyebrow: "ICONO", description: "Inspeccioná, editá, importá y exportá icon.bin." },
   { id: "lz11", label: "Comprimir / descomprimir LZ11", section: "lz11", eyebrow: "COMPRESIÓN", description: "Procesá archivos LZ11 sin sobrescribir la entrada." },
   { id: "blz", label: "Comprimir / descomprimir BLZ", section: "blz", eyebrow: "COMPRESIÓN", description: "Procesá code.bin y otros archivos BLZ sin sobrescribirlos." },
   { id: "titlescreen", games: ["XY", "ORAS"], label: "Pantalla de título", section: "titlescreen", eyebrow: "RECURSOS", description: "Inventariá, previsualizá y reemplazá imágenes." },
@@ -105,6 +108,12 @@ const groups = [
     label: "CRO / Salida",
     icon: "◆",
     links: editorPages.filter((page) => page.group === "CRO").map((page) => ({ to: `/editor/${page.id}`, label: page.label, description: page.description })),
+  },
+  {
+    id: "mixed",
+    label: "Según juego",
+    icon: "⇄",
+    links: editorPages.filter((page) => page.group === "Mixto").map((page) => ({ to: `/editor/${page.id}`, label: page.label, description: page.description })),
   },
 ];
 
@@ -359,6 +368,7 @@ function AppShell() {
           <NavLink to="/category/RomFS" className="side-link"><span>◈</span><b>RomFS</b><small>Datos del juego</small></NavLink>
           <NavLink to="/category/ExeFS" className="side-link"><span>◉</span><b>ExeFS</b><small>Código y tablas</small></NavLink>
           <NavLink to="/category/CRO" className="side-link"><span>◆</span><b>CRO / Salida</b><small>Recursos especiales</small></NavLink>
+          <NavLink to="/category/Mixto" className="side-link"><span>⇄</span><b>Según juego</b><small>Origen por generación</small></NavLink>
           <div className="side-footer"><span className="workspace-dot" />Todo local en tu Mac</div>
         </aside>
         <main className="app-main"><Outlet /></main>
@@ -403,8 +413,9 @@ function Dashboard() {
           <Link className="tab-card is-featured" to="/randomizer"><span className="tab-icon">↻</span><div><b>Randomizador</b><small>Personalizá datos, movimientos y evoluciones</small></div><span className="arrow">→</span></Link>
           <Link className="tab-card is-featured" to="/project"><span className="tab-icon">▣</span><div><b>Herramientas de proyecto</b><small>Extraer, validar, construir y reconstruir</small></div><span className="arrow">→</span></Link>
           <Link className="tab-card" to="/category/RomFS"><span className="tab-icon">◈</span><div><b>RomFS</b><small>Personal, movimientos, encuentros y texto</small></div><span className="arrow">→</span></Link>
-          <Link className="tab-card" to="/category/ExeFS"><span className="tab-icon">◉</span><div><b>ExeFS</b><small>TMs, tutores, tiendas y código</small></div><span className="arrow">→</span></Link>
-          <Link className="tab-card" to="/category/CRO"><span className="tab-icon">◆</span><div><b>CRO / Salida</b><small>Regalos, starters, tipos y Maison</small></div><span className="arrow">→</span></Link>
+          <Link className="tab-card" to="/category/ExeFS"><span className="tab-icon">◉</span><div><b>ExeFS</b><small>TMs, código y tablas de Gen. VI</small></div><span className="arrow">→</span></Link>
+          <Link className="tab-card" to="/category/CRO"><span className="tab-icon">◆</span><div><b>CRO / Salida</b><small>Recursos CRO y salida LayeredFS</small></div><span className="arrow">→</span></Link>
+          <Link className="tab-card" to="/category/Mixto"><span className="tab-icon">⇄</span><div><b>Según juego</b><small>Static Encounters y Type Chart cambian por generación</small></div><span className="arrow">→</span></Link>
         </div>
       </section>
       <section className="resume-card"><div><p className="kicker">SESIÓN</p><h2>Podés cerrar y volver después</h2><p>La carpeta, el juego detectado y los campos de las herramientas se guardan localmente. Los archivos generados siguen en el workspace o carpeta de salida.</p></div><span className="resume-icon">↻</span></section>
@@ -414,7 +425,7 @@ function Dashboard() {
 
 function ProjectPage() {
   const { workspace } = useWorkspace();
-  const standaloneTools = new Set(["extract", "inspect", "archives", "images", "lz11", "blz"]);
+  const standaloneTools = new Set(["extract", "inspect", "exefs", "romfs", "archives", "images", "lz11", "blz"]);
   const visibleTools = workspace.isComplete
     ? projectTools.filter((tool) => !tool.games || tool.games.includes(workspace.gameVersion))
     : projectTools;
@@ -427,7 +438,7 @@ function ProjectPage() {
         const disabledReason = !workspace.isComplete
           ? "Cargá y validá el workspace para habilitarla."
           : tool.id === "smdh"
-            ? "Requiere ExeFS con icon.bin SMDH válido."
+            ? "Requiere ExeFS; podés importar icon.bin desde esta pantalla."
           : tool.id === "patch"
             ? "Requiere ExeFS con code.bin descomprimido."
             : tool.id === "rebuild" || tool.id === "cia"
@@ -443,10 +454,10 @@ function ProjectPage() {
   );
 }
 
-function projectToolAvailable(tool, workspace, standaloneTools = new Set(["extract", "inspect", "archives", "images", "lz11", "blz"])) {
+function projectToolAvailable(tool, workspace, standaloneTools = new Set(["extract", "inspect", "exefs", "romfs", "archives", "images", "lz11", "blz"])) {
   if (standaloneTools.has(tool.id)) return true;
   if (!workspace.isComplete) return false;
-  if (tool.id === "smdh") return workspace.hasSmdh;
+  if (tool.id === "smdh") return workspace.hasExeFs;
   if (tool.id === "rebuild" || tool.id === "cia") return workspace.hasExeFs && workspace.hasExheader;
   if (tool.id === "patch") return workspace.codeBinReady;
   return true;
@@ -458,7 +469,7 @@ function ProjectToolsPage() {
   const selected = projectTools.find((tool) => tool.id === focus) || projectTools[0];
   const { workspace } = useWorkspace();
   const frameRef = useRef(null);
-  const requiresWorkspace = !["extract", "archives", "images", "lz11", "blz"].includes(selected.id);
+  const requiresWorkspace = !["extract", "exefs", "romfs", "archives", "images", "lz11", "blz"].includes(selected.id);
   const visibleTools = workspace.isComplete
     ? projectTools.filter((tool) => !tool.games || tool.games.includes(workspace.gameVersion))
     : projectTools;
@@ -471,7 +482,10 @@ function ProjectToolsPage() {
     const visibleSections = {
       extract: ["extract"],
       inspect: ["inspect"],
+      backups: ["workspace-backups"],
       build: ["inspect", "build"],
+      exefs: ["exefs-tools"],
+      romfs: ["romfs-tools"],
       rebuild: ["inspect", "rebuild-rom"],
       crr: ["inspect", "rebuild-crr"],
       cia: ["inspect", "rebuild-cia"],
@@ -513,7 +527,7 @@ function ProjectToolsPage() {
   return (
     <div className="page tools-page">
       <div className="page-toolbar"><div><Link className="back-link" to="/project">← Herramientas de proyecto</Link><h1>{selected.label}</h1><p>{selected.id === "inspect" ? "La validación se realiza desde el workspace común de la aplicación." : "Usá el workspace común; esta herramienta conserva los formularios de la versión Windows."}</p></div><span className="status-chip">Vista enfocada</span></div>
-      <div className="tools-layout"><ProjectToolRail selected={selected} visibleTools={visibleTools} workspace={workspace} setSearchParams={setSearchParams} />{selectedIsUnavailable ? <UnavailableTool tool={selected} workspace={workspace} /> : selected.id === "inspect" ? <WorkspaceSummary /> : <div className="legacy-host"><LegacyView externalRef={frameRef} src="/legacy/project.html?v=4" title="Herramientas de proyecto" stateKey="project" requireWorkspace={requiresWorkspace} autoLoadButtonId="inspect-action" workspacePanelSelector="#inspect" hideWorkspacePanel={requiresWorkspace} /></div>}</div>
+      <div className="tools-layout"><ProjectToolRail selected={selected} visibleTools={visibleTools} workspace={workspace} setSearchParams={setSearchParams} />{selectedIsUnavailable ? <UnavailableTool tool={selected} workspace={workspace} /> : selected.id === "inspect" ? <WorkspaceSummary /> : <div className="legacy-host"><LegacyView externalRef={frameRef} src="/legacy/project.html?v=10" title="Herramientas de proyecto" stateKey="project" requireWorkspace={requiresWorkspace} autoLoadButtonId="inspect-action" workspacePanelSelector="#inspect" hideWorkspacePanel={requiresWorkspace} /></div>}</div>
     </div>
   );
 }
@@ -529,7 +543,7 @@ function UnavailableTool({ tool, workspace }) {
   const reason = tool.games && workspace.isComplete && !tool.games.includes(workspace.gameVersion)
     ? `Esta herramienta solo corresponde a ${tool.games.join(" y ")}.`
       : tool.id === "smdh"
-      ? "Esta herramienta requiere un icon.bin SMDH válido dentro de ExeFS."
+      ? "Esta herramienta requiere ExeFS. Podés importar icon.bin desde esta pantalla."
       : tool.id === "patch"
       ? "Esta herramienta requiere un code.bin válido y alineado; si está comprimido con BLZ se decodifica automáticamente."
       : "Esta herramienta requiere ExeFS y exheader.bin en el workspace.";
@@ -549,7 +563,7 @@ function WorkspaceSummary() {
 }
 
 function RandomizerPage() {
-  return <div className="page randomizer-page"><div className="page-intro"><p className="eyebrow">RANDOMIZADOR</p><h1>Personalizá tu juego</h1><p>Las opciones se habilitan después de validar el workspace común. El flujo y los nombres conservan la lógica de pk3DS para Windows, incluyendo encuentros y equipos de entrenadores.</p></div><LegacyView src="/legacy/index.html?v=2" title="Randomizador" stateKey="randomizer" requireWorkspace autoLoadButtonId="inspect" workspacePanelSelector="#game" hideWorkspacePanel /></div>;
+  return <div className="page randomizer-page"><div className="page-intro"><p className="eyebrow">RANDOMIZADOR</p><h1>Personalizá tu juego</h1><p>Las opciones se habilitan después de validar el workspace común. El flujo y los nombres conservan la lógica de pk3DS para Windows, incluyendo encuentros y equipos de entrenadores.</p></div><LegacyView src="/legacy/index.html?v=4" title="Randomizador" stateKey="randomizer" requireWorkspace autoLoadButtonId="inspect" workspacePanelSelector="#game" hideWorkspacePanel /></div>;
 }
 
 function CategoryPage() {
@@ -557,12 +571,12 @@ function CategoryPage() {
   const { workspace, moduleAvailable, moduleInfo } = useWorkspace();
   const allPages = editorPages.filter((page) => page.group === group);
   const pages = allPages;
-  const title = group === "CRO" ? "CRO y salida" : group;
+  const title = group === "CRO" ? "CRO y salida" : group === "Mixto" ? "Según juego" : group;
   return <div className="page"><div className="category-title"><h1>{title}</h1></div><div className="editor-grid">{pages.map((page) => {
     const moduleId = page.availabilityId || page.id;
     const available = moduleAvailable(moduleId);
     const info = moduleInfo(moduleId);
-    const content = <><span className="editor-mark">{group === "RomFS" ? "◈" : group === "ExeFS" ? "◉" : "◆"}</span><div><h2>{page.label}</h2><p>{page.description}</p>{!available && <small className="disabled-note">{info?.requirement || "Cargá y validá un workspace compatible."}</small>}</div><span className="arrow">→</span></>;
+    const content = <><span className="editor-mark">{group === "RomFS" ? "◈" : group === "ExeFS" ? "◉" : group === "Mixto" ? "⇄" : "◆"}</span><div><h2>{page.label}</h2><p>{page.description}</p>{!available && <small className="disabled-note">{info?.requirement || "Cargá y validá un workspace compatible."}</small>}</div><span className="arrow">→</span></>;
     return available
       ? <Link className="editor-card" to={`/editor/${page.id}`} key={page.id}>{content}</Link>
       : <div className="editor-card is-disabled" aria-disabled="true" key={page.id}>{content}</div>;
@@ -573,8 +587,8 @@ function EditorPage() {
   const { id } = useParams();
   const page = editorPages.find((item) => item.id === id);
   if (!page) return <NotFound />;
-  const groupLabel = page.group === "CRO" ? "CRO / Salida" : page.group;
-  return <div className="page editor-page"><div className="page-toolbar"><div><Link className="back-link" to={`/category/${page.group}`}>← {groupLabel}</Link><h1>{page.label}</h1><p>{page.description} La sesión se conserva al navegar a otro módulo.</p></div><span className="status-chip">Editor</span></div><LegacyView src={`/legacy/${page.legacy}?v=4`} title={page.label} stateKey={page.id} requireWorkspace moduleId={page.availabilityId || page.id} hideWorkspacePanel /></div>;
+  const groupLabel = page.group === "CRO" ? "CRO / Salida" : page.group === "Mixto" ? "Según juego" : page.group;
+  return <div className="page editor-page"><div className="page-toolbar"><div><Link className="back-link" to={`/category/${page.group}`}>← {groupLabel}</Link><h1>{page.label}</h1><p>{page.description} La sesión se conserva al navegar a otro módulo.</p></div><span className="status-chip">Editor</span></div><LegacyView src={`/legacy/${page.legacy}?v=8`} title={page.label} stateKey={page.id} requireWorkspace moduleId={page.availabilityId || page.id} hideWorkspacePanel /></div>;
 }
 
 function LegacyView({ src, title, stateKey = src, externalRef, requireWorkspace = false, moduleId, hideWorkspacePanel = false, workspacePanelSelector = ".editor-main > section:has(.path-input)", autoLoadButtonId = "load" }) {
@@ -585,8 +599,8 @@ function LegacyView({ src, title, stateKey = src, externalRef, requireWorkspace 
   const { workspace, moduleAvailable, moduleInfo, language } = useWorkspace();
   const workspaceStateKey = workspace.path ? encodeURIComponent(workspace.path) : "unloaded";
   const storageKey = `${FRAME_STATE_PREFIX}${workspaceStateKey}:${stateKey}`;
-  const canOpen = !requireWorkspace || moduleAvailable(moduleId);
-  const availability = moduleInfo(moduleId);
+  const canOpen = !requireWorkspace || (moduleId ? moduleAvailable(moduleId) : workspace.isComplete);
+  const availability = moduleId ? moduleInfo(moduleId) : null;
 
   const installLanguageBridge = useCallback(() => {
     const view = frameRef.current?.contentWindow;
@@ -710,4 +724,34 @@ function NotFound() {
   return <div className="empty-state"><span>?</span><h1>Página no encontrada</h1><p>Volvé al inicio para elegir una herramienta.</p><Link className="button primary" to="/">Ir al inicio</Link></div>;
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+class AppErrorBoundary extends React.Component {
+  state = { failed: false, message: "" };
+
+  static getDerivedStateFromError(error) {
+    return {
+      failed: true,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("Error al mostrar pk3DS Mac", error, info);
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <main className="app-error" role="alert">
+        <section className="app-error-card">
+          <span aria-hidden="true">!</span>
+          <h1>No se pudo abrir esta pantalla</h1>
+          <p>Recargá la aplicación. Si vuelve a ocurrir, guardá tu trabajo local y compartí el detalle del error.</p>
+          {this.state.message && <details className="app-error-details"><summary>Ver detalle técnico</summary><pre>{this.state.message}</pre></details>}
+          <button className="button primary" type="button" onClick={() => window.location.reload()}>Recargar aplicación</button>
+        </section>
+      </main>
+    );
+  }
+}
+
+createRoot(document.getElementById("root")).render(<AppErrorBoundary><App /></AppErrorBoundary>);

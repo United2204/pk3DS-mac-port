@@ -17,6 +17,7 @@ public static class StaticGen6Editor
         RequireCro(workspace);
         var config = EditorSession.OpenReadOnly(workspace, request.Language);
         Guard.Gen6(config);
+        RequireTable(workspace, config.ORAS);
         return new StaticGen6CatalogResponse(config.ORAS ? "ORAS" : "XY", GetCount(config.ORAS),
             Catalogs.Species(config), Catalogs.Items(config),
             "Este cambio usa DllField.cro. En consola requiere el parche RO de Luma para evitar fallos.");
@@ -43,8 +44,7 @@ public static class StaticGen6Editor
                 var data = File.ReadAllBytes(path);
                 var entry = Validate(request.Entry, Catalogs.SpeciesCount(config), Catalogs.ItemCount(config));
                 var offset = GetOffset(config.ORAS, request.EntryIndex);
-                if (offset + EntrySize > data.Length)
-                    throw new WorkspaceException("La entrada de encuentro estático no existe.");
+                RequireEntry(data, offset);
 
                 var encounter = new EncounterStatic6(data.Skip(offset).Take(EntrySize).ToArray())
                 {
@@ -70,6 +70,14 @@ public static class StaticGen6Editor
 
     internal static int GetCount(bool oras) => oras ? 0x3B : 0xD;
 
+    private static void RequireTable(GameWorkspace workspace, bool oras)
+    {
+        var path = Path.Combine(workspace.RomFsPath, CroFile);
+        var minimumLength = (long)GetOffset(oras, GetCount(oras) - 1) + EntrySize;
+        if (new FileInfo(path).Length < minimumLength)
+            throw new WorkspaceException($"{CroFile} no contiene la tabla de encuentros estáticos completa.");
+    }
+
     internal static int GetOffset(bool oras, int entryIndex)
     {
         if (entryIndex < 0 || entryIndex >= GetCount(oras))
@@ -80,10 +88,15 @@ public static class StaticGen6Editor
     internal static StaticGen6Entry Read(byte[] data, bool oras, int entryIndex)
     {
         var offset = GetOffset(oras, entryIndex);
-        if (offset + EntrySize > data.Length)
-            throw new WorkspaceException($"{CroFile} no tiene el tamaño esperado.");
+        RequireEntry(data, offset);
         var entry = new EncounterStatic6(data.Skip(offset).Take(EntrySize).ToArray());
         return new StaticGen6Entry(entry.Species, entry.Form, entry.Level, entry.HeldItem, entry.Gender, entry.Ability, entry.ShinyLock, entry.IV3);
+    }
+
+    private static void RequireEntry(byte[]? data, int offset)
+    {
+        if (data is null || offset < 0 || data.Length - offset < EntrySize)
+            throw new WorkspaceException($"{CroFile} no tiene el tamaño esperado para esta entrada.");
     }
 
     /// <summary>Returns the validated entry so callers get a non-null value to apply.</summary>
@@ -94,9 +107,9 @@ public static class StaticGen6Editor
             || entry.Form is < 0 or > byte.MaxValue
             || entry.Level is < 1 or > 100
             || entry.HeldItem < 0 || entry.HeldItem >= itemCount
-            || entry.Gender is < 0 or > 3
-            || entry.Ability is < 0 or > 7)
-            throw new WorkspaceException("La especie, forma, nivel, objeto o flags no son válidos.");
+            || entry.Gender is < 0 or > 2
+            || entry.Ability is < 0 or > 3)
+            throw new WorkspaceException("La especie, forma, nivel, objeto, género o habilidad no son válidos.");
         return entry;
     }
 }

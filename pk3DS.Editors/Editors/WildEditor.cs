@@ -13,7 +13,15 @@ public static class WildEditor
     private const int SlotsPerTable = 10;
     private const int SosGroups = 7;
     private const int WeatherSlots = 6;
+    private const int MiniGroupSize = 11;
+    private const int TablePairHeaderSize = 4;
+    private const int EncounterTableSize = 0x164;
     private static readonly string[] EncounterGarcs = ["encdata", "zonedata", "worlddata"];
+    private static readonly System.Text.Json.JsonSerializerOptions BatchJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+    };
 
     public static WildAreaCatalogResponse GetCatalog(WildAreaCatalogRequest request)
     {
@@ -53,6 +61,159 @@ public static class WildEditor
                 return [config.GetGARCFileName("encdata")];
             });
 
+    /// <summary>Exports every Gen. VII encounter area as a read-only JSON report.</summary>
+    public static WildGen7BatchReportResponse ExportBatchReport(WildGen7BatchReportRequest request)
+    {
+        var (workspace, config) = EditorSession.OpenReadOnly(request.WorkspacePath, request.Language);
+        Guard.Gen7(config, "encuentros");
+        var encounterData = config.GetlzGARCData("encdata");
+        var zoneArchive = config.GetlzGARCData("zonedata");
+        var worldArchive = config.GetlzGARCData("worlddata");
+        var areaCount = encounterData.FileCount / MiniGroupSize;
+        var unassignedFileCount = encounterData.FileCount % MiniGroupSize;
+        var unassignedFileIndices = Enumerable.Range(areaCount * MiniGroupSize, unassignedFileCount).ToArray();
+
+        var zones = Array.Empty<ZoneData7>();
+        string? metadataDiagnostics = null;
+        try
+        {
+            var worlds = worldArchive.Files.Select(file => Mini.UnpackMini(file, "WD")[0]).ToArray();
+            var zoneFiles = zoneArchive.Files;
+            zones = ZoneData7.GetZoneData7Array(
+                zoneFiles[0], zoneFiles[1], config.GetText(TextName.metlist_000000), worlds);
+        }
+        catch (Exception exception) when (IsBatchDataException(exception))
+        {
+            // Zone labels are helpful but not required to preserve the encounter tables.
+            metadataDiagnostics = $"No se pudieron resolver los nombres de zona: {exception.Message}";
+        }
+
+        var output = EditorSession.ResolveBatchExportDirectory(workspace, request.OutputDirectory, "wild-gen7-reports");
+        var parent = Directory.GetParent(output)!.FullName;
+        Directory.CreateDirectory(parent);
+        var staging = Path.Combine(parent, $".pk3ds-wild-gen7-reports-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(staging);
+
+        var reports = new List<WildGen7BatchReportFile>();
+        var withoutTables = new List<WildGen7AreaWithoutTables>();
+        var skipped = new List<WildGen7SkippedArea>();
+        try
+        {
+            var reportDirectory = Path.Combine(staging, "Areas");
+            Directory.CreateDirectory(reportDirectory);
+            for (var areaIndex = 0; areaIndex < areaCount; areaIndex++)
+            {
+                var fileNumber = 9 + (MiniGroupSize * areaIndex);
+                var areaZones = zones.Where(zone => zone.AreaIndex == areaIndex)
+                    .OrderBy(zone => zone.Index).ToArray();
+                var zoneNames = areaZones.Select(zone => zone.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
+                var areaName = zoneNames.Length == 0 ? $"Área {areaIndex:000}" : string.Join(" / ", zoneNames);
+                var tables = new List<WildGen7TablePairReport>();
+                bool? hasTables = null;
+                string? noTableReason = null;
+                string? areaDiagnostic = metadataDiagnostics;
+                var parseFailed = false;
+                try
+                {
+                    var data = encounterData[fileNumber];
+                    if (data.Length == 0)
+                    {
+                        hasTables = false;
+                        noTableReason = "El archivo de área está vacío; no contiene tablas EA.";
+                    }
+                    else
+                    {
+                        var packedTables = Mini.UnpackMini(data, "EA");
+                        hasTables = packedTables.Any(table => table.Length > 0);
+                        if (hasTables == false)
+                            noTableReason = "El grupo EA está vacío; no contiene tablas día/noche.";
+                        else
+                        {
+                            for (var tableIndex = 0; tableIndex < packedTables.Length; tableIndex++)
+                            {
+                                var packedTable = packedTables[tableIndex];
+                                if (packedTable.Length < TablePairHeaderSize + (2 * EncounterTableSize))
+                                    throw new InvalidDataException(
+                                        $"La tabla EA {tableIndex} mide {packedTable.Length} bytes; se esperaban al menos {TablePairHeaderSize + (2 * EncounterTableSize)}.");
+
+                                var dayData = packedTable.Skip(TablePairHeaderSize).Take(EncounterTableSize).ToArray();
+                                var nightData = packedTable.Skip(TablePairHeaderSize + EncounterTableSize).ToArray();
+                                var day = new EncounterTable(dayData);
+                                var night = new EncounterTable(nightData);
+                                var headerHex = Convert.ToHexString(packedTable.Take(TablePairHeaderSize).ToArray());
+                                tables.Add(new WildGen7TablePairReport(
+                                    tableIndex, headerHex, ToTable(day), ToTable(night),
+                                    Convert.ToHexString(dayData), Convert.ToHexString(nightData)));
+                            }
+                        }
+                    }
+                }
+                catch (Exception exception) when (IsBatchDataException(exception))
+                {
+                    hasTables = null;
+                    tables.Clear();
+                    parseFailed = true;
+                    areaDiagnostic = JoinDiagnostics(areaDiagnostic, exception.Message);
+                }
+
+                var fileName = Path.Combine("Areas", $"{areaIndex:D3}-{SanitizeBatchFileName(areaName)}.json")
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                var document = new WildGen7AreaReportDocument(
+                    config.Version.ToString(), areaIndex, fileNumber, areaName, zoneNames,
+                    hasTables, tables.ToArray(), areaDiagnostic);
+                var outputPath = Path.Combine(staging, fileName.Replace('/', Path.DirectorySeparatorChar));
+                File.WriteAllText(outputPath, System.Text.Json.JsonSerializer.Serialize(document, BatchJsonOptions));
+                var bytes = checked((int)new FileInfo(outputPath).Length);
+                reports.Add(new WildGen7BatchReportFile(
+                    areaIndex, fileNumber, areaName, fileName, bytes, tables.Count, hasTables));
+                if (noTableReason is not null)
+                    withoutTables.Add(new WildGen7AreaWithoutTables(
+                        areaIndex, fileNumber, areaName, noTableReason, fileName));
+                if (parseFailed)
+                    skipped.Add(new WildGen7SkippedArea(areaIndex, fileNumber, areaName, areaDiagnostic!, fileName));
+            }
+
+            const string manifestName = "manifest.json";
+            var manifest = new
+            {
+                format = "pk3DS Wild Gen VII encounter reports",
+                gameVersion = config.Version.ToString(),
+                totalAreas = areaCount,
+                unassignedFileCount,
+                unassignedFileIndices,
+                source = new
+                {
+                    encdata = config.GetGARCFileName("encdata"),
+                    zonedata = config.GetGARCFileName("zonedata"),
+                    worlddata = config.GetGARCFileName("worlddata"),
+                    note = "Informes de solo lectura; no modifican el workspace original.",
+                },
+                exported = reports,
+                areasWithoutTables = withoutTables,
+                skipped,
+                diagnostics = metadataDiagnostics,
+            };
+            File.WriteAllText(Path.Combine(staging, manifestName),
+                System.Text.Json.JsonSerializer.Serialize(manifest, BatchJsonOptions));
+
+            Directory.Move(staging, output);
+            var diagnosticsSummary = JoinDiagnostics(
+                skipped.Count == 0 ? null : $"Se omitieron {skipped.Count} áreas dañadas; el manifiesto contiene los motivos.",
+                unassignedFileCount == 0 ? null : $"Hay {unassignedFileCount} archivos de encdata fuera de grupos completos.",
+                metadataDiagnostics);
+            return new WildGen7BatchReportResponse(
+                config.Version.ToString(), output, Path.Combine(output, manifestName), areaCount,
+                reports.ToArray(), withoutTables.ToArray(), skipped.ToArray(), unassignedFileCount,
+                unassignedFileIndices, reports.Sum(report => (long)report.Bytes), diagnosticsSummary);
+        }
+        finally
+        {
+            if (Directory.Exists(staging))
+                Directory.Delete(staging, recursive: true);
+        }
+    }
+
     private static Area7[] GetAreas(GameConfig config, LazyGARCFile? encounterData = null) => Area7.GetArray(
         encounterData ?? config.GetlzGARCData("encdata"),
         config.GetlzGARCData("zonedata"),
@@ -73,6 +234,25 @@ public static class WildEditor
         table.Encounter7s[0].Select((slot, index) => new WildEncounterSlot((int)slot.Species, (int)slot.Forme, table.Rates[index])).ToArray(),
         table.Encounter7s.Skip(1).Take(SosGroups).Select(group => group.Select(slot => new WildEncounterCompanionSlot((int)slot.Species, (int)slot.Forme)).ToArray()).ToArray(),
         table.AdditionalSOS.Select(slot => new WildEncounterCompanionSlot((int)slot.Species, (int)slot.Forme)).ToArray());
+
+    private static bool IsBatchDataException(Exception exception) =>
+        exception is WorkspaceException or ArgumentException or EndOfStreamException
+            or InvalidDataException or FormatException or OverflowException or IndexOutOfRangeException;
+
+    private static string SanitizeBatchFileName(string name)
+    {
+        var safe = new string(name.Select(character =>
+            char.IsControl(character) || "<>:\"/\\|?*".Contains(character)
+                ? character == '?' ? '-' : '_'
+                : character).ToArray()).Trim().TrimEnd('.');
+        return string.IsNullOrWhiteSpace(safe) ? "Area" : safe;
+    }
+
+    private static string? JoinDiagnostics(params string?[] values)
+    {
+        var nonEmpty = values.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray();
+        return nonEmpty.Length == 0 ? null : string.Join(" ", nonEmpty);
+    }
 
     private static void ApplyTable(EncounterTable target, WildEncounterTable? source, int speciesCount)
     {

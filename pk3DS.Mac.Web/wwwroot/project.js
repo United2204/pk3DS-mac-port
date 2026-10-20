@@ -2,12 +2,16 @@ const byId = (id) => document.getElementById(id);
 const workspace = byId('workspace');
 let inspected = false;
 let inspectedData = null;
+let redirectPatchOptions = [];
+let redirectPatchOptionsGame = '';
 let smdhData = null;
 let smdhBackups = null;
 let smdhSlot = 0;
 let titleScreenCatalog = null;
 let titleScreenBackups = null;
 let titleScreenPreviewRequest = 0;
+let titleScreenQueue = [];
+let workspaceBackups = null;
 
 async function post(url, body = {}) {
   const response = await fetch(url, {
@@ -31,10 +35,111 @@ async function post(url, body = {}) {
   return data;
 }
 
+async function getJson(url) {
+  const response = await fetch(url);
+  const raw = await response.text();
+  let data = {};
+  if (raw.trim()) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { error: raw.trim() };
+    }
+  }
+  if (!response.ok) {
+    throw new Error(data.error || data.detail || data.title || `El servidor rechazó la consulta (${response.status}).`);
+  }
+  if (!raw.trim()) throw new Error('El servidor no devolvió el estado de la extracción.');
+  return data;
+}
+
 function setStatus(message, state = 'neutral') {
   const element = byId('status');
   element.textContent = message;
   element.className = `status ${state}`;
+}
+
+function setWorkspaceBackupResult(message, state = 'neutral') {
+  const element = byId('workspace-backup-result');
+  element.textContent = message;
+  element.className = `status ${state}`;
+}
+
+function resetWorkspaceBackups() {
+  workspaceBackups = null;
+  byId('workspace-backup-summary').textContent = 'Cargá un workspace para ver sus copias.';
+  byId('workspace-backups-list').innerHTML = '';
+  byId('workspace-backup-select-all').checked = false;
+  byId('workspace-backup-select-all').indeterminate = false;
+  byId('workspace-backup-select-all').disabled = true;
+  setWorkspaceBackupResult('');
+}
+
+function renderWorkspaceBackups(data) {
+  workspaceBackups = data;
+  const groups = new Map();
+  for (const backup of data.backups || []) {
+    if (!groups.has(backup.category)) groups.set(backup.category, []);
+    groups.get(backup.category).push(backup);
+  }
+
+  const labels = { GARC: 'RomFS · GARCs', ExeFS: 'ExeFS', CRO: 'CRO / CRS', CRR: 'CRR' };
+  const rows = [...groups.entries()].map(([category, backups]) => `
+    <section class="workspace-backup-group">
+      <h3>${escapeHtml(labels[category] || category)} <small>${backups.length} archivo(s)</small></h3>
+      <div>${backups.map((backup) => {
+        const existence = backup.currentFileExists ? 'actual' : 'faltante · se volverá a crear';
+        return `<label class="check-card workspace-backup-item"><input class="workspace-backup-checkbox" type="checkbox" value="${escapeHtml(backup.id)}"><span><b>${escapeHtml(backup.relativePath)}</b><small>${Number(backup.bytes).toLocaleString()} B · ${existence}</small></span></label>`;
+      }).join('')}</div>
+    </section>`).join('');
+  byId('workspace-backups-list').innerHTML = rows || '<p class="muted">No hay archivos respaldados todavía. Guardá una copia inicial para habilitar la restauración.</p>';
+  byId('workspace-backup-summary').textContent = data.baselineExists
+    ? `${(data.backups || []).length} archivo(s) disponibles en la copia inicial de ${data.gameVersion}.`
+    : 'Todavía no se creó una copia inicial para este workspace.';
+  byId('workspace-backup-select-all').checked = false;
+  byId('workspace-backup-select-all').disabled = !data.baselineExists || (data.backups || []).length === 0;
+  updateBuildState();
+}
+
+function renderRedirectPatchOptions(data) {
+  redirectPatchOptions = data.archives || [];
+  redirectPatchOptionsGame = data.gameVersion || '';
+  byId('patch-garc-options').innerHTML = redirectPatchOptions.map((name) => `
+    <label class="check-card workspace-backup-item"><input class="patch-garc-checkbox" type="checkbox" value="${escapeHtml(name)}"><span><b>${escapeHtml(name)}</b></span></label>`).join('');
+  updateRedirectPatchSelection();
+}
+
+function updateRedirectPatchSelection() {
+  const options = [...document.querySelectorAll('.patch-garc-checkbox')];
+  const selected = options.filter((checkbox) => checkbox.checked).length;
+  byId('patch-garc-summary').textContent = redirectPatchOptions.length
+    ? `${selected} seleccionado(s) · ${redirectPatchOptions.length} GARC(s) configurados para ${redirectPatchOptionsGame}.`
+    : redirectPatchOptionsGame
+      ? `No hay GARCs configurados para ${redirectPatchOptionsGame}; podés indicar rutas adicionales.`
+      : 'Cargá un workspace para ver los GARCs del juego.';
+  byId('patch-garc-select-all').disabled = !inspected || options.length === 0;
+  byId('patch-garc-select-none').disabled = !inspected || selected === 0;
+  updateBuildState();
+}
+
+function clearRedirectPatchOptions() {
+  redirectPatchOptions = [];
+  redirectPatchOptionsGame = '';
+  byId('patch-garc-options').replaceChildren();
+  updateRedirectPatchSelection();
+}
+
+async function loadWorkspaceBackups(silent = false) {
+  if (!inspected) return null;
+  try {
+    const data = await post('/api/workspace/backups', { workspacePath: workspace.value });
+    renderWorkspaceBackups(data);
+    if (!silent) setWorkspaceBackupResult(data.note, data.baselineExists ? 'success' : 'neutral');
+    return data;
+  } catch (error) {
+    setWorkspaceBackupResult(error.message, 'error');
+    return null;
+  }
 }
 
 function setResult(message, state = 'neutral') {
@@ -47,6 +152,20 @@ function setExtractResult(message, state = 'neutral') {
   const element = byId('extract-result');
   element.textContent = message;
   element.className = `status ${state}`;
+}
+
+function renderExtractProgress(job) {
+  const progress = byId('extract-progress');
+  progress.hidden = job.status !== 'running';
+  if (job.total > 0) {
+    progress.max = job.total;
+    progress.value = Math.min(job.current, job.total);
+  } else {
+    progress.removeAttribute('value');
+    progress.removeAttribute('max');
+  }
+  const percent = job.total > 0 ? ` ${Math.floor((job.current / job.total) * 100)}%` : '';
+  setExtractResult(`${job.message}${percent}`);
 }
 
 function setRebuildResult(message, state = 'neutral') {
@@ -181,6 +300,12 @@ function setImageResult(message, state = 'neutral') {
   element.className = `status ${state}`;
 }
 
+function resetImagePreview() {
+  byId('image-preview').hidden = true;
+  byId('image-preview-info').textContent = '';
+  byId('image-preview-image').removeAttribute('src');
+}
+
 function setSmdhResult(message, state = 'neutral') {
   const element = byId('smdh-result');
   element.textContent = message;
@@ -237,6 +362,24 @@ function setTitleScreenReplaceGarcResult(message, state = 'neutral') {
 
 function setTitleScreenApplyResult(message, state = 'neutral') {
   const element = byId('title-screen-apply-result');
+  element.textContent = message;
+  element.className = `status ${state}`;
+}
+
+function setTitleScreenBatchQueueResult(message, state = 'neutral') {
+  const element = byId('title-screen-batch-queue-result');
+  element.textContent = message;
+  element.className = `status ${state}`;
+}
+
+function setTitleScreenBatchGarcResult(message, state = 'neutral') {
+  const element = byId('title-screen-batch-garc-result');
+  element.textContent = message;
+  element.className = `status ${state}`;
+}
+
+function setTitleScreenBatchApplyResult(message, state = 'neutral') {
+  const element = byId('title-screen-batch-apply-result');
   element.textContent = message;
   element.className = `status ${state}`;
 }
@@ -439,6 +582,69 @@ function resetTitleScreenReplacementSelectors() {
   byId('title-screen-preview-meta').textContent = '';
   setTitleScreenPreviewResult('Elegí un recurso BCLIM compatible para verlo.', 'neutral');
   setTitleScreenApplyResult('Elegí un recurso y un archivo de reemplazo para aplicarlo al workspace.', 'neutral');
+  resetTitleScreenQueue();
+}
+
+function titleScreenQueueKey(entry) {
+  return `${entry.fileNumber}:${entry.assetEntryIndex}`;
+}
+
+function renderTitleScreenQueue() {
+  const queue = byId('title-screen-batch-queue');
+  if (!titleScreenQueue.length) {
+    queue.innerHTML = '<div class="title-screen-row"><div><b>La cola está vacía.</b><small>Elegí un recurso y un archivo PNG o BCLIM para agregarlo.</small></div><span>0</span></div>';
+    return;
+  }
+  queue.innerHTML = titleScreenQueue.map((entry, index) => `<div class="title-screen-row"><div><b>${escapeHtml(entry.game)} · ${escapeHtml(entry.language)} · archivo ${entry.fileNumber}</b><small>${escapeHtml(entry.assetName)} · BCLIM #${entry.assetEntryIndex}</small><small>${escapeHtml(entry.replacementFile)}</small></div><button class="secondary-button" type="button" data-title-screen-remove="${index}" aria-label="Quitar ${escapeHtml(entry.assetName)} de la cola">Quitar</button></div>`).join('');
+  for (const button of queue.querySelectorAll('[data-title-screen-remove]')) {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.titleScreenRemove);
+      const removed = titleScreenQueue[index];
+      titleScreenQueue.splice(index, 1);
+      renderTitleScreenQueue();
+      setTitleScreenBatchQueueResult(removed
+        ? `Se quitó ${removed.assetName} de la cola.`
+        : 'Se actualizó la cola.', 'neutral');
+      updateBuildState();
+    });
+  }
+}
+
+function resetTitleScreenQueue() {
+  titleScreenQueue = [];
+  renderTitleScreenQueue();
+  setTitleScreenBatchQueueResult('Elegí un recurso y un archivo de reemplazo para agregarlo a la cola.', 'neutral');
+  setTitleScreenBatchGarcResult('La cola está vacía.', 'neutral');
+  setTitleScreenBatchApplyResult('La cola está vacía.', 'neutral');
+}
+
+function addTitleScreenQueueEntry() {
+  const archiveSelect = byId('title-screen-archive');
+  const assetSelect = byId('title-screen-asset');
+  const archive = titleScreenCatalog?.archives.find((entry) =>
+    entry.valid && String(entry.fileNumber) === archiveSelect.value);
+  const asset = archive?.assets.find((entry) => String(entry.entryIndex) === assetSelect.value);
+  const replacementFile = byId('title-screen-replacement').value.trim();
+  if (!archive || !asset || !replacementFile) {
+    setTitleScreenBatchQueueResult('Elegí un archivo de título, un recurso BCLIM y un reemplazo PNG o BCLIM.', 'error');
+    return;
+  }
+  const entry = {
+    fileNumber: Number(archive.fileNumber),
+    assetEntryIndex: Number(asset.entryIndex),
+    replacementFile,
+    game: archive.game,
+    language: archive.language,
+    assetName: asset.name,
+  };
+  if (titleScreenQueue.some((queued) => titleScreenQueueKey(queued) === titleScreenQueueKey(entry))) {
+    setTitleScreenBatchQueueResult('Ese archivo de título y recurso ya están en la cola.', 'warning');
+    return;
+  }
+  titleScreenQueue.push(entry);
+  renderTitleScreenQueue();
+  setTitleScreenBatchQueueResult(`Agregado: ${entry.game} · ${entry.language} · ${entry.assetName}.`, 'success');
+  updateBuildState();
 }
 
 function resetTitleScreenBackups() {
@@ -549,6 +755,7 @@ function renderTitleScreenCatalog(data) {
 function updateBuildState() {
   const hasExeFs = Boolean(inspectedData?.exeFsPath);
   const hasExheader = Boolean(inspectedData?.exheaderPath);
+  const hasSmdh = Boolean(inspectedData?.smdhReady);
   const exefsControl = byId('exefs');
   exefsControl.disabled = inspected && !hasExeFs;
   if (exefsControl.disabled) exefsControl.checked = false;
@@ -557,12 +764,14 @@ function updateBuildState() {
   byId('rebuild-action').disabled = !inspected || !hasExeFs || !hasExheader;
   byId('rebuild-crr-action').disabled = !inspected;
   byId('rebuild-cia-action').disabled = !inspected || !hasExeFs || !hasExheader;
-  byId('create-patch').disabled = !inspected || !hasExeFs;
-  byId('inspect-smdh').disabled = !inspected || !hasExeFs;
+  const hasPatchSelection = Boolean(document.querySelector('.patch-garc-checkbox:checked'))
+    || Boolean(byId('patch-garcs').value.trim());
+  byId('create-patch').disabled = !inspected || !hasExeFs || !hasPatchSelection;
+  byId('inspect-smdh').disabled = !inspected || !hasExeFs || !hasSmdh;
   byId('export-smdh').disabled = !smdhData;
   byId('update-smdh').disabled = !smdhData;
   byId('import-smdh').disabled = !inspected || !hasExeFs || !byId('smdh-import-input').value.trim();
-  byId('load-smdh-backups').disabled = !inspected || !hasExeFs;
+  byId('load-smdh-backups').disabled = !inspected || !hasExeFs || !hasSmdh;
   byId('restore-smdh').disabled = !smdhBackups
     || byId('smdh-backup').disabled
     || !byId('smdh-backup').value;
@@ -577,12 +786,27 @@ function updateBuildState() {
     || !assetSelect.value;
   byId('replace-title-screen-garc').disabled = byId('replace-title-screen').disabled;
   byId('apply-title-screen').disabled = byId('replace-title-screen').disabled;
+  byId('add-title-screen-batch').disabled = byId('replace-title-screen').disabled
+    || !byId('title-screen-replacement').value.trim();
+  byId('replace-title-screen-batch-garc').disabled = !titleScreenQueue.length;
+  byId('apply-title-screen-batch').disabled = !titleScreenQueue.length;
   byId('load-title-screen-backups').disabled = !inspected;
   byId('restore-title-screen').disabled = !titleScreenBackups
     || byId('title-screen-backup').disabled
     || !byId('title-screen-backup').value;
+  byId('create-workspace-backup').disabled = !inspected;
+  byId('load-workspace-backups').disabled = !inspected;
+  const workspaceBackupCheckboxes = [...document.querySelectorAll('.workspace-backup-checkbox')];
+  const selectedWorkspaceBackupCount = workspaceBackupCheckboxes.filter((checkbox) => checkbox.checked).length;
+  byId('workspace-backup-select-all').disabled = !inspected || workspaceBackupCheckboxes.length === 0;
+  byId('workspace-backup-select-all').checked = workspaceBackupCheckboxes.length > 0
+    && selectedWorkspaceBackupCount === workspaceBackupCheckboxes.length;
+  byId('workspace-backup-select-all').indeterminate = selectedWorkspaceBackupCount > 0
+    && selectedWorkspaceBackupCount < workspaceBackupCheckboxes.length;
+  byId('restore-workspace-backup').disabled = !inspected || !workspaceBackups?.baselineExists || selectedWorkspaceBackupCount === 0;
   byId('convert-image').disabled = !byId('image-input').value.trim();
   const imageInput = byId('image-input').value.trim().toLowerCase();
+  byId('preview-image').disabled = !imageInput.endsWith('.bclim') && !imageInput.endsWith('.bflim');
   byId('image-format').disabled = Boolean(imageInput)
     && !imageInput.endsWith('.png')
     && !imageInput.endsWith('.bflim');
@@ -600,10 +824,13 @@ function updateBuildState() {
 
 async function inspectWorkspace() {
   const button = byId('inspect-action');
+  const inspectedPath = workspace.value;
   button.disabled = true;
   inspected = false;
   inspectedData = null;
+  clearRedirectPatchOptions();
   resetSmdh();
+  resetWorkspaceBackups();
   titleScreenCatalog = null;
   resetTitleScreenBackups();
   byId('title-screen-catalog').hidden = true;
@@ -613,15 +840,27 @@ async function inspectWorkspace() {
   setTitleScreenApplyResult('Analizá el workspace para elegir una imagen.', 'neutral');
   setStatus('Cargando el juego…');
   try {
-    const data = await post('/api/workspace/inspect', { workspacePath: workspace.value });
+    const data = await post('/api/workspace/inspect', { workspacePath: inspectedPath });
+    if (workspace.value !== inspectedPath) return;
     inspected = true;
     inspectedData = data;
+    try {
+      const options = await post('/api/workspace/redirect-patch/options', { workspacePath: inspectedPath });
+      if (workspace.value === inspectedPath) renderRedirectPatchOptions(options);
+    } catch (error) {
+      if (workspace.value === inspectedPath) {
+        byId('patch-garc-summary').textContent = `No se pudo cargar el catálogo: ${error.message} Podés usar GARCs o rutas adicionales.`;
+        updateRedirectPatchSelection();
+      }
+    }
+    if (workspace.value !== inspectedPath) return;
     setCiaResult('', 'neutral');
     const exefs = data.exeFsPath ? ' ExeFS detectado.' : ' No hay ExeFS detectado.';
     const codeIssue = (data.diagnostics || []).find((diagnostic) => diagnostic.code === 'code-bin' && ['warning', 'error'].includes(diagnostic.severity));
     const codeNote = codeIssue ? ` ${codeIssue.message}` : data.codeBinCompressed ? ' code.bin BLZ detectado; se descomprime en memoria.' : '';
     setStatus(`Listo: ${data.gameVersion}.${exefs}${codeNote}`, codeIssue?.severity === 'error' ? 'error' : 'success');
     setResult('Podés construir una copia binaria desde este workspace.');
+    await loadWorkspaceBackups(true);
   } catch (error) {
     setStatus(error.message, 'error');
     setResult('Cargá un workspace válido para continuar.', 'neutral');
@@ -703,6 +942,19 @@ byId('browse-makerom').addEventListener('click', async () => {
   try {
     const data = await post('/api/workspace/pick-tool');
     byId('makerom-path').value = data.path;
+  } catch (error) {
+    setCiaResult(error.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+byId('browse-cia-patch').addEventListener('click', async () => {
+  const button = byId('browse-cia-patch');
+  button.disabled = true;
+  try {
+    const data = await post('/api/workspace/pick-redirect-patch');
+    byId('cia-patch-directory').value = data.path;
   } catch (error) {
     setCiaResult(error.message, 'error');
   } finally {
@@ -1090,10 +1342,74 @@ byId('browse-gar-output').addEventListener('click', async () => {
 });
 
 byId('inspect-action').addEventListener('click', inspectWorkspace);
+byId('load-workspace-backups').addEventListener('click', async () => {
+  const button = byId('load-workspace-backups');
+  button.disabled = true;
+  await loadWorkspaceBackups();
+  updateBuildState();
+});
+
+byId('create-workspace-backup').addEventListener('click', async () => {
+  const button = byId('create-workspace-backup');
+  button.disabled = true;
+  setWorkspaceBackupResult('Guardando la copia inicial…');
+  try {
+    const data = await post('/api/workspace/backups/create', { workspacePath: workspace.value, language: 2 });
+    setWorkspaceBackupResult(data.note, 'success');
+    await loadWorkspaceBackups(true);
+  } catch (error) {
+    setWorkspaceBackupResult(error.message, 'error');
+  } finally {
+    updateBuildState();
+  }
+});
+
+byId('workspace-backup-select-all').addEventListener('change', () => {
+  const selected = byId('workspace-backup-select-all').checked;
+  document.querySelectorAll('.workspace-backup-checkbox').forEach((checkbox) => { checkbox.checked = selected; });
+  updateBuildState();
+});
+
+byId('workspace-backups-list').addEventListener('change', (event) => {
+  if (event.target.matches('.workspace-backup-checkbox')) updateBuildState();
+});
+
+byId('patch-garc-options').addEventListener('change', (event) => {
+  if (event.target.matches('.patch-garc-checkbox')) updateRedirectPatchSelection();
+});
+byId('patch-garc-select-all').addEventListener('click', () => {
+  document.querySelectorAll('.patch-garc-checkbox').forEach((checkbox) => { checkbox.checked = true; });
+  updateRedirectPatchSelection();
+});
+byId('patch-garc-select-none').addEventListener('click', () => {
+  document.querySelectorAll('.patch-garc-checkbox').forEach((checkbox) => { checkbox.checked = false; });
+  updateRedirectPatchSelection();
+});
+byId('patch-garcs').addEventListener('input', updateBuildState);
+
+byId('restore-workspace-backup').addEventListener('click', async () => {
+  const button = byId('restore-workspace-backup');
+  const backupIds = [...document.querySelectorAll('.workspace-backup-checkbox:checked')].map((checkbox) => checkbox.value);
+  if (backupIds.length === 0) return;
+  button.disabled = true;
+  setWorkspaceBackupResult('Restaurando los archivos seleccionados…');
+  try {
+    const data = await post('/api/workspace/backups/restore', { workspacePath: workspace.value, backupIds });
+    setWorkspaceBackupResult(`${data.note} Copia del estado anterior: ${data.safetyBackupDirectory}.`, 'success');
+    await loadWorkspaceBackups(true);
+  } catch (error) {
+    setWorkspaceBackupResult(error.message, 'error');
+  } finally {
+    updateBuildState();
+  }
+});
+
 workspace.addEventListener('input', () => {
   inspected = false;
   inspectedData = null;
+  clearRedirectPatchOptions();
   resetSmdh();
+  resetWorkspaceBackups();
   titleScreenCatalog = null;
   resetTitleScreenBackups();
   byId('title-screen-catalog').hidden = true;
@@ -1129,17 +1445,32 @@ byId('build-action').addEventListener('click', async () => {
 
 byId('extract-action').addEventListener('click', async () => {
   const button = byId('extract-action');
+  const progress = byId('extract-progress');
   button.disabled = true;
+  progress.hidden = false;
+  progress.removeAttribute('value');
+  progress.removeAttribute('max');
   setExtractResult('Extrayendo el archivo…');
   try {
-    const data = await post('/api/workspace/extract', {
+    const job = await post('/api/workspace/extract/jobs', {
       inputPath: byId('input-file').value,
       outputDirectory: byId('extract-output').value.trim() || null,
     });
+    let status;
+    while (true) {
+      status = await getJson(job.statusUrl);
+      renderExtractProgress(status);
+      if (status.status === 'completed' || status.status === 'failed') break;
+      await new Promise((resolve) => window.setTimeout(resolve, 450));
+    }
+    if (status.status === 'failed') throw new Error(status.error || status.message);
+    const data = status.result;
     setExtractResult(`Listo: ${data.format}. Se generaron ${data.files.length} archivos en ${data.outputDirectory}.`, 'success');
   } catch (error) {
+    progress.hidden = true;
     setExtractResult(error.message, 'error');
   } finally {
+    progress.hidden = true;
     button.disabled = false;
   }
 });
@@ -1190,8 +1521,9 @@ byId('rebuild-cia-action').addEventListener('click', async () => {
       outputFile: byId('cia-output').value.trim() || null,
       trimmed: byId('cia-trimmed').checked,
       makeromPath: byId('makerom-path').value.trim() || null,
+      redirectPatchDirectory: byId('cia-patch-directory').value.trim() || null,
     });
-    setCiaResult(`Listo: ${data.outputFile} (${data.bytes.toLocaleString()} bytes).`, 'success');
+    setCiaResult(`Listo: ${data.outputFile} (${data.bytes.toLocaleString()} bytes). ${data.note}`, 'success');
   } catch (error) {
     setCiaResult(error.message, 'error');
   } finally {
@@ -1204,17 +1536,24 @@ byId('create-patch').addEventListener('click', async () => {
   button.disabled = true;
   setPatchResult('Creando el parche de redirección…');
   try {
-    const names = byId('patch-garcs').value
+    const customNames = byId('patch-garcs').value
       .split(/[\n,]/)
       .map((value) => value.trim())
       .filter(Boolean);
+    const names = [...new Set([
+      ...[...document.querySelectorAll('.patch-garc-checkbox:checked')].map((checkbox) => checkbox.value),
+      ...customNames,
+    ])];
     const data = await post('/api/workspace/redirect-patch', {
       workspacePath: workspace.value,
       garcNames: names,
       outputDirectory: byId('patch-output').value.trim() || null,
       includeAllLanguageVariants: byId('patch-all-languages').checked,
     });
-    setPatchResult(`Listo: ${data.redirectedPaths} ruta(s) redirigida(s) en ${data.outputDirectory}.`, 'success');
+    byId('cia-patch-directory').value = data.outputDirectory;
+    byId('cia-patch-directory').dispatchEvent(new Event('input', { bubbles: true }));
+    byId('cia-patch-directory').dispatchEvent(new Event('change', { bubbles: true }));
+    setPatchResult(`Listo: ${data.redirectedPaths} ruta(s) redirigida(s) en ${data.outputDirectory}. ${data.note}`, 'success');
   } catch (error) {
     setPatchResult(error.message, 'error');
   } finally {
@@ -1308,8 +1647,9 @@ byId('shuffle-garc').addEventListener('click', async () => {
       inputFile: byId('garc-shuffle-input').value,
       outputFile: byId('garc-shuffle-output').value.trim() || null,
       seed: rawSeed === '' ? null : Number(rawSeed),
+      workspacePath: inspected ? workspace.value.trim() : null,
     });
-    setGarcShuffleResult(`Listo: ${data.changedEntries}/${data.shuffledEntries} referencias cambiadas. Salida: ${data.outputFile} (semilla ${data.seed}).`, 'success');
+    setGarcShuffleResult(`Listo: ${data.changedEntries}/${data.shuffledEntries} referencias cambiadas. Salida: ${data.outputFile} (semilla ${data.seed}). ${data.note}`, 'success');
   } catch (error) {
     setGarcShuffleResult(error.message, 'error');
   } finally {
@@ -1552,6 +1892,7 @@ byId('browse-title-screen-replacement').addEventListener('click', async () => {
   try {
     const data = await post('/api/workspace/pick-image');
     byId('title-screen-replacement').value = data.path;
+    updateBuildState();
   } catch (error) {
     setTitleScreenReplaceResult(error.message, 'error');
   } finally {
@@ -1565,6 +1906,7 @@ byId('browse-image-input').addEventListener('click', async () => {
   try {
     const data = await post('/api/workspace/pick-image');
     byId('image-input').value = data.path;
+    resetImagePreview();
     updateBuildState();
   } catch (error) {
     setImageResult(error.message, 'error');
@@ -1573,7 +1915,10 @@ byId('browse-image-input').addEventListener('click', async () => {
   }
 });
 
-byId('image-input').addEventListener('input', updateBuildState);
+byId('image-input').addEventListener('input', () => {
+  resetImagePreview();
+  updateBuildState();
+});
 
 byId('browse-lz11-input').addEventListener('click', async () => {
   const button = byId('browse-lz11-input');
@@ -1608,7 +1953,12 @@ byId('browse-blz-input').addEventListener('click', async () => {
 byId('blz-input').addEventListener('input', updateBuildState);
 
 byId('title-screen-archive').addEventListener('change', updateTitleScreenAssets);
-byId('title-screen-asset').addEventListener('change', loadTitleScreenPreview);
+byId('title-screen-asset').addEventListener('change', () => {
+  loadTitleScreenPreview();
+  updateBuildState();
+});
+byId('title-screen-replacement').addEventListener('input', updateBuildState);
+byId('add-title-screen-batch').addEventListener('click', addTitleScreenQueueEntry);
 byId('title-screen-backup').addEventListener('change', updateBuildState);
 
 byId('browse-smdh-output').addEventListener('click', async () => {
@@ -1679,13 +2029,23 @@ byId('inspect-smdh').addEventListener('click', async () => {
 byId('export-smdh').addEventListener('click', async () => {
   const button = byId('export-smdh');
   button.disabled = true;
+  captureSmdhForm();
   setSmdhResult('Exportando icon.bin y los iconos PNG…');
   try {
     const data = await post('/api/workspace/smdh/export', {
       workspacePath: workspace.value,
       outputDirectory: byId('smdh-output').value.trim() || null,
+      appInfo: (smdhData.appInfo || []).map((info, slot) => ({
+        slot,
+        shortDescription: info.shortDescription || '',
+        longDescription: info.longDescription || '',
+        publisher: info.publisher || '',
+      })),
+      settings: captureSmdhSettings(),
+      smallIconFile: byId('smdh-small-input').value.trim() || null,
+      largeIconFile: byId('smdh-large-input').value.trim() || null,
     });
-    setSmdhResult(`Listo: icon.bin, small-icon.png y large-icon.png en ${data.outputDirectory}.`, 'success');
+    setSmdhResult(`Listo: icon.bin, small-icon.png y large-icon.png con los cambios actuales en ${data.outputDirectory}. El workspace no se modificó.`, 'success');
   } catch (error) {
     setSmdhResult(error.message, 'error');
   } finally {
@@ -1731,6 +2091,7 @@ byId('import-smdh').addEventListener('click', async () => {
       workspacePath: workspace.value,
       sourceFile: byId('smdh-import-input').value.trim(),
     });
+    if (inspectedData) inspectedData.smdhReady = true;
     setSmdhImportResult(`Listo: icon.bin importado. Backup: ${data.backupFile}.`, 'success');
     const inspectedAgain = await post('/api/workspace/smdh/inspect', { workspacePath: workspace.value });
     renderSmdh(inspectedAgain);
@@ -1796,6 +2157,7 @@ byId('restore-smdh').addEventListener('click', async () => {
 byId('inspect-title-screen').addEventListener('click', async () => {
   const button = byId('inspect-title-screen');
   button.disabled = true;
+  resetTitleScreenQueue();
   setTitleScreenResult('Leyendo los DARCs de pantalla de título…');
   try {
     const data = await post('/api/editors/titlescreen/catalog', { workspacePath: workspace.value });
@@ -1895,6 +2257,58 @@ byId('apply-title-screen').addEventListener('click', async () => {
   }
 });
 
+byId('replace-title-screen-batch-garc').addEventListener('click', async () => {
+  const button = byId('replace-title-screen-batch-garc');
+  button.disabled = true;
+  setTitleScreenBatchGarcResult('Validando la cola y generando una copia completa del GARC…');
+  try {
+    const data = await post('/api/editors/titlescreen/replace-garc-batch', {
+      workspacePath: workspace.value,
+      replacements: titleScreenQueue.map((entry) => ({
+        fileNumber: entry.fileNumber,
+        assetEntryIndex: entry.assetEntryIndex,
+        replacementFile: entry.replacementFile,
+      })),
+      outputFile: byId('title-screen-batch-garc-output').value.trim() || null,
+    });
+    const compression = data.compressedArchives ? ' con LZSS' : '';
+    setTitleScreenBatchGarcResult(`Listo: ${data.replacements} reemplazo(s) en ${data.archives} archivo(s); GARC${compression} generado en ${data.outputFile}.`, 'success');
+  } catch (error) {
+    setTitleScreenBatchGarcResult(error.message, 'error');
+  } finally {
+    updateBuildState();
+  }
+});
+
+byId('apply-title-screen-batch').addEventListener('click', async () => {
+  const button = byId('apply-title-screen-batch');
+  button.disabled = true;
+  setTitleScreenBatchApplyResult('Validando la cola, guardando una copia y actualizando el workspace…');
+  try {
+    const data = await post('/api/editors/titlescreen/apply-batch', {
+      workspacePath: workspace.value,
+      replacements: titleScreenQueue.map((entry) => ({
+        fileNumber: entry.fileNumber,
+        assetEntryIndex: entry.assetEntryIndex,
+        replacementFile: entry.replacementFile,
+      })),
+    });
+    setTitleScreenBatchApplyResult(`Listo: ${data.replacements} reemplazo(s) aplicados. Copia de seguridad en ${data.backupFile}.`, 'success');
+    resetTitleScreenQueue();
+    try {
+      const refreshed = await post('/api/editors/titlescreen/catalog', { workspacePath: workspace.value });
+      renderTitleScreenCatalog(refreshed);
+      setTitleScreenResult('Inventario y vista previa actualizados después de aplicar la cola.', 'success');
+    } catch (error) {
+      setTitleScreenResult(`Workspace actualizado, pero no pude recargar el inventario: ${error.message}`, 'warning');
+    }
+  } catch (error) {
+    setTitleScreenBatchApplyResult(error.message, 'error');
+  } finally {
+    updateBuildState();
+  }
+});
+
 byId('load-title-screen-backups').addEventListener('click', async () => {
   const button = byId('load-title-screen-backups');
   button.disabled = true;
@@ -1944,6 +2358,27 @@ byId('convert-image').addEventListener('click', async () => {
     });
     setImageResult(`Listo: ${data.width}×${data.height}, ${data.inputFormat} → ${data.outputFormat}. Salida: ${data.outputFile}.`, 'success');
   } catch (error) {
+    setImageResult(error.message, 'error');
+  } finally {
+    updateBuildState();
+  }
+});
+
+byId('preview-image').addEventListener('click', async () => {
+  const button = byId('preview-image');
+  button.disabled = true;
+  resetImagePreview();
+  setImageResult('Generando la vista previa…');
+  try {
+    const data = await post('/api/workspace/preview-image', {
+      inputFile: byId('image-input').value.trim(),
+    });
+    byId('image-preview-info').textContent = `${data.width} × ${data.height} · ${data.inputFormat} ${data.pixelFormat}`;
+    byId('image-preview-image').src = `data:image/png;base64,${data.pngBase64}`;
+    byId('image-preview').hidden = false;
+    setImageResult(data.note, 'success');
+  } catch (error) {
+    resetImagePreview();
     setImageResult(error.message, 'error');
   } finally {
     updateBuildState();

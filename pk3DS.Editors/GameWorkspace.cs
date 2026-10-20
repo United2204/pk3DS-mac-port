@@ -54,7 +54,36 @@ public sealed record GameWorkspace(
         var archiveRoot = Path.Combine(romfs, "a");
         var fileCount = Directory.EnumerateFiles(archiveRoot, "*", SearchOption.AllDirectories)
             .Count(path => Path.GetFileName(path).Length == 1);
-        return new GameConfig(fileCount).Version;
+        var exactVersion = new GameConfig(fileCount).Version;
+        if (exactVersion != GameVersion.Invalid)
+            return exactVersion;
+
+        // A retail RomFS can omit an unused, zero-content archive entry. Keep the exact-count
+        // mapping above authoritative, but accept one missing slot when the generation-specific
+        // randomizer/editor GARCs still identify that game unambiguously.
+        return fileCount switch
+        {
+            270 when HasGarcFiles(romfs, 12, 38, 39, 40, 212, 213, 214, 215, 218) => GameVersion.XY,
+            298 when HasGarcFiles(romfs, 13, 36, 37, 38, 189, 190, 191, 192, 195) => GameVersion.ORAS,
+            310 when HasAnyGarcFile(romfs, 82, 83)
+                && HasGarcFiles(romfs, 11, 12, 13, 14, 17, 104, 105, 106) => GameVersion.SM,
+            332 when HasAnyGarcFile(romfs, 82, 83)
+                && HasGarcFiles(romfs, 11, 12, 13, 14, 17, 105, 106, 107) => GameVersion.USUM,
+            _ => GameVersion.Invalid,
+        };
+    }
+
+    private static bool HasGarcFiles(string romFs, params int[] fileNumbers) =>
+        fileNumbers.All(fileNumber => HasGarcFile(romFs, fileNumber));
+
+    private static bool HasAnyGarcFile(string romFs, params int[] fileNumbers) =>
+        fileNumbers.Any(fileNumber => HasGarcFile(romFs, fileNumber));
+
+    private static bool HasGarcFile(string romFs, int fileNumber)
+    {
+        var path = Path.Combine(romFs, "a", (fileNumber / 100 % 10).ToString(),
+            (fileNumber / 10 % 10).ToString(), (fileNumber % 10).ToString());
+        return File.Exists(path) && new FileInfo(path).Length > 0;
     }
 
     private static string? FindExeFs(string root)
@@ -63,17 +92,42 @@ public sealed record GameWorkspace(
             .Where(Directory.Exists);
         foreach (var candidate in candidates)
         {
-            if (Directory.EnumerateFiles(candidate).Any(path => Path.GetFileName(path).Contains("code", StringComparison.OrdinalIgnoreCase)))
+            if (FindCodeFile(candidate) is not null)
                 return candidate;
         }
         return null;
     }
 
-    private static string? FindExheader(string root) => Directory.EnumerateFiles(root)
-        .FirstOrDefault(path =>
+    internal static string? FindCodeFile(string exeFsPath)
+    {
+        var codeFiles = Directory.EnumerateFiles(exeFsPath, "*", SearchOption.TopDirectoryOnly)
+            .Where(path => string.Equals(Path.GetFileNameWithoutExtension(path), "code", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return codeFiles.Length switch
         {
-            var name = Path.GetFileName(path);
-            return (name.StartsWith("exh", StringComparison.OrdinalIgnoreCase) || name.StartsWith("decryptedexh", StringComparison.OrdinalIgnoreCase))
-                && new FileInfo(path).Length == 0x800;
-        });
+            0 => null,
+            1 => codeFiles[0],
+            _ => throw new WorkspaceException("El ExeFS contiene más de un archivo code.bin; quitá la ambigüedad antes de continuar."),
+        };
+    }
+
+    private static string? FindExheader(string root)
+    {
+        var candidates = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
+            .Where(path =>
+            {
+                var name = Path.GetFileName(path);
+                return (name.StartsWith("exh", StringComparison.OrdinalIgnoreCase)
+                    || name.StartsWith("decryptedexh", StringComparison.OrdinalIgnoreCase))
+                    && new FileInfo(path).Length == 0x800;
+            })
+            .ToArray();
+
+        return candidates.Length switch
+        {
+            0 => null,
+            1 => candidates[0],
+            _ => throw new WorkspaceException("El workspace contiene más de un exheader.bin válido; dejá un único archivo antes de continuar."),
+        };
+    }
 }

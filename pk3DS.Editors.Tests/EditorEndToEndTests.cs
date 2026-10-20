@@ -49,6 +49,18 @@ public class EditorEndToEndTests : IDisposable
     }
 
     [Fact]
+    public void AWorkspaceWithOneUnusedArchiveMissingStillDetectsItsGame()
+    {
+        var missingUnusedArchive = Path.Combine(_workspace.RomFs, "a", "0", "0", "7");
+        File.Delete(missingUnusedArchive);
+
+        var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+        Assert.Equal("XY", response.GameVersion);
+        Assert.True(response.IsComplete);
+    }
+
+    [Fact]
     public void MissingSmdhDisablesTheIconModule()
     {
         var iconPath = Path.Combine(_workspace.ExeFs, "icon.bin");

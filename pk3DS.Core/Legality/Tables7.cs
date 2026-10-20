@@ -136,6 +136,11 @@ public static partial class Legal
 
     internal static readonly ushort[] HeldItems_SM = new ushort[1].Concat(Pouch_Items_SM).Concat(Pouch_Berries_SM).Concat(Pouch_Medicine_SM).Concat(Pouch_ZCrystalHeld_SM).ToArray();
     internal static readonly ushort[] HeldItems_USUM = new ushort[1].Concat(HeldItems_SM).Concat(Pouch_ZCrystalHeld_USUM).ToArray();
+    public static readonly ushort[] TrainerRandomizerItems_7 = new ushort[1]
+        .Concat(Pouch_Items_SM)
+        .Concat(Pouch_Medicine_SM)
+        .Concat(new ushort[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 492, 493, 494, 495, 496, 497, 498, 499, 576 })
+        .ToArray();
 
     internal static readonly int[] AlolanOriginForms =
     [

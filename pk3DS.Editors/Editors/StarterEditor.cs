@@ -43,13 +43,20 @@ public static class StarterEditor
                 var fieldPath = Path.Combine(scratchRomFs, FieldFile);
                 var poke = File.ReadAllBytes(pokePath);
                 var field = File.ReadAllBytes(fieldPath);
-                var pokeOffset = FindPokeOffset(poke, config);
-                var fieldLayout = FindFieldLayout(field, config);
-                WritePoke(poke, pokeOffset, request.Groups);
-                WriteField(field, fieldLayout, request.Groups);
+                ApplyGroups(poke, field, config, request.Groups);
                 File.WriteAllBytes(pokePath, poke);
                 File.WriteAllBytes(fieldPath, field);
             });
+    }
+
+    internal static void ApplyGroups(byte[] poke, byte[] field, GameConfig config, StarterGroup[] groups)
+    {
+        EnsureSupported(config);
+        Validate(groups, Catalogs.SpeciesCount(config), config);
+        var pokeOffset = FindPokeOffset(poke, config);
+        var fieldLayout = FindFieldLayout(field, config);
+        WritePoke(poke, pokeOffset, groups);
+        WriteField(field, fieldLayout, groups);
     }
 
     internal static StarterGroup[] ReadGroups(byte[] data, GameConfig config)

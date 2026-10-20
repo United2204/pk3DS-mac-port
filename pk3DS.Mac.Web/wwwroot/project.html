@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Herramientas de proyecto · pk3DS Mac</title>
-    <link rel="stylesheet" href="app.css">
+    <link rel="stylesheet" href="app.css?v=7">
   </head>
   <body>
     <header class="site-header">
@@ -23,12 +23,13 @@
           <span class="section-number">1</span>
           <div><p class="kicker">EXTRACCIÓN</p><h2>Extraer un CXI, 3DS o CIA</h2></div>
         </div>
-        <p class="section-copy">Elegí un CXI, 3DS o CIA desencriptado y una carpeta nueva o vacía. Se generará un workspace con <code>RomFS</code>, <code>ExeFS</code> y <code>exheader.bin</code>.</p>
+        <p class="section-copy">Elegí un CXI, 3DS o CIA desencriptado y una carpeta nueva o vacía. Se generará un workspace con <code>RomFS</code>, <code>ExeFS</code> y <code>exheader.bin</code>; podés seguir el avance mientras se procesa.</p>
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="input-file" type="text" placeholder="Archivo .cxi, .3ds o .cia" spellcheck="false"><button id="browse-file" class="secondary" type="button">Examinar…</button></div>
         <label class="field project-output">Carpeta de extracción
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="extract-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-extract-output" class="secondary" type="button">Elegir…</button></div>
         </label>
         <div class="ready-row project-action"><div><b>El origen se conserva intacto.</b><small>La carpeta de destino debe ser nueva o estar vacía.</small></div><button id="extract-action" class="primary" type="button">Extraer →</button></div>
+        <progress id="extract-progress" class="extract-progress" aria-label="Progreso de extracción" hidden></progress>
         <p id="extract-result" class="status neutral" role="status" aria-live="polite"></p>
       </section>
 
@@ -45,6 +46,26 @@
           <button id="inspect-action" type="button">Cargar</button>
         </div>
         <p id="status" class="status neutral" role="status">El origen se abrirá solo para lectura.</p>
+      </section>
+
+      <section id="workspace-backups" class="panel">
+        <div class="section-heading">
+          <div><p class="kicker">COPIAS DEL WORKSPACE</p><h2>Respaldar o restaurar archivos originales</h2></div>
+        </div>
+        <p class="section-copy">Guarda una copia inicial de los GARCs configurados para el idioma de datos seleccionado, ExeFS y archivos CRO/CRS/CRR del juego. Las copias existentes no se sobrescriben. Antes de restaurar archivos, se guarda el estado actual en otra carpeta de seguridad.</p>
+        <div class="ready-row project-action">
+          <div><b id="workspace-backup-summary">Cargá un workspace para ver sus copias.</b><small>El respaldo vive dentro de <code>.pk3ds-backups</code> y acompaña al workspace si lo movés.</small></div>
+          <div class="backup-actions">
+            <button id="create-workspace-backup" class="primary" type="button" disabled>Guardar originales</button>
+            <button id="load-workspace-backups" class="secondary-button" type="button" disabled>Actualizar lista</button>
+          </div>
+        </div>
+        <div class="workspace-backups-selection">
+          <label class="check-card"><input id="workspace-backup-select-all" type="checkbox" disabled><span>Seleccionar todos</span></label>
+          <div id="workspace-backups-list" class="workspace-backups-list" aria-live="polite"></div>
+        </div>
+        <div class="ready-row project-action"><div><b>Restauración selectiva.</b><small>Los archivos eliminados se volverán a crear desde la copia inicial.</small></div><button id="restore-workspace-backup" class="primary" type="button" disabled>Restaurar seleccionados →</button></div>
+        <p id="workspace-backup-result" class="status neutral" role="status" aria-live="polite"></p>
       </section>
 
       <section id="build" class="panel">
@@ -67,6 +88,68 @@
           <button id="build-action" class="primary" type="button" disabled>Construir →</button>
         </div>
         <p id="result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="exefs-tools" class="panel">
+        <div class="section-heading">
+          <div><p class="kicker">EXEFS INDEPENDIENTE</p><h2>Empaquetar o desempaquetar ExeFS</h2></div>
+        </div>
+        <p class="section-copy">Trabaja con <code>exefs.bin</code> sin cargar un workspace completo. Valida slots, nombres, hashes, rangos y alineación; las entradas suelen guardarse como archivos <code>.bin</code>. No modifica el origen.</p>
+
+        <h3>Desempaquetar exefs.bin</h3>
+        <div class="path-input">
+          <span aria-hidden="true">⌁</span>
+          <input id="exefs-unpack-input" type="text" placeholder="Archivo exefs.bin" spellcheck="false">
+          <button id="browse-exefs-unpack-input" class="secondary" type="button">Examinar…</button>
+        </div>
+        <label class="field project-output">Carpeta de salida
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="exefs-unpack-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-exefs-unpack-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+        <div class="ready-row project-action"><div><b>Se valida el contenedor antes de escribir.</b><small>La carpeta debe ser nueva o estar vacía.</small></div><button id="unpack-exefs-action" class="primary" type="button">Desempaquetar →</button></div>
+        <p id="exefs-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+
+        <h3>Empaquetar una carpeta ExeFS</h3>
+        <div class="path-input">
+          <span aria-hidden="true">⌁</span>
+          <input id="exefs-pack-input" type="text" placeholder="Carpeta con hasta 10 archivos" spellcheck="false">
+          <button id="browse-exefs-pack-input" class="secondary" type="button">Elegir…</button>
+        </div>
+        <label class="field project-output">Archivo de salida
+          <input id="exefs-pack-output" type="text" placeholder="Opcional: junto a la carpeta">
+        </label>
+        <div class="ready-row project-action"><div><b>Los nombres base deben caber en 8 bytes ASCII.</b><small>No se sobrescriben archivos existentes.</small></div><button id="pack-exefs-action" class="primary" type="button">Empaquetar →</button></div>
+        <p id="exefs-pack-result" class="status neutral" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="romfs-tools" class="panel">
+        <div class="section-heading">
+          <div><p class="kicker">ROMFS INDEPENDIENTE</p><h2>Empaquetar o desempaquetar RomFS</h2></div>
+        </div>
+        <p class="section-copy">Trabaja con un archivo <code>romfs.bin</code> o su carpeta raíz sin cargar un workspace completo. Se revisan la cabecera, las tablas y las rutas antes de publicar la salida; el origen permanece intacto.</p>
+
+        <h3>Desempaquetar romfs.bin</h3>
+        <div class="path-input">
+          <span aria-hidden="true">⌁</span>
+          <input id="romfs-unpack-input" type="text" placeholder="Archivo romfs.bin" spellcheck="false">
+          <button id="browse-romfs-unpack-input" class="secondary" type="button">Examinar…</button>
+        </div>
+        <label class="field project-output">Carpeta de salida
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="romfs-unpack-output" type="text" placeholder="Opcional: junto al archivo"><button id="browse-romfs-unpack-output" class="secondary" type="button">Elegir…</button></div>
+        </label>
+        <div class="ready-row project-action"><div><b>La salida se publica al terminar la lectura.</b><small>La carpeta debe ser nueva o estar vacía.</small></div><button id="unpack-romfs-action" class="primary" type="button">Desempaquetar →</button></div>
+        <p id="romfs-unpack-result" class="status neutral" role="status" aria-live="polite"></p>
+
+        <h3>Empaquetar una carpeta RomFS</h3>
+        <div class="path-input">
+          <span aria-hidden="true">⌁</span>
+          <input id="romfs-pack-input" type="text" placeholder="Carpeta raíz del RomFS" spellcheck="false">
+          <button id="browse-romfs-pack-input" class="secondary" type="button">Elegir…</button>
+        </div>
+        <label class="field project-output">Archivo de salida
+          <input id="romfs-pack-output" type="text" placeholder="Opcional: junto a la carpeta">
+        </label>
+        <div class="ready-row project-action"><div><b>No se siguen enlaces simbólicos.</b><small>No se sobrescriben archivos existentes.</small></div><button id="pack-romfs-action" class="primary" type="button">Empaquetar →</button></div>
+        <p id="romfs-pack-result" class="status neutral" role="status" aria-live="polite"></p>
       </section>
 
       <section id="rebuild-rom" class="panel">
@@ -101,15 +184,18 @@
           <span class="section-number">6</span>
           <div><p class="kicker">CIA</p><h2>Crear un archivo .cia</h2></div>
         </div>
-        <p class="section-copy">Reconstruye primero una ROM .3ds en staging y luego la convierte a un CIA desencriptado con <code>makerom</code>, compatible con Azahar. La conversión omite las firmas retail del contenido modificado; la versión macOS arm64 se incluye en la aplicación.</p>
+        <p class="section-copy">Reconstruye primero una ROM .3ds en staging y luego la convierte a un CIA desencriptado con <code>makerom</code>, compatible con Azahar. Si eliges un parche de redirección generado aquí, aplica <code>.code.bin</code> y <code>a0/</code> en un workspace temporal; el original queda intacto.</p>
         <label class="field project-output">Ejecutable makerom (opcional)
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="makerom-path" type="text" placeholder="Se usará la versión incluida"><button id="browse-makerom" class="secondary" type="button">Usar otro…</button></div>
         </label>
         <label class="field project-output">Archivo de salida
           <input id="cia-output" type="text" placeholder="Opcional: por defecto, newROM.cia (se agrega .cia si falta)">
         </label>
+        <label class="field project-output">Parche de redirección (opcional)
+          <div class="path-input"><span aria-hidden="true">⌁</span><input id="cia-patch-directory" type="text" placeholder="Se completa al crear el parche o elegí una carpeta existente"><button id="browse-cia-patch" class="secondary" type="button">Elegir…</button></div>
+        </label>
         <label class="check-card project-check"><input id="cia-trimmed" type="checkbox" checked><span>ROM intermedia recortada</span></label>
-        <div class="ready-row project-action"><div><b>Se requiere un workspace completo.</b><small>makerom arm64 está incluido; CIA desencriptado y sin firmas retail del contenido reconstruido.</small></div><button id="rebuild-cia-action" class="primary" type="button" disabled>Crear CIA →</button></div>
+        <div class="ready-row project-action"><div><b>Se requiere un workspace completo.</b><small>makerom arm64 está incluido; el resultado no tiene firmas retail válidas y no se garantiza su aceptación en una consola sin parchear.</small></div><button id="rebuild-cia-action" class="primary" type="button" disabled>Crear CIA →</button></div>
         <p id="cia-result" class="status neutral" role="status" aria-live="polite"></p>
       </section>
 
@@ -118,8 +204,12 @@
           <span class="section-number">7</span>
           <div><p class="kicker">PARCHE</p><h2>Crear parche de redirección</h2></div>
         </div>
-        <p class="section-copy">Porta el parche “Redirect [CIA]” de pk3DS: cambia las referencias de los GARCs seleccionados en <code>code.bin</code> y copia sus archivos al árbol <code>a0/</code>. Esto genera los contenidos del parche; todavía no firma ni construye un archivo CIA.</p>
-        <label class="field project-output">GARCs o rutas de RomFS
+        <p class="section-copy">Porta el parche “Redirect [CIA]” de pk3DS: cambia las referencias de los GARCs seleccionados en <code>code.bin</code> y copia sus archivos al árbol <code>a0/</code>. Al terminar, la carpeta se selecciona automáticamente en el constructor CIA para integrarla.</p>
+        <div class="workspace-backups-selection">
+          <div class="ready-row"><b id="patch-garc-summary">Cargá un workspace para ver los GARCs del juego.</b><div class="backup-actions"><button id="patch-garc-select-all" class="secondary" type="button" disabled>Seleccionar todos</button><button id="patch-garc-select-none" class="secondary" type="button" disabled>Limpiar</button></div></div>
+          <div id="patch-garc-options" class="workspace-backups-list" aria-label="GARCs disponibles para el juego"></div>
+        </div>
+        <label class="field project-output">GARCs adicionales o rutas de RomFS
           <textarea id="patch-garcs" rows="4" placeholder="Un nombre por línea, por ejemplo:&#10;personal&#10;levelup&#10;gametext"></textarea>
         </label>
         <label class="check-card project-check"><input id="patch-all-languages" type="checkbox"><span>Incluir las ocho variantes de idioma para gametext/storytext</span></label>
@@ -321,7 +411,7 @@
           <span class="section-number">10</span>
           <div><p class="kicker">IMÁGENES</p><h2>Convertir PNG, BCLIM y BFLIM</h2></div>
         </div>
-        <p class="section-copy">Convertí PNG, BCLIM y BFLIM en cualquiera de las tres direcciones, usando codecs portables. La entrada queda intacta y la salida no sobrescribe archivos existentes.</p>
+        <p class="section-copy">Previsualizá BCLIM y BFLIM, y convertí PNG, BCLIM y BFLIM en cualquiera de las tres direcciones usando codecs portables. La vista previa se genera en memoria; la conversión guarda una copia y deja intacta la entrada.</p>
         <div class="tool-block">
           <h3>Archivo de entrada</h3>
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="image-input" type="text" placeholder="Archivo .png, .bclim o .bflim" spellcheck="false"><button id="browse-image-input" class="secondary" type="button">Examinar…</button></div>
@@ -331,7 +421,8 @@
           <label class="field project-output">Formato XLIM de salida
             <select id="image-format"><option value="RGBA8" selected>RGBA8 (sin compresión)</option><option value="ETC1">ETC1 (color comprimido)</option><option value="ETC1A4">ETC1A4 (color + alpha comprimido)</option></select>
           </label>
-          <div class="ready-row project-action"><div><b>Genera una copia convertida.</b><small>PNG → BCLIM/BFLIM usa el formato elegido; BCLIM/BFLIM → PNG conserva las dimensiones. La entrada nunca se modifica.</small></div><button id="convert-image" class="primary" type="button">Convertir →</button></div>
+          <div class="ready-row project-action"><div><b>Vista previa y conversión independiente.</b><small>La vista previa acepta BCLIM/BFLIM de hasta 4 megapíxeles. PNG → BCLIM/BFLIM usa el formato elegido; BCLIM/BFLIM → PNG conserva las dimensiones.</small></div><div class="image-actions"><button id="preview-image" class="secondary" type="button" disabled>Vista previa</button><button id="convert-image" class="primary" type="button">Convertir →</button></div></div>
+          <div id="image-preview" class="image-preview" hidden><div><b id="image-preview-info"></b><small>Vista previa temporal en PNG. No se escribió ningún archivo.</small></div><img id="image-preview-image" alt="Vista previa de imagen BCLIM/BFLIM"></div>
           <p id="image-result" class="status neutral" role="status" aria-live="polite"></p>
         </div>
       </section>
@@ -341,8 +432,8 @@
           <span class="section-number">11</span>
           <div><p class="kicker">ICONO SMDH</p><h2>Inspeccionar icon.bin</h2></div>
         </div>
-        <p class="section-copy">Lee el SMDH de <code>ExeFS/icon.bin</code> para mostrar el nombre, la descripción y el editor por idioma. También podés exportar el archivo original y sus iconos PNG; el workspace no se modifica.</p>
-        <div class="ready-row project-action"><div><b id="smdh-summary">Cargá un workspace para analizarlo.</b><small>Disponible cuando ExeFS contiene un <code>icon.bin</code> SMDH válido.</small></div><button id="inspect-smdh" class="primary" type="button" disabled>Analizar →</button></div>
+        <p class="section-copy">Lee el SMDH de <code>ExeFS/icon.bin</code> para mostrar el nombre, la descripción y el editor por idioma. Podés exportar una copia con los cambios actuales o importar un SMDH aunque ExeFS todavía no tenga <code>icon.bin</code>.</p>
+        <div class="ready-row project-action"><div><b id="smdh-summary">Cargá un workspace para analizarlo.</b><small>Analizá el icon.bin existente o importá uno si todavía no está en ExeFS.</small></div><button id="inspect-smdh" class="primary" type="button" disabled>Analizar →</button></div>
         <div id="smdh-preview" class="smdh-preview" hidden>
           <div class="smdh-icons">
             <figure><img id="smdh-small-icon" alt="Icono SMDH pequeño" hidden><figcaption>24 × 24</figcaption></figure>
@@ -375,13 +466,6 @@
           </div>
           <div class="ready-row project-action"><div><b>Actualiza el workspace con backup.</b><small>Se conserva una copia de <code>icon.bin</code> antes de escribir.</small></div><button id="update-smdh" class="primary" type="button" disabled>Aplicar →</button></div>
           <p id="smdh-update-result" class="status neutral" role="status" aria-live="polite"></p>
-          <div class="tool-block">
-            <h3>Importar un SMDH completo</h3>
-            <p class="section-copy">Reemplaza todo el <code>icon.bin</code> por otro SMDH válido. El archivo seleccionado no se modifica y el workspace recibe un backup.</p>
-            <div class="path-input project-output"><span aria-hidden="true">⌁</span><input id="smdh-import-input" type="text" placeholder="Archivo icon.bin SMDH" spellcheck="false"><button id="browse-smdh-import" class="secondary" type="button">Examinar…</button></div>
-            <div class="ready-row project-action"><div><b>Importa el archivo completo.</b><small>Conserva el estado anterior en <code>.pk3ds-backups</code>.</small></div><button id="import-smdh" class="primary" type="button" disabled>Importar →</button></div>
-            <p id="smdh-import-result" class="status neutral" role="status" aria-live="polite"></p>
-          </div>
           <div class="tool-block">
             <h3>Restaurar un backup de icon.bin</h3>
             <p class="section-copy">Las ediciones e importaciones conservan el estado anterior. Buscá una copia y restaurala; antes de reemplazar el icono actual también se crea un backup de seguridad.</p>
@@ -439,10 +523,17 @@
             <p class="muted">El botón Aplicar de arriba guarda todos los valores mostrados junto con los textos e iconos.</p>
           </div>
         </div>
+        <div class="tool-block">
+          <h3>Importar un SMDH completo</h3>
+          <p class="section-copy">Reemplaza todo el <code>icon.bin</code> por otro SMDH válido. Si ExeFS todavía no tiene icon.bin, la importación lo crea; si ya existe, conserva una copia de seguridad.</p>
+          <div class="path-input project-output"><span aria-hidden="true">⌁</span><input id="smdh-import-input" type="text" placeholder="Archivo icon.bin SMDH" spellcheck="false"><button id="browse-smdh-import" class="secondary" type="button">Examinar…</button></div>
+          <div class="ready-row project-action"><div><b>Importa el archivo completo.</b><small>Conserva el estado anterior en <code>.pk3ds-backups</code>.</small></div><button id="import-smdh" class="primary" type="button" disabled>Importar →</button></div>
+          <p id="smdh-import-result" class="status neutral" role="status" aria-live="polite"></p>
+        </div>
         <label class="field project-output">Carpeta de exportación
           <div class="path-input"><span aria-hidden="true">⌁</span><input id="smdh-output" type="text" placeholder="Opcional: smdh-export"><button id="browse-smdh-output" class="secondary" type="button">Elegir…</button></div>
         </label>
-        <div class="ready-row project-action"><div><b>Exporta icon.bin y ambos tamaños.</b><small>Incluye el SMDH original, small-icon.png y large-icon.png.</small></div><button id="export-smdh" class="primary" type="button" disabled>Exportar →</button></div>
+        <div class="ready-row project-action"><div><b>Exporta el SMDH y ambos tamaños con los cambios actuales, sin modificar el workspace.</b><small>Incluye icon.bin, small-icon.png y large-icon.png.</small></div><button id="export-smdh" class="primary" type="button" disabled>Exportar →</button></div>
         <p id="smdh-result" class="status neutral" role="status" aria-live="polite"></p>
       </section>
 
@@ -516,6 +607,16 @@
             <p id="title-screen-preview-result" class="status neutral" role="status" aria-live="polite"></p>
           </div>
           <div class="path-input project-output"><span aria-hidden="true">⌁</span><input id="title-screen-replacement" type="text" placeholder="Imagen .png o .bclim" spellcheck="false"><button id="browse-title-screen-replacement" class="secondary" type="button">Examinar…</button></div>
+          <div class="ready-row project-action"><div><b>Cola de reemplazos</b><small>Agrega el archivo y el recurso seleccionados a una lista para procesarlos juntos.</small></div><button id="add-title-screen-batch" class="secondary-button" type="button" disabled>Agregar a la cola</button></div>
+          <div id="title-screen-batch-queue" class="title-screen-list" aria-label="Reemplazos en cola"><div class="title-screen-row"><div><b>La cola está vacía.</b><small>Elegí un recurso y un archivo PNG o BCLIM para agregarlo.</small></div><span>0</span></div></div>
+          <p id="title-screen-batch-queue-result" class="status neutral" role="status" aria-live="polite"></p>
+          <label class="field project-output">GARC completo para la cola
+            <input id="title-screen-batch-garc-output" type="text" placeholder="Opcional: titlescreen-batch-replaced.garc">
+          </label>
+          <div class="ready-row project-action"><div><b>Genera un GARC con toda la cola.</b><small>Valida todos los reemplazos antes de escribir una sola salida y conserva la compresión LZSS de OR/AS.</small></div><button id="replace-title-screen-batch-garc" class="primary" type="button" disabled>Generar GARC →</button></div>
+          <p id="title-screen-batch-garc-result" class="status neutral" role="status" aria-live="polite"></p>
+          <div class="ready-row project-action"><div><b>Aplica toda la cola al workspace.</b><small>Guarda una sola copia en <code>.pk3ds-backups</code> y actualiza el GARC una sola vez.</small></div><button id="apply-title-screen-batch" class="primary" type="button" disabled>Aplicar cola →</button></div>
+          <p id="title-screen-batch-apply-result" class="status neutral" role="status" aria-live="polite"></p>
           <label class="field project-output">DARC de salida
             <input id="title-screen-replace-output" type="text" placeholder="Opcional: se genera en el workspace">
           </label>
@@ -603,6 +704,8 @@
       </section>
     </main>
     <footer>pk3DS Mac trabaja de forma local. Ningún archivo se sube a internet.</footer>
-    <script src="project.js?v=4"></script>
+    <script src="project.js?v=11"></script>
+    <script src="exefs-tools.js?v=1"></script>
+    <script src="romfs-tools.js?v=1"></script>
   </body>
 </html>

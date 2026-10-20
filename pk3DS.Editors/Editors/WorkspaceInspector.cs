@@ -19,7 +19,7 @@ public static class WorkspaceInspector
             workspace.TitleId,
             workspace.ExeFsPath,
             workspace.ExheaderPath,
-            GetModuleAvailability(workspace, code.Ready, smdhReady),
+            GetModuleAvailability(workspace, code.Ready),
             "El origen solo se leerá. La salida será un ZIP LayeredFS para Luma.")
         {
             CodeBinPath = code.Path,
@@ -31,9 +31,10 @@ public static class WorkspaceInspector
         };
     }
 
-    private static ModuleAvailability[] GetModuleAvailability(GameWorkspace workspace, bool codeReady, bool smdhReady) =>
+    private static ModuleAvailability[] GetModuleAvailability(GameWorkspace workspace, bool codeReady) =>
     [
-        new("smdh", "Icono SMDH", "ExeFS", smdhReady, "ExeFS con icon.bin SMDH válido"),
+        new("smdh", "Icono SMDH", "ExeFS", workspace.ExeFsPath is not null,
+            "ExeFS; importá icon.bin si falta"),
         new("personal", "Personal Stats", "RomFS", HasGarc(workspace, "personal"), "GARC personal"),
         new("evolutions", "Evolutions", "RomFS", HasGarc(workspace, "evolution"), "GARC evolution"),
         new("levelup", "Level Up Moves", "RomFS", HasGarc(workspace, "levelup"), "GARC levelup"),
@@ -50,7 +51,7 @@ public static class WorkspaceInspector
         new("pickup", "Pickup Gen. VII", "RomFS", (workspace.Version is GameVersion.SM or GameVersion.USUM) && HasGarc(workspace, "pickup"), "GARC pickup Gen. VII"),
         new("pickup6", "Pickup Gen. VI", "ExeFS", (workspace.Version is GameVersion.XY or GameVersion.ORAS) && codeReady, "ExeFS con code.bin válido y alineado"),
         new("maison", "Battle Maison / Tree / Royal", "RomFS", HasAllGarcs(workspace, "maisonpkN", "maisontrN", "maisonpkS", "maisontrS"), "GARC maison normal/super"),
-        new("static", "Static Encounters", "RomFS",
+        new("static", "Static Encounters", workspace.Version is GameVersion.XY or GameVersion.ORAS ? "CRO" : "RomFS",
             workspace.Version is GameVersion.XY or GameVersion.ORAS
                 ? HasFile(workspace.RomFsPath, "DllField.cro")
                 : workspace.Version is GameVersion.SM or GameVersion.USUM
@@ -68,8 +69,8 @@ public static class WorkspaceInspector
                 : "GARC encdata + zonedata + worlddata"),
         new("tm", "TMs / HMs", "ExeFS", codeReady, "ExeFS con code.bin válido y alineado"),
         new("shiny-rate", "Shiny Rate", "ExeFS", codeReady, "ExeFS con code.bin válido y alineado"),
-        new("tutors", "Move Tutors Gen. VII", "RomFS", workspace.Version is GameVersion.SM or GameVersion.USUM && HasFile(workspace.RomFsPath, "Shop.cro"), "Shop.cro"),
-        new("marts", "Poké Mart Gen. VII", "RomFS", workspace.Version is GameVersion.SM or GameVersion.USUM && HasFile(workspace.RomFsPath, "Shop.cro"), "Shop.cro"),
+        new("tutors", "Move Tutors Gen. VII", "CRO", workspace.Version is GameVersion.SM or GameVersion.USUM && HasFile(workspace.RomFsPath, "Shop.cro"), "Shop.cro"),
+        new("marts", "Poké Mart Gen. VII", "CRO", workspace.Version is GameVersion.SM or GameVersion.USUM && HasFile(workspace.RomFsPath, "Shop.cro"), "Shop.cro"),
         new("tutors6", "Move Tutors Gen. VI", "ExeFS", (workspace.Version is GameVersion.XY or GameVersion.ORAS) && codeReady, "ExeFS con code.bin válido y alineado"),
         new("marts6", "Poké Mart Gen. VI", "ExeFS", (workspace.Version is GameVersion.XY or GameVersion.ORAS) && codeReady, "ExeFS con code.bin válido y alineado"),
         new("opowers", "O-Powers Gen. VI", "ExeFS", (workspace.Version is GameVersion.XY or GameVersion.ORAS) && codeReady, "ExeFS con code.bin válido y alineado"),
@@ -78,7 +79,7 @@ public static class WorkspaceInspector
             && HasFile(workspace.RomFsPath, "DllField.cro"), "DllPoke3Select.cro + DllField.cro"),
         new("gift6", "Gift Pokémon Gen. VI", "RomFS", workspace.Version is GameVersion.XY or GameVersion.ORAS
             && HasFile(workspace.RomFsPath, "DllField.cro"), "DllField.cro"),
-        new("typechart", "Type Chart", "RomFS + ExeFS", workspace.Version is GameVersion.XY or GameVersion.ORAS
+        new("typechart", "Type Chart", workspace.Version is GameVersion.XY or GameVersion.ORAS ? "CRO" : "ExeFS", workspace.Version is GameVersion.XY or GameVersion.ORAS
             ? HasFile(workspace.RomFsPath, "DllBattle.cro")
             : workspace.Version is GameVersion.SM or GameVersion.USUM && codeReady,
             "Gen. VI: DllBattle.cro; Gen. VII: ExeFS code.bin"),
@@ -89,8 +90,15 @@ public static class WorkspaceInspector
         if (workspace.ExeFsPath is null)
             return new(null, null, false, false, "No se encontró ExeFS.");
 
-        var path = Directory.EnumerateFiles(workspace.ExeFsPath, "*", SearchOption.TopDirectoryOnly)
-            .FirstOrDefault(file => Path.GetFileName(file).Contains("code", StringComparison.OrdinalIgnoreCase));
+        string? path;
+        try
+        {
+            path = GameWorkspace.FindCodeFile(workspace.ExeFsPath);
+        }
+        catch (WorkspaceException exception)
+        {
+            return new(null, null, false, false, exception.Message);
+        }
         if (path is null)
             return new(null, null, false, false, "No se encontró code.bin dentro de ExeFS.");
 
@@ -187,7 +195,7 @@ public static class WorkspaceInspector
             diagnostics.Add(new("success", "exheader", "exheader.bin válido; el Title ID fue detectado."));
 
         if (workspace.ExeFsPath is not null && !HasSmdh(workspace))
-            diagnostics.Add(new("warning", "smdh", "Falta ExeFS/icon.bin: el editor de icono SMDH quedará deshabilitado."));
+            diagnostics.Add(new("info", "smdh", "Falta ExeFS/icon.bin; podés importar un SMDH desde Herramientas de proyecto."));
 
         if (code.Path is null)
             diagnostics.Add(new("warning", "code-bin", code.Message ?? "No hay code.bin utilizable; las funciones ExeFS quedarán deshabilitadas."));

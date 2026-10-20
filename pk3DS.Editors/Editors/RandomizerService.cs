@@ -10,9 +10,47 @@ namespace pk3DS.Editors;
 /// </summary>
 public static class RandomizerService
 {
+    private static readonly object RandomizeLock = new();
+
+    /// <summary>
+    /// Runs one RNG-backed mutation while holding the same gate used by the combined web
+    /// randomizer. A null seed keeps the current RNG stream; a supplied seed replaces it before
+    /// the mutation, matching <see cref="Randomize"/>.
+    /// </summary>
+    internal static T WithRandomizerSeed<T>(int? seed, Func<T> mutation)
+    {
+        lock (RandomizeLock)
+        {
+            if (seed is int value)
+                Util.ReseedRand(value);
+            return mutation();
+        }
+    }
+
     // Struggle (165) and Shadow Blast (621) are never valid randomizer output.
     // A fresh array per read: the randomizers take ownership of what they are handed.
     private static int[] AlwaysBannedMoves => [165, 621];
+
+    private static readonly (int Species, ushort[] Items)[] MegaOptionsXY =
+    [
+        (003, [659]), (006, [660, 678]), (009, [661]), (065, [679]), (094, [656]),
+        (115, [675]), (127, [671]), (130, [676]), (142, [672]), (150, [662, 663]),
+        (181, [658]), (212, [670]), (214, [680]), (229, [666]), (248, [669]),
+        (257, [664]), (282, [657]), (303, [681]), (306, [667]), (308, [665]),
+        (310, [682]), (354, [668]), (359, [677]), (380, [684]), (381, [685]),
+        (445, [683]), (448, [673]), (460, [674]),
+    ];
+
+    private static readonly (int Species, ushort[] Items)[] MegaOptionsORAS =
+    [
+        (015, [770]), (018, [762]), (080, [760]), (208, [761]), (254, [753]),
+        (260, [752]), (302, [754]), (319, [759]), (323, [767]), (334, [755]),
+        (362, [763]), (373, [769]), (376, [758]), (428, [768]), (475, [756]),
+        (531, [757]), (719, [764]),
+    ];
+
+    private static readonly HashSet<int> XyStoryMegaTrainerIDs = [188, 263, 276, 277, 519, 520, 521, 526, 599, 600, 601];
+    private static readonly HashSet<int> OrasStoryMegaTrainerIDs = [178, 235, 557, 583, 687, 698, 699, 700, 701, 713, 906, 907, 908, 909, 910, 911, 912, 913, 942, 944, 946];
 
     public static ExportResult Randomize(RandomizeRequest request)
     {
@@ -41,60 +79,68 @@ public static class RandomizerService
             trainerGarcs = trainerGarcs.Append("levelup");
 
         return EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId, request.Language,
-            "randomizer", wildGarcs.Concat(trainerGarcs), config =>
+            "randomizer", wildGarcs.Concat(trainerGarcs), config => RandomizeData(config, request.Seed,
+                personal, learnsets, eggMoves, moves, evolutions, wild, trainers));
+    }
+
+    private static List<string> RandomizeData(GameConfig config, int? seed,
+        PersonalOptions personal, LearnsetOptions learnsets, EggMoveOptions eggMoves, MoveOptions moves,
+        EvolutionOptions evolutions, WildRandomizerOptions wild, TrainerRandomizerOptions trainers)
+    {
+        return WithRandomizerSeed(seed, () =>
+        {
+            var changed = new List<string>();
+
+            if (personal.HasChanges)
             {
-                var changed = new List<string>();
+                RandomizePersonal(config, personal);
+                ModifyPersonal(config, personal);
+                GarcWriter.SavePersonal(config);
+                changed.Add(config.GetGARCFileName("personal"));
+            }
 
-                if (personal.HasChanges)
-                {
-                    RandomizePersonal(config, personal);
-                    ModifyPersonal(config, personal);
-                    GarcWriter.SavePersonal(config);
-                    changed.Add(config.GetGARCFileName("personal"));
-                }
+            if (learnsets.Enabled)
+            {
+                RandomizeLearnsets(config, learnsets);
+                GarcWriter.SaveLearnsets(config);
+                changed.Add(config.GetGARCFileName("levelup"));
+            }
 
-                if (learnsets.Enabled)
-                {
-                    RandomizeLearnsets(config, learnsets);
-                    GarcWriter.SaveLearnsets(config);
-                    changed.Add(config.GetGARCFileName("levelup"));
-                }
+            if (eggMoves.Enabled)
+            {
+                RandomizeEggMoves(config, eggMoves);
+                changed.Add(config.GetGARCFileName("eggmove"));
+            }
 
-                if (eggMoves.Enabled)
-                {
-                    RandomizeEggMoves(config, eggMoves);
-                    changed.Add(config.GetGARCFileName("eggmove"));
-                }
+            if (moves.HasChanges)
+            {
+                ModifyMoves(config, moves);
+                GarcWriter.SaveMoves(config);
+                changed.Add(config.GetGARCFileName("move"));
+            }
 
-                if (moves.HasChanges)
-                {
-                    ModifyMoves(config, moves);
-                    GarcWriter.SaveMoves(config);
-                    changed.Add(config.GetGARCFileName("move"));
-                }
+            if (evolutions.Mode != EvolutionMode.None)
+            {
+                RandomizeEvolutions(config, evolutions);
+                GarcWriter.SaveEvolutions(config);
+                changed.Add(config.GetGARCFileName("evolution"));
+            }
 
-                if (evolutions.Mode != EvolutionMode.None)
-                {
-                    RandomizeEvolutions(config, evolutions);
-                    GarcWriter.SaveEvolutions(config);
-                    changed.Add(config.GetGARCFileName("evolution"));
-                }
+            if (wild.HasChanges)
+            {
+                RandomizeWild(config, wild);
+                changed.Add(config.GetGARCFileName("encdata"));
+            }
 
-                if (wild.HasChanges)
-                {
-                    RandomizeWild(config, wild);
-                    changed.Add(config.GetGARCFileName("encdata"));
-                }
+            if (trainers.HasChanges)
+            {
+                RandomizeTrainers(config, trainers);
+                changed.Add(config.GetGARCFileName("trdata"));
+                changed.Add(config.GetGARCFileName("trpoke"));
+            }
 
-                if (trainers.HasChanges)
-                {
-                    RandomizeTrainers(config, trainers);
-                    changed.Add(config.GetGARCFileName("trdata"));
-                    changed.Add(config.GetGARCFileName("trpoke"));
-                }
-
-                return changed;
-            });
+            return changed;
+        });
     }
 
     private static void RandomizePersonal(GameConfig config, PersonalOptions options)
@@ -287,14 +333,25 @@ public static class RandomizerService
             throw new WorkspaceException("Naturaleza y shiny aleatorios solo están disponibles en el flujo de entrenadores de Gen. VII.");
         if (options.RandomizeTypeThemes && !options.RandomizeSpecies)
             throw new WorkspaceException("Los temas por tipo requieren activar la randomización de especies.");
-        if (options.AllowMegaForms && config.Generation != 6)
-            throw new WorkspaceException("Las formas Mega aleatorias solo están disponibles en el flujo de entrenadores de Gen. VI.");
         if (options.AllowMegaForms && !options.RandomizeSpecies)
             throw new WorkspaceException("Las formas Mega aleatorias requieren activar la randomización de especies.");
+        if (options.EnsureStoryMegaEvolutions && !options.RandomizeSpecies)
+            throw new WorkspaceException("Las Megaevoluciones de historia requieren activar la randomización de especies.");
         if (options.IncludeGymTrainerThemes && config.Generation != 6)
             throw new WorkspaceException("Los temas de entrenadores de gimnasio solo están disponibles en el flujo de entrenadores de Gen. VI.");
         if (options.IncludeGymTrainerThemes && !options.RandomizeTypeThemes)
             throw new WorkspaceException("Los temas de entrenadores de gimnasio requieren activar los temas por tipo.");
+        if ((options.GymEliteOnlyThemes || options.EnsureStoryMegaEvolutions || options.FillImportantGen6Teams) && config.Generation != 6)
+            throw new WorkspaceException("Las opciones de gimnasios, Megaevoluciones de historia y equipos importantes solo están disponibles en Gen. VI.");
+        if (options.GymEliteOnlyThemes && !options.RandomizeTypeThemes)
+            throw new WorkspaceException("El filtro de gimnasios y Alto Mando requiere activar los temas por tipo.");
+        var hasAllowedSpeciesGeneration = options.AllowGen1 || options.AllowGen2 || options.AllowGen3
+            || options.AllowGen4 || options.AllowGen5 || options.AllowGen6
+            || (config.Generation == 7 && options.AllowGen7);
+        if ((options.RandomizeSpecies || options.RandomizeComposition || options.FillImportantGen6Teams
+                || options.FillImportantGen7Teams || options.ForceFullyEvolved)
+            && !hasAllowedSpeciesGeneration)
+            throw new WorkspaceException("Seleccioná al menos una generación para el pool de especies.");
         var moveModes = Convert.ToInt32(options.RandomizeMoves) + Convert.ToInt32(options.UseCurrentLearnsetMoves)
             + Convert.ToInt32(options.MetronomeMoves);
         if (moveModes > 1)
@@ -304,54 +361,58 @@ public static class RandomizerService
 
         var species = new SpeciesRandomizer(config)
         {
-            G1 = true,
-            G2 = true,
-            G3 = true,
-            G4 = true,
-            G5 = true,
-            G6 = true,
-            G7 = config.Generation == 7,
+            G1 = options.AllowGen1,
+            G2 = options.AllowGen2,
+            G3 = options.AllowGen3,
+            G4 = options.AllowGen4,
+            G5 = options.AllowGen5,
+            G6 = options.AllowGen6,
+            G7 = config.Generation == 7 && options.AllowGen7,
             L = options.IncludeLegendary,
             E = options.IncludeMythical,
-            Shedinja = options.IncludeShedinja,
+            Shedinja = config.Generation == 6 || options.IncludeShedinja,
             rBST = options.MatchBst,
         };
         species.Initialize();
 
         var speciesCount = Catalogs.SpeciesCount(config);
-        var fallbackSpecies = GetFallbackSpecies(config, speciesCount);
+        var fallbackSpecies = GetTrainerFallbackSpecies(config, speciesCount, options);
         var trainerClassCount = Catalogs.TrainerClasses(config).Length;
         var itemCount = Catalogs.ItemCount(config);
-        var trainerItemPool = config.Info.HeldItems
-            .Where(item => item > 0 && item < itemCount)
-            .Distinct()
-            .ToArray();
+        var trainerItemPool = GetTrainerItemPool(config, itemCount);
         var form = new FormRandomizer(config)
         {
             AllowMega = options.AllowMegaForms,
             AllowAlolanForm = config.Generation == 7,
         };
-        var finalSpecies = GetFinalTrainerSpecies(config, speciesCount);
+        var finalSpecies = GetFinalTrainerSpecies(config, speciesCount, options);
         var teamRange = NormalizeTeamRange(options.MinTeamSize, options.MaxTeamSize);
         var importantGen7 = config.USUM ? Legal.ImportantTrainers_USUM : Legal.ImportantTrainers_SM;
-        var typeCount = Math.Clamp(config.GetText(TextName.Types).Length, 1, 18);
+        var importantGen6 = GetImportantGen6TrainerIDs(config);
+        var typeCount = Math.Clamp(config.GetText(TextName.Types).Length, 1, config.Generation == 7 ? 17 : 18);
+        var megaOptions = GetMegaOptions(config);
         var gen6Themes = options.RandomizeTypeThemes && config.Generation == 6
-            ? BuildGen6TrainerThemes(config, typeCount, options.IncludeGymTrainerThemes)
+            ? BuildGen6TrainerThemes(config, typeCount, options.IncludeGymTrainerThemes, options, megaOptions)
             : null;
         var learnset = options.ForceHighPower || options.UseCurrentLearnsetMoves
             ? config.Learnsets is null
                 ? throw new WorkspaceException("Los movimientos por nivel requieren el GARC levelup del workspace.")
                 : new LearnsetRandomizer(config, config.Learnsets)
             : null;
-        var fallbackMoves = GetFallbackMoves(config);
+        int[] trainerMoveBans = config.Generation == 7
+            ? [165, 621, 464, .. Legal.Z_Moves]
+            : [165, 621];
+        if (options.ExcludeFixedDamageMoves)
+            trainerMoveBans = [.. trainerMoveBans, .. MoveRandomizer.FixedDamageMoves];
+        var fallbackMoves = GetFallbackMoves(config).Where(moveId => !trainerMoveBans.Contains(moveId)).ToArray();
         var move = config.Moves.Length > config.Info.MaxMoveID
             ? new MoveRandomizer(config)
             {
-                rDMG = true,
-                rDMGCount = 2,
-                rSTAB = true,
-                rSTABCount = 2,
-                BannedMoves = [165, 621, .. MoveRandomizer.FixedDamageMoves],
+                rDMG = options.EnsureDamagingMoves,
+                rDMGCount = Math.Clamp(options.DamagingMoveCount, 0, 4),
+                rSTAB = options.EnsureStabMoves,
+                rSTABCount = Math.Clamp(options.StabMoveCount, 0, 4),
+                BannedMoves = trainerMoveBans,
             }
             : null;
         var trdata = config.GetGARCData("trdata");
@@ -364,41 +425,67 @@ public static class RandomizerService
             if (config.Generation == 6)
             {
                 var trainer = new TrainerData6(trdata.Files[index], trpoke.Files[index], config.ORAS);
+                if (trainer.Team.Length == 0)
+                    continue;
                 if (options.RandomizeMoves || options.UseCurrentLearnsetMoves || options.MetronomeMoves || options.ForceHighPower)
                     trainer.Moves = true;
+                if (options.RandomizeItems)
+                    trainer.Item = true;
                 if (options.RandomizeClasses)
                     trainer.Class = GetRandomTrainerClass(config, trainerClassCount, trainer.Class, trainer.BattleType, options);
                 if (options.RandomizeComposition)
-                    RandomizeComposition(trainer, teamRange.Min, teamRange.Max);
+                    AdjustTeamSize(trainer, config, species, fallbackSpecies, options, teamRange.Min, teamRange.Max);
+                if (options.FillImportantGen6Teams && importantGen6.Contains(index))
+                    FillImportantTeam(trainer, config, species, fallbackSpecies, options);
                 if (options.MaximizeAI)
                     trainer.AI |= 7;
                 if (options.RandomizePrizes)
                     RandomizePrize(config, trainer, options.PrizeChance);
-                foreach (var pokemon in trainer.Team)
+                var trainerTheme = options.RandomizeTypeThemes
+                    ? GetGen6TrainerTheme(gen6Themes!, index, typeCount, config, options.GymEliteOnlyThemes, options.IncludeGymTrainerThemes)
+                    : null;
+                for (var pokemonIndex = 0; pokemonIndex < trainer.Team.Length; pokemonIndex++)
                 {
+                    var pokemon = trainer.Team[pokemonIndex];
                     if (pokemon.Species <= 0 || pokemon.Species >= speciesCount)
                         continue;
+                    var storyMegaSlot = options.RandomizeSpecies && options.EnsureStoryMegaEvolutions
+                        && IsStoryMegaTrainer(config, index) && pokemonIndex == trainer.Team.Length - 1;
+                    var forcedStoryMega = false;
                     if (options.RandomizeSpecies)
                     {
-                int? theme = options.RandomizeTypeThemes
-                    ? GetGen6TrainerTheme(gen6Themes!, index, typeCount)
-                    : null;
-                        pokemon.Species = (ushort)(theme is int type
-                            ? GetRandomSpeciesType(config, species, fallbackSpecies, pokemon.Species, type)
-                            : GetRandomSpecies(config, species, fallbackSpecies, pokemon.Species));
-                        pokemon.Form = (ushort)form.GetRandomForme(pokemon.Species);
+                        if (storyMegaSlot)
+                        {
+                            var storyMega = GetRandomMega(config, megaOptions, options, trainerTheme)
+                                ?? throw new WorkspaceException("No hay Megaevoluciones compatibles con las generaciones seleccionadas para garantizar las Megas de historia.");
+                            pokemon.Species = (ushort)storyMega.Species;
+                            pokemon.Item = storyMega.Item;
+                            // The held-item field is controlled by a trainer-level format bit.
+                            // Enable it so the forced Mega Stone is included in the exported team.
+                            trainer.Item = true;
+                            pokemon.Form = 0;
+                            forcedStoryMega = true;
+                        }
+                        else
+                        {
+                            pokemon.Species = (ushort)(trainerTheme is int type
+                                ? GetTrainerRandomSpeciesType(config, species, fallbackSpecies, pokemon.Species, type, options)
+                                : GetTrainerRandomSpecies(config, species, fallbackSpecies, pokemon.Species, options));
+                            pokemon.Form = (ushort)form.GetRandomForme(pokemon.Species);
+                        }
                         pokemon.Gender = 0;
                     }
                     if (options.RandomizeLevels)
                         pokemon.Level = (ushort)ScaleLevel(pokemon.Level, options.LevelMultiplier);
                     if (options.MaximizeIVs)
                         pokemon.IVs = byte.MaxValue;
-                    if (options.RandomizeItems && trainerItemPool.Length > 0)
-                        pokemon.Item = trainerItemPool[Util.Rand.Next(trainerItemPool.Length)];
+                    if (options.RandomizeItems && !forcedStoryMega && trainerItemPool.Length > 0)
+                        pokemon.Item = (ushort)trainerItemPool[Util.Rand.Next(trainerItemPool.Length)];
                     if (options.RandomizeAbilities)
                         pokemon.Ability = Util.Rand.Next(1, 4);
+                    ForceFinalEvolution(pokemon, options, finalSpecies, form);
                     if (options.RandomizeMoves)
-                        pokemon.Moves = GetRandomTrainerMoves(config, move, fallbackMoves, pokemon.Species, pokemon.Form)
+                        pokemon.Moves = GetRandomTrainerMoves(config, move, fallbackMoves, pokemon.Species)
                             .Select(value => (ushort)value).ToArray();
                     else if (options.UseCurrentLearnsetMoves)
                         pokemon.Moves = learnset!.GetCurrentMoves(pokemon.Species, pokemon.Form, pokemon.Level, 4)
@@ -406,7 +493,6 @@ public static class RandomizerService
                     else if (options.MetronomeMoves)
                         pokemon.Moves = [118, 0, 0, 0];
                     ApplyHighPowerMoves(pokemon, options, learnset);
-                    ForceFinalEvolution(pokemon, options, finalSpecies, form);
                 }
                 trdata.SetFile(index, trainer.Write());
                 trpoke.SetFile(index, trainer.WriteTeam());
@@ -415,34 +501,55 @@ public static class RandomizerService
             }
 
             var trainer7 = new TrainerData7(trdata.Files[index], trpoke.Files[index]);
+            if (trainer7.Pokemon.Count == 0)
+                continue;
             if (options.RandomizeClasses)
                 trainer7.TrainerClass = GetRandomTrainerClass(config, trainerClassCount, trainer7.TrainerClass, (int)trainer7.Mode, options);
+            var trainer7Profile = GetAverageTeamProfile(
+                config,
+                trainer7.Pokemon.Select(pokemon => pokemon.Species),
+                trainer7.Pokemon.Select(pokemon => pokemon.Level));
             if (options.RandomizeComposition)
-                RandomizeComposition(trainer7, teamRange.Min, teamRange.Max);
+                AdjustTeamSize(trainer7, config, species, fallbackSpecies, options, teamRange.Min, teamRange.Max, trainer7Profile);
             if (options.FillImportantGen7Teams && importantGen7.Contains(index))
-                FillImportantTeam(trainer7, config, species, fallbackSpecies, form);
+                FillImportantTeam(trainer7, config, species, fallbackSpecies, options, trainer7Profile);
+            if (IsBattleRoyalTrainer(index))
+                trainer7.NumPokemon = 1;
             if (options.MaximizeAI)
-                trainer7.AI |= 7;
+                trainer7.AI |= (int)(TrainerAI.Basic | TrainerAI.Strong | TrainerAI.Expert | TrainerAI.PokeChange);
             foreach (var pokemon in trainer7.Pokemon)
             {
                 if (pokemon.Species <= 0 || pokemon.Species >= speciesCount)
                     continue;
+                var megaWasSelected = false;
                 if (options.RandomizeSpecies)
                 {
-                    var theme = options.RandomizeTypeThemes
-                        ? Util.Rand.Next(typeCount)
-                        : (int?)null;
-                    pokemon.Species = theme is int type
-                        ? GetRandomSpeciesType(config, species, fallbackSpecies, pokemon.Species, type)
-                        : GetRandomSpecies(config, species, fallbackSpecies, pokemon.Species);
-                    pokemon.Form = form.GetRandomForme(pokemon.Species);
+                    var megaItem = IsMegaStone(megaOptions, pokemon.Item);
+                    var mega = megaItem ? GetRandomMega(config, megaOptions, options) : null;
+                    if (mega is { } megaChoice)
+                    {
+                        pokemon.Species = megaChoice.Species;
+                        pokemon.Item = megaChoice.Item;
+                        pokemon.Form = 0;
+                        megaWasSelected = true;
+                    }
+                    else
+                    {
+                        var theme = options.RandomizeTypeThemes
+                            ? Util.Rand.Next(typeCount)
+                            : (int?)null;
+                        pokemon.Species = theme is int type
+                            ? GetTrainerRandomSpeciesType(config, species, fallbackSpecies, pokemon.Species, type, options)
+                            : GetTrainerRandomSpecies(config, species, fallbackSpecies, pokemon.Species, options);
+                        pokemon.Form = form.GetRandomForme(pokemon.Species);
+                    }
                     pokemon.Gender = 0;
                 }
                 if (options.RandomizeLevels)
                     pokemon.Level = ScaleLevel(pokemon.Level, options.LevelMultiplier);
                 if (options.MaximizeIVs)
                     pokemon.IVs = [31, 31, 31, 31, 31, 31];
-                if (options.RandomizeItems && trainerItemPool.Length > 0)
+                if (options.RandomizeItems && !megaWasSelected && trainerItemPool.Length > 0)
                     pokemon.Item = trainerItemPool[Util.Rand.Next(trainerItemPool.Length)];
                 if (options.RandomizeAbilities)
                     pokemon.Ability = Util.Rand.Next(0, 4);
@@ -450,14 +557,20 @@ public static class RandomizerService
                     pokemon.Nature = Util.Rand.Next(25);
                 if (options.RandomizeShiny)
                     pokemon.Shiny = Util.Rand.Next(101) < Math.Clamp(options.ShinyChance, 0, 100);
+                ForceFinalEvolution(pokemon, options, finalSpecies, form);
                 if (options.RandomizeMoves)
-                    pokemon.Moves = GetRandomTrainerMoves(config, move, fallbackMoves, pokemon.Species, pokemon.Form);
+                    pokemon.Moves = GetRandomTrainerMoves(config, move, fallbackMoves, pokemon.Species);
                 else if (options.UseCurrentLearnsetMoves)
                     pokemon.Moves = learnset!.GetCurrentMoves(pokemon.Species, pokemon.Form, pokemon.Level, 4);
                 else if (options.MetronomeMoves)
                     pokemon.Moves = [118, 0, 0, 0];
                 ApplyHighPowerMoves(pokemon, options, learnset);
-                ForceFinalEvolution(pokemon, options, finalSpecies, form);
+                if (move is not null && (options.UseCurrentLearnsetMoves || options.MetronomeMoves))
+                {
+                    var currentMoves = pokemon.Moves;
+                    if (move.SanitizeMovesetForBannedMoves(currentMoves, pokemon.Species))
+                        pokemon.Moves = currentMoves;
+                }
             }
             trainer7.Write(out var data, out var team);
             trdata.SetFile(index, data);
@@ -490,10 +603,187 @@ public static class RandomizerService
         trainer.Prize = pool[Util.Rand.Next(pool.Length)];
     }
 
-    private static int[] GetFinalTrainerSpecies(GameConfig config, int speciesCount)
+    private static int[] GetFinalTrainerSpecies(GameConfig config, int speciesCount, TrainerRandomizerOptions options)
     {
-        var source = config.Generation == 7 ? Legal.FinalEvolutions_7 : Legal.FinalEvolutions_6;
-        return source.Where(species => species > 0 && species < speciesCount).Distinct().ToArray();
+        IEnumerable<int> source = config.Generation == 7 ? Legal.FinalEvolutions_7 : Legal.FinalEvolutions_6;
+        if (options.IncludeLegendary)
+            source = source.Concat(config.Generation == 7
+                ? config.USUM ? Legal.Legendary_USUM : Legal.Legendary_SM
+                : Legal.Legendary_6);
+        if (options.IncludeMythical)
+            source = source.Concat(config.Generation == 7
+                ? config.USUM ? Legal.Mythical_USUM : Legal.Mythical_SM
+                : Legal.Mythical_6);
+        return source.Where(species => species > 0 && species < speciesCount
+                && IsTrainerSpeciesGenerationAllowed(species, config.Generation, options))
+            .Distinct().ToArray();
+    }
+
+    private static int[] GetTrainerFallbackSpecies(GameConfig config, int speciesCount, TrainerRandomizerOptions options)
+    {
+        var excludedLegendary = options.IncludeLegendary
+            ? Array.Empty<int>()
+            : config.Generation == 6
+                ? Legal.Legendary_6
+                : config.USUM ? Legal.Legendary_USUM : Legal.Legendary_SM;
+        var excludedMythical = options.IncludeMythical
+            ? Array.Empty<int>()
+            : config.Generation == 6
+                ? Legal.Mythical_6
+                : config.USUM ? Legal.Mythical_USUM : Legal.Mythical_SM;
+
+        return GetFallbackSpecies(config, speciesCount)
+            .Where(species => IsTrainerSpeciesGenerationAllowed(species, config.Generation, options))
+            .Where(species => !excludedLegendary.Contains(species) && !excludedMythical.Contains(species))
+            .Where(species => config.Generation == 6 || options.IncludeShedinja || species != 292)
+            .ToArray();
+    }
+
+    private static bool IsTrainerSpeciesGenerationAllowed(int species, int gameGeneration, TrainerRandomizerOptions options) => species switch
+    {
+        <= 151 => options.AllowGen1,
+        <= 251 => options.AllowGen2,
+        <= 386 => options.AllowGen3,
+        <= 493 => options.AllowGen4,
+        <= 649 => options.AllowGen5,
+        <= 721 => options.AllowGen6,
+        _ => gameGeneration == 7 && options.AllowGen7,
+    };
+
+    private static (int Species, ushort[] Items)[] GetMegaOptions(GameConfig config) => config.Generation == 7 || config.ORAS
+        ? [.. MegaOptionsXY, .. MegaOptionsORAS]
+        : MegaOptionsXY;
+
+    private static (int Species, ushort Item)? GetRandomMega(GameConfig config,
+        (int Species, ushort[] Items)[] megaOptions, TrainerRandomizerOptions options, int? requiredType = null)
+    {
+        var candidates = megaOptions.Where(option => option.Species > 0 && option.Species < config.Personal.Table.Length
+            && IsTrainerSpeciesGenerationAllowed(option.Species, config.Generation, options)).ToArray();
+        if (requiredType is int type)
+            candidates = candidates.Where(option => config.Personal.Table[option.Species].Types.Contains(type)).ToArray();
+        if (candidates.Length == 0)
+            return null;
+
+        var selected = candidates[Util.Rand.Next(candidates.Length)];
+        return (selected.Species, selected.Items[Util.Rand.Next(selected.Items.Length)]);
+    }
+
+    private static bool IsMegaStone((int Species, ushort[] Items)[] megaOptions, int item) =>
+        megaOptions.Any(option => option.Items.Contains((ushort)item));
+
+    private static int[] GetTrainerItemPool(GameConfig config, int itemCount)
+    {
+        IEnumerable<ushort> items = config.Generation == 6
+            ? (config.ORAS ? Legal.Pouch_Items_AO : Legal.Pouch_Items_XY)
+                .Concat(Legal.Pouch_Berry_XY)
+            : Legal.TrainerRandomizerItems_7;
+        return items.Where(item => item > 0 && item < itemCount).Select(item => (int)item).ToArray();
+    }
+
+    private static HashSet<int> GetImportantGen6TrainerIDs(GameConfig config)
+    {
+        var groups = config.ORAS ? OrasTrainerThemeGroups : XyTrainerThemeGroups;
+        var notImportant = config.ORAS
+            ? new HashSet<int> { 1, 2, 3, 4, 5, 6 }
+            : new HashSet<int> { 1, 2, 3, 4, 5, 6, 137, 138, 139, 188 };
+        return groups.SelectMany(group => group.IDs)
+            .Where(id => !notImportant.Contains(id))
+            .ToHashSet();
+    }
+
+    private static bool IsStoryMegaTrainer(GameConfig config, int trainerIndex) => config.ORAS
+        ? OrasStoryMegaTrainerIDs.Contains(trainerIndex)
+        : XyStoryMegaTrainerIDs.Contains(trainerIndex);
+
+    private static bool IsBattleRoyalTrainer(int trainerIndex) => trainerIndex is 81 or 82 or 83 or 84 or 185;
+
+    private static (int Species, int Level) GetAverageTeamProfile(GameConfig config, IEnumerable<int> teamSpecies, IEnumerable<int> teamLevels)
+    {
+        var table = config.Personal.Table;
+        var levels = teamLevels.ToArray();
+        var validSpecies = teamSpecies.Where(species => species > 0 && species < table.Length).ToArray();
+        var averageLevel = levels.Length > 0 ? (int)levels.Average() : 1;
+        if (validSpecies.Length == 0)
+            return (table.Length > 1 ? 1 : 0, Math.Clamp(averageLevel, 1, 100));
+
+        var averageBst = (int)validSpecies.Average(species => table[species].BST);
+        var speciesLimit = Math.Min(config.MaxSpeciesID, table.Length - 1);
+        if (speciesLimit < 1)
+            return (validSpecies[0], Math.Clamp(averageLevel, 1, 100));
+        var averageSpecies = Enumerable.Range(1, Math.Max(1, speciesLimit))
+            .MinBy(species => Math.Abs(table[species].BST - averageBst));
+        return (averageSpecies, Math.Clamp(averageLevel, 1, 100));
+    }
+
+    private static void AdjustTeamSize(TrainerData6 trainer, GameConfig config, SpeciesRandomizer species, int[] fallbackSpecies,
+        TrainerRandomizerOptions options, int minimum, int maximum)
+    {
+        if (trainer.Team.Length == 0 || trainer.BattleType == 4)
+            return;
+
+        var count = Math.Clamp(trainer.Team.Length, minimum, maximum);
+        if (count == trainer.Team.Length)
+            return;
+
+        var profile = GetAverageTeamProfile(config, trainer.Team.Select(pokemon => (int)pokemon.Species), trainer.Team.Select(pokemon => (int)pokemon.Level));
+        var team = trainer.Team.Take(count).ToList();
+        while (team.Count < count)
+        {
+            var source = team[^1];
+            var pokemon = new TrainerData6.Pokemon(source.Write(trainer.Item, trainer.Moves), trainer.Item, trainer.Moves)
+            {
+                Species = (ushort)GetTrainerRandomSpecies(config, species, fallbackSpecies, profile.Species, options),
+                Level = (ushort)profile.Level,
+            };
+            team.Add(pokemon);
+        }
+        trainer.Team = team.ToArray();
+        trainer.NumPokemon = (byte)count;
+    }
+
+    private static void AdjustTeamSize(TrainerData7 trainer, GameConfig config, SpeciesRandomizer species, int[] fallbackSpecies,
+        TrainerRandomizerOptions options, int minimum, int maximum, (int Species, int Level) profile)
+    {
+        if (trainer.Pokemon.Count == 0)
+            return;
+
+        var count = Math.Clamp(trainer.Pokemon.Count, minimum, maximum);
+        if (count == trainer.Pokemon.Count)
+            return;
+
+        if (count < trainer.Pokemon.Count)
+            trainer.Pokemon.RemoveRange(count, trainer.Pokemon.Count - count);
+        while (trainer.Pokemon.Count < count)
+        {
+            var pokemon = new TrainerPoke7
+            {
+                Species = GetTrainerRandomSpecies(config, species, fallbackSpecies, profile.Species, options),
+                Level = profile.Level,
+            };
+            trainer.Pokemon.Add(pokemon);
+        }
+        trainer.NumPokemon = count;
+    }
+
+    private static void FillImportantTeam(TrainerData6 trainer, GameConfig config, SpeciesRandomizer species, int[] fallbackSpecies,
+        TrainerRandomizerOptions options)
+    {
+        if (trainer.Team.Length == 0 || trainer.Team.Length >= 6)
+            return;
+
+        var profile = GetAverageTeamProfile(config, trainer.Team.Select(pokemon => (int)pokemon.Species), trainer.Team.Select(pokemon => (int)pokemon.Level));
+        var team = trainer.Team.ToList();
+        while (team.Count < 6)
+        {
+            var source = team[^1];
+            team.Add(new TrainerData6.Pokemon(source.Write(trainer.Item, trainer.Moves), trainer.Item, trainer.Moves)
+            {
+                Species = (ushort)GetTrainerRandomSpecies(config, species, fallbackSpecies, profile.Species, options),
+                Level = (ushort)profile.Level,
+            });
+        }
+        trainer.Team = team.ToArray();
+        trainer.NumPokemon = 6;
     }
 
     private static void ForceFinalEvolution(TrainerData6.Pokemon pokemon, TrainerRandomizerOptions options, int[] finalSpecies, FormRandomizer form)
@@ -533,18 +823,19 @@ public static class RandomizerService
         pokemon.Moves = learnset.GetHighPoweredMoves(pokemon.Species, pokemon.Form, 4);
     }
 
-    private static void FillImportantTeam(TrainerData7 trainer, GameConfig config, SpeciesRandomizer species, int[] fallbackSpecies, FormRandomizer form)
+    private static void FillImportantTeam(TrainerData7 trainer, GameConfig config, SpeciesRandomizer species, int[] fallbackSpecies,
+        TrainerRandomizerOptions options, (int Species, int Level) profile)
     {
         if (trainer.Pokemon.Count == 0)
             return;
 
-        var averageLevel = (int)Math.Round(trainer.Pokemon.Average(pokemon => pokemon.Level));
         while (trainer.Pokemon.Count < 6)
         {
-            var pokemon = trainer.Pokemon[^1].Clone();
-            pokemon.Species = GetRandomSpecies(config, species, fallbackSpecies, pokemon.Species);
-            pokemon.Form = form.GetRandomForme(pokemon.Species);
-            pokemon.Level = Math.Clamp(averageLevel, 1, 100);
+            var pokemon = new TrainerPoke7
+            {
+                Species = GetTrainerRandomSpecies(config, species, fallbackSpecies, profile.Species, options),
+                Level = profile.Level,
+            };
             trainer.Pokemon.Add(pokemon);
         }
         trainer.NumPokemon = 6;
@@ -559,55 +850,37 @@ public static class RandomizerService
 
     private static int GetRandomTrainerClass(GameConfig config, int classCount, int original, int battleType, TrainerRandomizerOptions options)
     {
-        if (classCount <= 0 || options.OnlySinglesForClasses && battleType != 0)
+        if (classCount <= 0)
             return original;
 
         var classes = config.GetText(TextName.TrainerClasses);
         var special = config.Generation == 6
             ? config.ORAS ? Legal.SpecialClasses_ORAS : Legal.SpecialClasses_XY
             : config.USUM ? Legal.SpecialClasses_USUM : Legal.SpecialClasses_SM;
+        if (options.IgnoreSpecialClasses && special.Contains(original))
+            return original;
+
+        if (config.Generation == 6)
+        {
+            var modelClasses = config.ORAS ? Legal.Model_AO : Legal.Model_XY;
+            if (modelClasses.Contains(original) && (!options.IgnoreSpecialClasses || !special.Contains(original)))
+            {
+                var modelCandidates = modelClasses.Where(index => index >= 0 && index < classCount).ToArray();
+                return modelCandidates.Length == 0 ? original : modelCandidates[Util.Rand.Next(modelCandidates.Length)];
+            }
+            if (options.OnlySinglesForClasses && battleType != 0)
+                return original;
+        }
+
         var candidates = Enumerable.Range(0, classCount)
             .Where(index => index < classes.Length && !classes[index].StartsWith("[~", StringComparison.Ordinal))
             .Where(index => !options.IgnoreSpecialClasses || !special.Contains(index))
             .Where(index => config.Generation != 7 || index != 82)
+            .Where(index => config.Generation != 6 || !(config.ORAS && index <= 63) && index is not (>= 68 and <= 126))
             .ToArray();
         if (candidates.Length == 0)
             return original;
-        if (options.IgnoreSpecialClasses && special.Contains(original))
-            return original;
         return candidates[Util.Rand.Next(candidates.Length)];
-    }
-
-    private static void RandomizeComposition(TrainerData6 trainer, int minimum, int maximum)
-    {
-        if (trainer.Team.Length == 0)
-            return;
-
-        var count = Util.Rand.Next(minimum, maximum + 1);
-        if (count == trainer.Team.Length)
-            return;
-
-        var team = trainer.Team.Take(Math.Min(count, trainer.Team.Length)).ToList();
-        while (team.Count < count)
-        {
-            var source = team[^1];
-            team.Add(new TrainerData6.Pokemon(source.Write(trainer.Item, trainer.Moves), trainer.Item, trainer.Moves));
-        }
-        trainer.Team = team.ToArray();
-        trainer.NumPokemon = (byte)count;
-    }
-
-    private static void RandomizeComposition(TrainerData7 trainer, int minimum, int maximum)
-    {
-        if (trainer.Pokemon.Count == 0)
-            return;
-
-        var count = Util.Rand.Next(minimum, maximum + 1);
-        if (count < trainer.Pokemon.Count)
-            trainer.Pokemon.RemoveRange(count, trainer.Pokemon.Count - count);
-        while (trainer.Pokemon.Count < count)
-            trainer.Pokemon.Add(trainer.Pokemon[^1].Clone());
-        trainer.NumPokemon = count;
     }
 
     private static void RandomizeWild(GameConfig config, WildRandomizerOptions options)
@@ -645,16 +918,15 @@ public static class RandomizerService
 
     private static void RandomizeWildGen6(GameConfig config, WildRandomizerOptions options, SpeciesRandomizer species)
     {
-        var garc = config.GetGARCData("encdata");
-        var firstMapFile = config.ORAS ? 2 : 1;
+        var garc = new WildGen6Archive(config);
         var form = new FormRandomizer(config) { AllowAlolanForm = false };
         var speciesCount = Catalogs.SpeciesCount(config);
         var fallbackSpecies = GetFallbackSpecies(config, speciesCount);
         var changedAreas = 0;
 
-        for (var fileIndex = firstMapFile; fileIndex < garc.Files.Length; fileIndex++)
+        for (var fileIndex = garc.FirstMapFile; fileIndex < garc.FirstMapFile + garc.AreaCount; fileIndex++)
         {
-            var file = garc.Files[fileIndex];
+            var file = garc.GetFile(fileIndex);
             if (!WildGen6Editor.TryGetEncounterOffset(file, config.ORAS, out var offset))
                 continue;
 
@@ -696,17 +968,15 @@ public static class RandomizerService
             garc.SetFile(fileIndex, file);
             changedAreas++;
 
-            // OR/AS has a packed copy of every area's encounter slots in file 1.
+            // OR/AS has a packed copy of every area's encounter slots in file 537.
             if (config.ORAS)
             {
-                var packed = garc.Files[1];
-                var locationIndex = fileIndex - firstMapFile;
-                var packedOffset = BitConverter.ToInt32(packed, (locationIndex + 1) * 4) + 0xE;
+                var packed = garc.GetFile(garc.PackedDataFileIndex);
+                var locationIndex = fileIndex - garc.FirstMapFile;
                 var slotBytes = WildGen6Editor.GetSlotCount(oras: true) * 4;
-                if (packedOffset < 0 || packedOffset + slotBytes > packed.Length)
-                    throw new WorkspaceException("La tabla interna de encuentros de OR/AS no es válida.");
+                var packedOffset = WildGen6Editor.GetPackedSlotOffset(packed, locationIndex, slotBytes);
                 WildGen6Editor.WriteSlots(packed, packedOffset, slots);
-                garc.SetFile(1, packed);
+                garc.SetFile(garc.PackedDataFileIndex, packed);
             }
         }
 
@@ -786,43 +1056,164 @@ public static class RandomizerService
         return randomizer.GetRandomSpecies(oldSpecies);
     }
 
-    private static int GetRandomSpeciesType(GameConfig config, SpeciesRandomizer randomizer, int[] fallback, int oldSpecies, int type)
+    private static int GetTrainerRandomSpecies(GameConfig config, SpeciesRandomizer randomizer, int[] fallback, int oldSpecies,
+        TrainerRandomizerOptions options)
     {
         if (oldSpecies <= 0 || oldSpecies >= config.Personal.Table.Length)
             return oldSpecies;
-        if (config.Personal.Table.Length <= config.MaxSpeciesID)
+        if (config.Personal.Table.Length > config.MaxSpeciesID)
+            return randomizer.GetRandomSpecies(oldSpecies);
+
+        IEnumerable<int> candidates = fallback;
+        if (options.MatchBst)
         {
-            var candidates = fallback
-                .Where(species => config.Personal.Table[species].Types.Contains(type))
-                .ToArray();
-            if (candidates.Length == 0)
-                return GetRandomSpecies(config, randomizer, fallback, oldSpecies);
-            var replacement = candidates[Util.Rand.Next(candidates.Length)];
-            if (candidates.Length > 1)
-                for (var attempt = 0; attempt < 32 && replacement == oldSpecies; attempt++)
-                    replacement = candidates[Util.Rand.Next(candidates.Length)];
-            return replacement;
+            var oldBst = config.Personal.Table[oldSpecies].BST;
+            var minimumBst = oldBst * 10 / 11;
+            var maximumBst = oldBst * 11 / 10;
+            var similarBst = fallback.Where(species =>
+            {
+                var bst = config.Personal.Table[species].BST;
+                return bst >= minimumBst && bst <= maximumBst;
+            }).ToArray();
+            if (similarBst.Length > 0)
+                candidates = similarBst;
         }
-        return randomizer.GetRandomSpeciesType(oldSpecies, type);
+        return PickTrainerSpecies(candidates, oldSpecies);
     }
 
-    private static Dictionary<int, int> BuildGen6TrainerThemes(GameConfig config, int typeCount, bool includeGymTrainers)
+    private static int GetTrainerRandomSpeciesType(GameConfig config, SpeciesRandomizer randomizer, int[] fallback, int oldSpecies,
+        int type, TrainerRandomizerOptions options)
+    {
+        if (oldSpecies <= 0 || oldSpecies >= config.Personal.Table.Length)
+            return oldSpecies;
+        if (config.Personal.Table.Length > config.MaxSpeciesID)
+        {
+            var preserveOriginalType = randomizer.rType;
+            randomizer.rType = config.Generation == 6;
+            try
+            {
+                return randomizer.GetRandomSpeciesType(oldSpecies, type);
+            }
+            finally
+            {
+                randomizer.rType = preserveOriginalType;
+            }
+        }
+
+        var originalTypes = config.Personal.Table[oldSpecies].Types;
+        var typeCompatibleCandidates = config.Generation == 6
+            ? fallback.Where(species => originalTypes.Any(originalType => config.Personal.Table[species].Types.Contains(originalType))).ToArray()
+            : fallback;
+        if (typeCompatibleCandidates.Length == 0)
+            typeCompatibleCandidates = fallback;
+
+        var themedCandidates = typeCompatibleCandidates
+            .Where(species => config.Personal.Table[species].Types.Contains(type))
+            .ToArray();
+        IEnumerable<int> candidates = themedCandidates.Length > 0 ? themedCandidates : typeCompatibleCandidates;
+        if (options.MatchBst)
+        {
+            var oldBst = config.Personal.Table[oldSpecies].BST;
+            var minimumBst = oldBst * 10 / 11;
+            var maximumBst = oldBst * 11 / 10;
+            var similarBst = candidates.Where(species =>
+            {
+                var bst = config.Personal.Table[species].BST;
+                return bst >= minimumBst && bst <= maximumBst;
+            }).ToArray();
+            if (similarBst.Length > 0)
+                candidates = similarBst;
+        }
+        return PickTrainerSpecies(candidates, oldSpecies);
+    }
+
+    private static int PickTrainerSpecies(IEnumerable<int> candidates, int oldSpecies)
+    {
+        var pool = candidates.ToArray();
+        if (pool.Length == 0)
+            return oldSpecies;
+        var alternatives = pool.Where(species => species != oldSpecies).ToArray();
+        var selection = alternatives.Length > 0 ? alternatives : pool;
+        return selection[Util.Rand.Next(selection.Length)];
+    }
+
+    private static Dictionary<int, int> BuildGen6TrainerThemes(GameConfig config, int typeCount, bool includeGymTrainers,
+        TrainerRandomizerOptions options, (int Species, ushort[] Items)[] megaOptions)
     {
         var map = new Dictionary<int, int>();
+        var groupTypes = new Dictionary<string, int>(StringComparer.Ordinal);
         var groups = config.ORAS ? OrasTrainerThemeGroups : XyTrainerThemeGroups;
         if (includeGymTrainers)
             groups = [.. groups, .. (config.ORAS ? OrasGymTrainerThemeGroups : XyGymTrainerThemeGroups)];
+        var megaTypes = options.EnsureStoryMegaEvolutions
+            ? megaOptions
+                .Where(option => option.Species > 0 && option.Species < config.Personal.Table.Length
+                    && IsTrainerSpeciesGenerationAllowed(option.Species, config.Generation, options))
+                .SelectMany(option => config.Personal.Table[option.Species].Types)
+                .Where(type => type >= 0 && type < typeCount)
+                .Distinct()
+                .ToArray()
+            : Array.Empty<int>();
+        var gymEliteGroups = groups
+            .Select(group => group.Name)
+            .Where(IsGen6GymEliteThemeName)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var availableGymEliteTypes = options.EnsureStoryMegaEvolutions
+            ? megaTypes.ToList()
+            : Enumerable.Range(0, typeCount).ToList();
+        if (availableGymEliteTypes.Count < gymEliteGroups.Length)
+        {
+            throw new WorkspaceException(
+                $"Hay {availableGymEliteTypes.Count} tipo(s) elegible(s), pero se necesitan {gymEliteGroups.Length} distintos para conservar temas únicos en gimnasios y Alto Mando.");
+        }
+
         foreach (var (name, ids) in groups)
         {
-            var type = Util.Rand.Next(typeCount);
+            if (!groupTypes.TryGetValue(name, out var type))
+            {
+                if (IsGen6GymEliteThemeName(name))
+                {
+                    var poolIndex = Util.Rand.Next(availableGymEliteTypes.Count);
+                    type = availableGymEliteTypes[poolIndex];
+                    availableGymEliteTypes.RemoveAt(poolIndex);
+                }
+                else if (options.EnsureStoryMegaEvolutions && ids.Any(id => IsStoryMegaTrainer(config, id)))
+                {
+                    if (megaTypes.Length == 0)
+                        throw new WorkspaceException("No hay tipos con Mega-Evoluciones elegibles para los equipos de historia seleccionados.");
+                    type = megaTypes[Util.Rand.Next(megaTypes.Length)];
+                }
+                else
+                {
+                    type = Util.Rand.Next(typeCount);
+                }
+                groupTypes.Add(name, type);
+            }
             foreach (var id in ids)
                 map[id] = type;
         }
         return map;
     }
 
-    private static int GetGen6TrainerTheme(IReadOnlyDictionary<int, int> themes, int trainerIndex, int typeCount) =>
-        themes.TryGetValue(trainerIndex, out var type) ? type : Util.Rand.Next(typeCount);
+    private static int? GetGen6TrainerTheme(IReadOnlyDictionary<int, int> themes, int trainerIndex, int typeCount,
+        GameConfig config, bool gymEliteOnly, bool includeGymTrainers)
+    {
+        if (gymEliteOnly && !IsGen6GymEliteTrainer(config, trainerIndex))
+            return null;
+        return themes.TryGetValue(trainerIndex, out var type) ? type : Util.Rand.Next(typeCount);
+    }
+
+    private static bool IsGen6GymEliteTrainer(GameConfig config, int trainerIndex)
+    {
+        var groups = config.ORAS ? OrasTrainerThemeGroups : XyTrainerThemeGroups;
+        return groups.Any(group => IsGen6GymEliteThemeName(group.Name) && group.IDs.Contains(trainerIndex));
+    }
+
+    private static bool IsGen6GymEliteThemeName(string name) =>
+        name.StartsWith("GYM", StringComparison.Ordinal)
+        || name.StartsWith("ELITE", StringComparison.Ordinal)
+        || name == "CHAMPION";
 
     private static readonly (string Name, int[] IDs)[] XyTrainerThemeGroups =
     [
@@ -832,27 +1223,28 @@ public static class RandomizerService
         ("FLAREBOSS", [303, 525, 526]),
         ("FLARE1", [175, 344]), ("FLARE2", [350, 351]), ("FLARE3", [348, 349]),
         ("FLARE4", [346, 347]), ("FLARE5", [345]),
-        ("GYM1", [6, 254, 262]), ("GYM2", [76, 261, 279]), ("GYM3", [21, 255, 263, 613]),
+        ("GYM1", [6, 254, 262]), ("GYM2", [76, 261, 279]), ("GYM3", [21, 255, 263, 613, 188]),
         ("GYM4", [22, 256, 264]), ("GYM5", [23, 257, 265]), ("GYM6", [24, 258, 266]),
         ("GYM7", [25, 259, 267]), ("GYM8", [26, 260, 268]),
         ("ELITE1", [269, 273, 507]), ("ELITE2", [271, 275]), ("ELITE3", [187, 272]),
         ("ELITE4", [270, 274]), ("CHAMPION", [276, 277]),
         ("SHAUNA", [321, 322, 323, 137, 138, 139]), ("TREVOR", [325, 439]),
         ("TIERNO", [324, 438, 573]), ("PROFESSOR", [327, 328]), ("ESSENTIA", [503, 504, 505, 511, 512, 513, 514, 515]),
+        ("AZ", [602]), ("CHATELAINE1", [559]), ("CHATELAINE2", [560]), ("CHATELAINE3", [561]), ("CHATELAINE4", [562]),
     ];
 
     private static readonly (string Name, int[] IDs)[] OrasTrainerThemeGroups =
     [
-        ("RIVAL1", [289, 292, 295, 298, 527, 530, 674, 677, 699, 906]),
-        ("RIVAL2", [290, 293, 296, 299, 528, 531, 675, 678, 700, 907]),
-        ("RIVAL3", [291, 294, 297, 300, 529, 532, 676, 679, 701, 908]),
+        ("RIVAL1", [1, 4, 289, 292, 295, 298, 527, 530, 674, 677, 699, 906]),
+        ("RIVAL2", [2, 5, 290, 293, 296, 299, 528, 531, 675, 678, 700, 907]),
+        ("RIVAL3", [3, 6, 291, 294, 297, 300, 529, 532, 676, 679, 701, 908]),
         ("AQUA1", [178, 231, 266]), ("AQUA2", [683, 684, 685, 686, 687]), ("AQUA3", [688, 689, 690]),
         ("MAGMA1", [235, 236, 271]), ("MAGMA2", [694, 695, 696, 697, 698]), ("MAGMA3", [691, 692, 693]),
         ("GYM1", [561]), ("GYM2", [563]), ("GYM3", [567]), ("GYM4", [569]), ("GYM5", [570]),
         ("GYM6", [571]), ("GYM7", [552]), ("GYM8", [572, 943]),
         ("ELITE1", [553, 909]), ("ELITE2", [554, 910]), ("ELITE3", [555, 911]),
         ("ELITE4", [556, 912]), ("CHAMPION", [557, 680, 913, 942]),
-        ("WALLY", [518, 583, 944, 945, 946, 947]), ("RIVAL_EXTRA", [1, 4, 2, 5, 3, 6]),
+        ("WALLY", [518, 583, 944, 945, 946, 947]), ("LOREKEEPER", [713, 898]), ("EXPERT", [856, 857]),
     ];
 
     private static readonly (string Name, int[] IDs)[] XyGymTrainerThemeGroups =
@@ -879,10 +1271,10 @@ public static class RandomizerService
     private static int[] GetFallbackMoves(GameConfig config) =>
         Enumerable.Range(1, Math.Max(0, Math.Min(config.Moves.Length - 1, Catalogs.MoveCount(config) - 1))).ToArray();
 
-    private static int[] GetRandomTrainerMoves(GameConfig config, MoveRandomizer? randomizer, int[] fallback, int species, int form)
+    private static int[] GetRandomTrainerMoves(GameConfig config, MoveRandomizer? randomizer, int[] fallback, int species)
     {
         if (randomizer is not null)
-            return randomizer.GetRandomMoveset(config.Personal.GetFormIndex(species, form), 4);
+            return randomizer.GetRandomMoveset(species, 4);
         if (fallback.Length == 0)
             return [0, 0, 0, 0];
         if (fallback.Length >= 4)

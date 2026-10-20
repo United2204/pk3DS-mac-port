@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>OWSE / Scripts · pk3DS Mac</title>
-    <link rel="stylesheet" href="app.css">
+    <link rel="stylesheet" href="app.css?v=7">
   </head>
   <body>
     <header class="site-header">
@@ -15,7 +15,7 @@
       <div class="intro editor-intro">
         <p class="eyebrow">INSPECTOR ROMFS · GEN. VI/VII</p>
         <h1>OWSE / Scripts del mundo</h1>
-        <p>Revisa los scripts <code>ZO</code> de Gen. VI y <code>ZS</code>/<code>ZI</code> de Gen. VII dentro de <code>encdata</code>. Podés editar instrucciones de script en ambas generaciones, entidades y propiedades de movimiento en Gen. VI, y consultar o exportar las posiciones <code>EP</code>, <code>EM</code> principal, <code>EI</code> tipo 10, <code>PR</code> tipos 203/204, <code>EB</code>, <code>ES</code>, <code>EA</code> tipos 5/6 y <code>ET</code> tipos 7/9 confirmadas de Gen. VII junto al inventario estructural <code>ED</code>. El dump original nunca se modifica.</p>
+        <p>Revisa los scripts <code>ZO</code> de Gen. VI y <code>ZS</code>/<code>ZI</code> de Gen. VII dentro de <code>encdata</code>. Podés editar instrucciones de script en ambas generaciones, entidades y propiedades de movimiento en Gen. VI, y consultar o exportar las posiciones <code>EP</code>, <code>EM</code> principal, <code>EI</code> tipo 10, <code>PR</code> tipos 203/204/364, <code>EB</code> tipos 2/11, <code>EG</code> tipo 8, <code>ES</code> tipo 4, <code>EA</code> tipos 5/6 y <code>ET</code> tipos 7/9 confirmadas de Gen. VII junto al inventario estructural <code>ED</code>. El dump original nunca se modifica.</p>
       </div>
       <section class="panel">
         <div class="path-input">
@@ -63,8 +63,8 @@
         <div id="gen7-entity-fields" class="owse-zone-fields is-hidden">
           <div class="ready-row">
             <div>
-              <h3>Posiciones EP, EM, EI, PR, EB, ES, EA y ET Gen. VII</h3>
-              <p class="muted">Las posiciones se leen automáticamente al abrir la zona. Podés volver a leerlas cuando quieras. Solo se editan los vectores X/Y/Z confirmados de EP, del EM principal, de EI tipo 10, de PR tipos 203/204, de EB tipo 2, de ES tipo 4, de EA tipo 5/6 y de ET tipo 7/9; los demás campos de <code>ED</code> se conservan.</p>
+              <h3>Posiciones EP, EM, EI, PR, EB, EG, ES, EA y ET Gen. VII</h3>
+              <p class="muted">Las posiciones se leen automáticamente al abrir la zona. Podés volver a leerlas cuando quieras. Solo se editan los vectores X/Y/Z confirmados de EP, EM tipos 1/3, EI tipo 10, PR tipos 203/204/364, EB tipos 2/11, EG tipo 8, ES tipo 4, EA tipos 5/6 y ET tipos 7/9; los demás campos de <code>ED</code> se conservan.</p>
             </div>
             <div class="owse-actions">
               <button id="load-gen7-entities" class="secondary-button" type="button" onclick="loadGen7Entities()" disabled>Leer posiciones</button>
@@ -72,26 +72,31 @@
               <button id="export-gen7-raw-entities" class="secondary-button" type="button" onclick="exportGen7RawEntities()" disabled>Exportar ED crudo →</button>
             </div>
           </div>
-          <div id="gen7-entity-summary" class="owse-meta"><span class="muted">Todavía no hay posiciones EP/EM/EI/PR/EB/ES/EA/ET abiertas.</span></div>
-          <p class="muted">El inventario ED también muestra el bloque, tamaño, cabeceras <code>count</code>/<code>kind</code>, perfil estructural detectado y los primeros bytes de cada subentrada. Las variantes no confirmadas —por ejemplo EM tipo 3— se muestran como solo lectura con el motivo y se conservan intactas al exportar. <strong>Exportar ED crudo</strong> guarda el contenedor completo, sus bloques, subentradas y un manifiesto para inspección externa.</p>
+          <div id="gen7-entity-summary" class="owse-meta"><span class="muted">Todavía no hay posiciones EP/EM/EI/PR/EB/EG/ES/EA/ET abiertas.</span></div>
+          <p class="muted">El inventario ED también muestra el bloque, tamaño, cabeceras <code>count</code>/<code>kind</code>, perfil estructural detectado y los primeros bytes de cada subentrada. EM tipo 3 permite editar solo XYZ; ES tipo 0 muestra sus descriptores, pero conserva el payload como datos crudos. Las demás variantes sin perfil confirmado quedan en solo lectura. <strong>Exportar ED crudo</strong> guarda el contenedor completo, sus bloques, subentradas y un manifiesto para inspección externa.</p>
           <div id="gen7-entity-table" class="owse-entities">
             <h3>Posiciones EP</h3>
             <div id="gen7-ep-table"></div>
-            <h3>Posiciones EM principales</h3>
-            <p class="muted">El segundo esquema EM puede variar entre zonas y permanece sin edición.</p>
+            <h3>Posiciones EM</h3>
+            <p class="muted">EM tipo 1 usa stride <code>0x78</code> y EM tipo 3 stride <code>0x58</code>. Solo se editan sus vectores XYZ; los campos restantes y la cola variable se conservan.</p>
             <div id="gen7-em-table"></div>
             <h3>Posiciones EI tipo 10</h3>
             <p class="muted">EI tipo 10 usa registros de stride confirmado <code>0x5C</code>, con la posición en <code>0x08</code>; los campos posteriores se conservan.</p>
             <div id="gen7-ei-table"></div>
-            <h3>Posiciones PR tipos 203/204</h3>
-            <p class="muted">Solo se edita el vector XYZ fijo en <code>0x08</code>; los payloads variables posteriores se conservan.</p>
+            <h3>Posiciones PR tipos 203/204/364</h3>
+            <p class="muted">PR tipos 203/204 tienen un vector XYZ en <code>0x08</code>. El perfil retail confirmado para PR tipo 364 contiene una entrada de <code>0x21C</code> bytes y dos registros de <code>0x34</code>, marcados 364/365, con vectores en <code>0x08</code> y <code>0x3C</code>. Cada registro valida sus tres offsets; se escriben únicamente esos XYZ y se conserva la cola anidada.</p>
             <div id="gen7-pr-table"></div>
             <h3>Posiciones EB primarias</h3>
-            <p class="muted">Solo se editan los registros EB tipo 2 con stride confirmado. Los datos posteriores a cada registro se conservan.</p>
+            <p class="muted">Se editan EB tipo 2 con stride <code>0x3C</code> y EB tipo 11 con longitud exacta <code>4 + count × 0x44</code> y marcador 11 en cada registro. Solo cambian sus vectores XYZ; los demás bytes se conservan.</p>
             <div id="gen7-eb-table"></div>
+            <h3>Posiciones EG tipo 8</h3>
+            <p class="muted">EG tipo 8 usa registros de <code>0x4C</code> bytes con marcador 8 y XYZ en <code>0x08 + index × 0x4C</code>. Se editan solo las coordenadas; la cola variable se conserva íntegra.</p>
+            <div id="gen7-eg-table"></div>
             <h3>Posiciones ES primarias</h3>
-            <p class="muted">Solo se editan los registros ES tipo 4 que completan el stride confirmado. Las variantes cortas permanecen en diagnóstico.</p>
+            <p class="muted">Se editan registros ES tipo 4 completos. ES tipo 0 expone sus descriptores de <code>0x10</code> bytes, offsets absolutos, límites de payload, tipo, cantidad de puntos y palabras crudas. Los tipos 0–3 muestran sólo las longitudes y conteos estructurales confirmados; no se modifican payloads ni se atribuye significado de juego a esos campos.</p>
             <div id="gen7-es-table"></div>
+            <h4>Descriptores ES tipo 0 (solo lectura)</h4>
+            <div id="gen7-es-kind0-details" class="owse-es-kind0-list"><span class="muted">Los detalles aparecen al leer una zona con entradas ES tipo 0.</span></div>
             <h3>Posiciones EA tipos 5/6</h3>
             <p class="muted">Se editan los registros EA tipo 5 y el vector confirmado de EA tipo 6; las referencias y subregistros adicionales se conservan.</p>
             <div id="gen7-ea-table"></div>
@@ -103,17 +108,48 @@
           </div>
           <p id="gen7-entity-result" class="status neutral"></p>
         </div>
+        <section id="gen7-map-resource-fields" class="owse-card owse-card-wide is-hidden">
+          <div class="ready-row">
+            <div>
+              <h3>Recursos de mapa Gen. VII</h3>
+              <p class="muted">En USUM, inspecciona cinco bloques candidatos del mundo actual y sus subarchivos Mini con offsets validados. Se muestran firmas, tamaños y cadenas ASCII; los formatos de modelo, colisión y entorno siguen opacos. La exportación conserva cada contenedor y subarchivo crudo con un manifiesto.</p>
+            </div>
+            <div class="owse-actions">
+              <button id="load-gen7-map-resources" class="secondary-button" type="button" disabled>Inspeccionar recursos</button>
+              <button id="export-gen7-map-resources" class="secondary-button" type="button" disabled>Exportar recursos y subarchivos →</button>
+            </div>
+          </div>
+          <div id="gen7-map-resource-summary" class="owse-entities"><span class="muted">Todavía no se inspeccionan los recursos de este mundo.</span></div>
+          <p id="gen7-map-resource-result" class="status neutral"></p>
+        </section>
+        <section id="gen7-script-export" class="owse-card owse-card-wide is-hidden">
+          <div class="ready-row">
+            <div>
+              <h2>Exportación masiva de scripts Gen. VII</h2>
+              <p class="muted">Guarda un informe JSON por cada script <code>ZS</code>/<code>ZI</code>, con cabecera, instrucciones, líneas interpretadas y bytes hexadecimales. Los grupos dañados se anotan en el manifiesto.</p>
+            </div>
+            <button id="export-all-scripts-gen7" class="secondary-button" type="button" disabled>Exportar scripts Gen. VII</button>
+          </div>
+          <p id="gen7-script-batch-result" class="status neutral"></p>
+        </section>
         <section id="gen6-editor" class="owse-card owse-card-wide is-hidden">
           <div class="ready-row">
             <div>
               <h2>Entidades de zona Gen. VI</h2>
-              <p class="muted">Edita posiciones, destinos y referencias sin cambiar la cantidad de registros ni tocar bytes no interpretados.</p>
+              <p class="muted">Edita posiciones, destinos y referencias sin cambiar la cantidad de registros ni tocar bytes no interpretados. También podés exportar zonas y entidades, mapas PNG y scripts Gen. VI con sus informes y diagnósticos.</p>
             </div>
             <div class="owse-actions">
               <button id="load-zone" class="secondary-button" type="button">Abrir zona editable</button>
               <button id="export-zone" class="primary" type="button" disabled>Exportar parche →</button>
+              <button id="export-all-zones" class="secondary-button" type="button" disabled>Exportar zonas y entidades</button>
+              <button id="export-all-maps" class="secondary-button" type="button" disabled>Exportar todos los mapas</button>
+              <button id="export-all-scripts" class="secondary-button" type="button" disabled>Exportar scripts Gen. VI</button>
+              <label class="owse-map-overlay-toggle"><input id="map-entity-overlay" type="checkbox" checked disabled> Superponer entidades en mapas</label>
             </div>
           </div>
+          <p id="zone-batch-result" class="status neutral"></p>
+          <p id="map-batch-result" class="status neutral"></p>
+          <p id="script-batch-result" class="status neutral"></p>
           <div id="map-fields" class="owse-map-fields is-hidden">
             <div class="ready-row">
               <div>
@@ -142,9 +178,16 @@
               <div class="ready-row">
                 <div>
                   <h3>Vista previa visual</h3>
-                  <p class="muted">Se arma con las entradas GR referenciadas por la matriz MM. Es una vista de referencia; las colisiones y entidades siguen editándose en sus tablas.</p>
+                  <p class="muted">Se arma con las entradas GR referenciadas por la matriz MM. La capa de entidades es solo visual; las entidades siguen editándose en sus tablas.</p>
                 </div>
                 <span id="map-preview-meta" class="muted"></span>
+              </div>
+              <div class="owse-map-legend" aria-label="Leyenda de entidades del mapa">
+                <span><i class="map-legend-furniture"></i>Muebles</span>
+                <span><i class="map-legend-npc"></i>NPC</span>
+                <span><i class="map-legend-warp"></i>Warps</span>
+                <span><i class="map-legend-trigger"></i>Triggers</span>
+                <span><i class="map-legend-fly"></i>FlyTo</span>
               </div>
               <img id="map-preview" alt="Vista previa del mapa Gen. VI" />
               <p id="map-preview-result" class="status neutral"></p>
@@ -181,6 +224,6 @@
       </section>
     </main>
     <footer>pk3DS Mac trabaja de forma local.</footer>
-  <script src="owse.js?v=28"></script>
+  <script src="owse.js?v=36"></script>
   </body>
 </html>

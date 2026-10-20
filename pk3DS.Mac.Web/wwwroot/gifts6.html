@@ -1,1 +1,82 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gift Pokémon · pk3DS Mac</title><link rel="stylesheet" href="app.css"></head><body><header class="site-header"><a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a></header><main class="editor-main"><div class="intro editor-intro"><p class="eyebrow">EDITOR CRO · GEN. VI</p><h1>Gift Pokémon</h1><p>Edita los regalos recibidos durante la aventura, conservando los campos específicos de cada juego.</p></div><section class="panel"><div class="path-input"><span>⌁</span><input id="workspace" placeholder="Carpeta completa del juego o RomFS"><button id="browse" class="secondary">Examinar…</button><button id="load">Cargar</button></div><p id="status" class="status neutral">Este editor funciona con X/Y y Rubí Omega / Zafiro Alfa.</p></section><section id="editor" class="panel is-disabled"><div class="text-toolbar gift-toolbar"><label class="field">Entrada<select id="entry" disabled></select></label><button id="open" class="secondary-button" disabled>Abrir regalo</button></div><p id="warning" class="status neutral"></p><div id="fields" class="gift-fields"></div></section><section class="panel output-panel text-export"><div class="ready-row"><div><b id="summary">Sin cambios para exportar</b><small>La salida contiene el parche RomFS de DllField.cro.</small></div><button id="export" class="primary" disabled>Exportar →</button></div><p id="result" class="status neutral"></p></section></main><footer>pk3DS Mac trabaja de forma local.</footer><script src="gifts6.js?v=3"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Gift Pokémon · pk3DS Mac</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html"><span class="brand-mark">pk</span>pk3DS <b>Mac</b></a>
+  </header>
+  <main class="editor-main">
+    <div class="intro editor-intro">
+      <p class="eyebrow">EDITOR CRO · GEN. VI</p>
+      <h1>Gift Pokémon</h1>
+      <p>Edita los regalos recibidos durante la aventura, o randomiza toda la tabla conservando los campos específicos de cada juego.</p></div><p class="status warning" role="note">Editar CRO puede bloquear el juego en consola si no se parchea el módulo RO; se requiere firmware personalizado como Luma3DS.</p>
+    <section class="panel">
+      <div class="path-input">
+        <span>⌁</span>
+        <input id="workspace" placeholder="Carpeta completa del juego o RomFS">
+        <button id="browse" class="secondary">Examinar…</button>
+        <button id="load">Cargar</button>
+      </div>
+      <p id="status" class="status neutral">Este editor funciona con X/Y y Rubí Omega / Zafiro Alfa.</p>
+    </section>
+    <section id="editor" class="panel is-disabled">
+      <div class="text-toolbar gift-toolbar">
+        <label class="field">Entrada<select id="entry" disabled></select></label>
+        <button id="open" class="secondary-button" disabled>Abrir regalo</button>
+      </div>
+      <p id="warning" class="status neutral"></p>
+      <div id="fields" class="gift-fields"></div>
+    </section>
+    <section id="randomizer" class="panel is-disabled" hidden aria-labelledby="randomizer-title">
+      <h2 id="randomizer-title">Randomizar todos los regalos</h2>
+      <p>Genera un único parche LayeredFS de <code>DllField.cro</code> con las opciones de pk3DS para X/Y y OR/AS. El juego original no se modifica.</p>
+      <fieldset>
+        <legend>Pool por generación</legend>
+        <label><input id="rand-g1" type="checkbox" checked> Generación I</label>
+        <label><input id="rand-g2" type="checkbox" checked> Generación II</label>
+        <label><input id="rand-g3" type="checkbox" checked> Generación III</label>
+        <label><input id="rand-g4" type="checkbox" checked> Generación IV</label>
+        <label><input id="rand-g5" type="checkbox" checked> Generación V</label>
+        <label><input id="rand-g6" type="checkbox" checked> Generación VI</label>
+      </fieldset>
+      <fieldset>
+        <legend>Especies y Megas</legend>
+        <label><input id="rand-legendary" type="checkbox" checked> Incluir legendarios del juego</label>
+        <label><input id="rand-mythical" type="checkbox" checked> Incluir míticos y singulares</label>
+        <label><input id="rand-bst" type="checkbox"> Mantener un BST parecido</label>
+        <label><input id="rand-replace-mega" type="checkbox"> Reemplazar regalos con Megapiedra</label>
+        <label><input id="rand-mega-forms" type="checkbox"> Permitir formas Mega aleatorias</label>
+      </fieldset>
+      <fieldset>
+        <legend>Campos del regalo</legend>
+        <label><input id="rand-items" type="checkbox" checked> Randomizar objetos</label>
+        <label><input id="rand-levels" type="checkbox" checked> Multiplicar niveles por <input id="rand-level-multiplier" type="number" min="0" max="3" step="0.01" value="1.00" inputmode="decimal" aria-label="Multiplicador de nivel"></label>
+        <label><input id="rand-shiny" type="checkbox"> Quitar bloqueos shiny</label>
+        <label><input id="rand-abilities" type="checkbox"> Randomizar habilidades (1, 2 u oculta)</label>
+        <label><input id="rand-evolution" type="checkbox"> Forzar evolución final desde el nivel <input id="rand-evolution-level" type="number" min="1" max="100" step="1" value="50" aria-label="Nivel para forzar evolución final"></label>
+      </fieldset>
+      <div class="field">
+        <label for="rand-seed">Semilla opcional (entero con signo de 32 bits)</label>
+        <input id="rand-seed" type="number" min="-2147483648" max="2147483647" step="1" inputmode="numeric" aria-describedby="rand-seed-help">
+        <small id="rand-seed-help">La misma semilla y las mismas opciones producen las mismas selecciones.</small>
+      </div>
+      <button id="randomize-run" class="primary" disabled>Randomizar y exportar todos</button>
+      <p id="randomize-result" class="status neutral" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel output-panel text-export">
+      <div class="ready-row">
+        <div><b id="summary">Sin cambios para exportar</b><small>La salida contiene el parche RomFS de DllField.cro.</small></div>
+        <button id="export" class="primary" disabled>Exportar →</button>
+      </div>
+      <p id="result" class="status neutral"></p>
+    </section>
+  </main>
+  <footer>pk3DS Mac trabaja de forma local.</footer>
+  <script src="gifts6.js?v=4"></script>
+</body>
+</html>
