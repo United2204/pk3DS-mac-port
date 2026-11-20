@@ -101,13 +101,18 @@ public sealed record GameWorkspace(
     internal static string? FindCodeFile(string exeFsPath)
     {
         var codeFiles = Directory.EnumerateFiles(exeFsPath, "*", SearchOption.TopDirectoryOnly)
-            .Where(path => string.Equals(Path.GetFileNameWithoutExtension(path), "code", StringComparison.OrdinalIgnoreCase))
+            .Where(path =>
+            {
+                var fileName = Path.GetFileNameWithoutExtension(path);
+                return string.Equals(fileName, "code", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(fileName, ".code", StringComparison.OrdinalIgnoreCase);
+            })
             .ToArray();
         return codeFiles.Length switch
         {
             0 => null,
             1 => codeFiles[0],
-            _ => throw new WorkspaceException("El ExeFS contiene más de un archivo code.bin; quitá la ambigüedad antes de continuar."),
+            _ => throw new WorkspaceException("El ExeFS contiene más de un archivo de código (code.bin / .code.bin); quitá la ambigüedad antes de continuar."),
         };
     }
 

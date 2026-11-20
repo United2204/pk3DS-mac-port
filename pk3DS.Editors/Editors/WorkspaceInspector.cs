@@ -33,7 +33,7 @@ public static class WorkspaceInspector
 
     private static ModuleAvailability[] GetModuleAvailability(GameWorkspace workspace, bool codeReady) =>
     [
-        new("smdh", "Icono SMDH", "ExeFS", workspace.ExeFsPath is not null,
+        new("smdh", "Icono SMDH", "ExeFS", HasSmdh(workspace),
             "ExeFS; importá icon.bin si falta"),
         new("personal", "Personal Stats", "RomFS", HasGarc(workspace, "personal"), "GARC personal"),
         new("evolutions", "Evolutions", "RomFS", HasGarc(workspace, "evolution"), "GARC evolution"),

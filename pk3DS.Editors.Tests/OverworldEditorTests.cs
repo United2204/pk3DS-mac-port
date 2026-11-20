@@ -199,6 +199,46 @@ public sealed class OverworldEditorTests : IDisposable
     }
 
     [Fact]
+    public void Gen7EntityReadAndExportHandlesMultipleEmBlocks()
+    {
+        var config = EditorSession.OpenReadOnly(_workspace.RomFs, language: null);
+        var garc = config.Config.GetlzGARCData("encdata");
+        var blocks = Mini.UnpackMini(garc[0], "ED");
+        var type1Entry = Mini.UnpackMini(blocks[1], "EM")[0].ToArray();
+        var type3Entry = BuildGen7EmType3Entry(30f);
+        var type3BlockIndex = blocks.Length;
+        garc[0] = Mini.PackMini([.. blocks, Mini.PackMini([type3Entry], "EM")], "ED");
+        garc.Save();
+
+        var original = OverworldEditor.GetGen7Entities(new OverworldGen7EntityRequest(_workspace.RomFs, 0));
+        var type1Position = Assert.Single(original.EmPositions, position => position.BlockEntry == 1);
+        var type3Position = Assert.Single(original.EmPositions, position => position.BlockEntry == type3BlockIndex);
+        Assert.Equal(30f, type3Position.X);
+        var expectedX = type3Position.X + 1f;
+        var changedPositions = original.EmPositions
+            .Select(position => position.BlockEntry == type3BlockIndex ? position with { X = expectedX } : position)
+            .ToArray();
+
+        var result = OverworldEditor.ExportGen7Entities(new OverworldGen7EntityExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId, 0,
+            Positions: null, EmPositions: changedPositions));
+
+        Assert.Single(result.ChangedFiles);
+        Assert.Equal("a/0/8/2", result.ChangedFiles[0]);
+        ExportAssertions.AssertContentDiffersFromSource(result, _workspace);
+
+        var exportedGarc = new GARC.MemGARC(ExportAssertions.ReadGarcArchive(result, "a/0/8/2"));
+        var exportedEdBlocks = Mini.UnpackMini(exportedGarc.Files[0], "ED");
+        var exportedType1Entry = Mini.UnpackMini(exportedEdBlocks[type1Position.BlockEntry], "EM")[0];
+        var exportedType3Entry = Mini.UnpackMini(exportedEdBlocks[type3BlockIndex], "EM")[0];
+        Assert.Equal(type1Entry, exportedType1Entry);
+
+        var expectedType3Entry = type3Entry.ToArray();
+        BitConverter.GetBytes(expectedX).CopyTo(expectedType3Entry, 0x08);
+        Assert.Equal(expectedType3Entry, exportedType3Entry);
+    }
+
+    [Fact]
     public void Gen7EiKind10ReadsAndExportsItsFixedPositionRecords()
     {
         var config = EditorSession.OpenReadOnly(_workspace.RomFs, language: null);
@@ -461,6 +501,19 @@ public sealed class OverworldEditorTests : IDisposable
         var entry = new byte[bytes];
         BitConverter.GetBytes(count).CopyTo(entry, 0);
         BitConverter.GetBytes(kind).CopyTo(entry, 4);
+        return entry;
+    }
+
+    private static byte[] BuildGen7EmType3Entry(float x)
+    {
+        const int recordTableEnd = sizeof(int) + 0x58;
+        var entry = Enumerable.Repeat((byte)0xA5, recordTableEnd).ToArray();
+        BitConverter.GetBytes(1).CopyTo(entry, 0);
+        BitConverter.GetBytes(3).CopyTo(entry, sizeof(int));
+        BitConverter.GetBytes(x).CopyTo(entry, 0x08);
+        BitConverter.GetBytes(300f).CopyTo(entry, 0x0C);
+        BitConverter.GetBytes(400f).CopyTo(entry, 0x10);
+        BitConverter.GetBytes(recordTableEnd).CopyTo(entry, sizeof(int) + 0x54);
         return entry;
     }
 
@@ -866,7 +919,8 @@ public sealed class OverworldEditorTests : IDisposable
         matrixGarc.Files = matrixFiles;
         File.WriteAllBytes(matrixPath, matrixGarc.Save());
 
-        var response = OverworldEditor.GetGen6Map(new OverworldGen6MapRequest(_xyWorkspace.RomFs, 0));
+        var response = OverworldEditor.GetGen6Map(new OverworldGen6MapRequest(
+            _xyWorkspace.RomFs, 0, IncludeEntityOverlay: false));
 
         Assert.NotNull(response.Preview);
         Assert.NotNull(response.Preview!.PngBase64);

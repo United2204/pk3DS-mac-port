@@ -2040,6 +2040,7 @@ public sealed class ProjectToolsTests : IDisposable
         BitConverter.GetBytes(0x4843434Eu).CopyTo(header, 0x100);
         BitConverter.GetBytes((uint)(totalLength / 0x200)).CopyTo(header, 0x104);
         BitConverter.GetBytes(Convert.ToUInt64(SyntheticWorkspace.TitleId, 16)).CopyTo(header, 0x108);
+        header[0x18F] = 0x05; // FixedCrypto + NoCrypto, matching CTRUtil.SetNCCH for plain fixtures.
         BitConverter.GetBytes(0x400u).CopyTo(header, 0x180);
         BitConverter.GetBytes((uint)(exeFsOffset / 0x200)).CopyTo(header, 0x1A0);
         BitConverter.GetBytes((uint)(exeFs.Length / 0x200)).CopyTo(header, 0x1A4);

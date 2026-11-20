@@ -527,7 +527,7 @@ function renderGen7Entities(data) {
     ['Bloques ED', blocks.length ? blocks.join(' · ') : 'sin bloques interpretables'],
   ]);
   renderGen7PositionTable($('gen7-ep-table'), data.positions, 'EP');
-  renderGen7PositionTable($('gen7-em-table'), emPositions, 'EM');
+  renderGen7PositionTable($('gen7-em-table'), emPositions, 'EM', true);
   renderGen7PositionTable($('gen7-ei-table'), eiPositions, 'EI', true);
   renderGen7PositionTable($('gen7-pr-table'), prPositions, 'PR', true);
   renderGen7PositionTable($('gen7-eb-table'), ebPositions, 'EB', true, true);

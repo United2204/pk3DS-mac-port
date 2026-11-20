@@ -1,5 +1,7 @@
 using System.IO.Compression;
 using pk3DS.Core;
+using pk3DS.Core.CTR;
+using pk3DS.Core.Structures;
 using pk3DS.Editors;
 
 namespace pk3DS.Editors.Tests;
@@ -46,6 +48,24 @@ public class EditorEndToEndTests : IDisposable
         Assert.True(response.CodeBinReady);
         Assert.False(response.CodeBinCompressed);
         Assert.Contains(response.Diagnostics, diagnostic => diagnostic.Code == "code-bin" && diagnostic.Severity == "success");
+    }
+
+    [Fact]
+    public void HiddenDotCodeEntryIsRecognisedAsExeFsCode()
+    {
+        var codePath = Path.Combine(_workspace.ExeFs, "code.bin");
+        var hiddenCodePath = Path.Combine(_workspace.ExeFs, ".code.bin");
+        File.Move(codePath, hiddenCodePath);
+
+        var response = WorkspaceInspector.Inspect(new WorkspaceRequest(_workspace.Root));
+
+        Assert.Equal(Path.GetFullPath(_workspace.ExeFs), response.ExeFsPath);
+        Assert.Equal(Path.GetFullPath(hiddenCodePath), response.CodeBinPath);
+        Assert.True(response.CodeBinReady);
+        Assert.True(response.SmdhReady);
+        Assert.True(response.Modules.Single(module => module.Id == "tm").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "shiny-rate").SourceAvailable);
+        Assert.True(response.Modules.Single(module => module.Id == "smdh").SourceAvailable);
     }
 
     [Fact]
@@ -210,7 +230,44 @@ public class EditorEndToEndTests : IDisposable
     {
         var response = LearnsetEditor.GetCatalog(new LearnsetCatalogRequest(_workspace.RomFs));
 
-        Assert.Equal(_workspace.SpeciesCount, response.Species.Length);
+        // Species id 0 is the placeholder entry and is rejected by LearnsetEditor.RequireSpecies.
+        Assert.Equal(_workspace.SpeciesCount - 1, response.Species.Length);
+        Assert.DoesNotContain(response.Species, species => species.Id == 0);
+    }
+
+    [Fact]
+    public void PlaceholderSpeciesCannotBeOpenedOrEdited()
+    {
+        Assert.Throws<WorkspaceException>(() => LearnsetEditor.GetTable(
+            new LearnsetTableRequest(_workspace.RomFs, SpeciesIndex: 0)));
+        Assert.Throws<WorkspaceException>(() => EggMoveEditor.GetTable(
+            new EggMoveTableRequest(_workspace.RomFs, SpeciesIndex: 0)));
+
+        Assert.Throws<WorkspaceException>(() => LearnsetEditor.Export(new LearnsetExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId,
+            SpeciesIndex: 0, Entries: [new LearnsetEntry(1, 1)])));
+        Assert.Throws<WorkspaceException>(() => EggMoveEditor.Export(new EggMoveExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId,
+            SpeciesIndex: 0, Moves: [1])));
+    }
+
+    [Fact]
+    public void MetronomeLeavesThePlaceholderLearnsetUntouched()
+    {
+        const string levelupPath = "a/2/1/4";
+        var sourceArchive = new GARC.MemGARC(File.ReadAllBytes(
+            Path.Combine(_workspace.RomFs, levelupPath.Replace('/', Path.DirectorySeparatorChar))));
+        var placeholder = sourceArchive.GetFile(0);
+
+        var result = LearnsetEditor.ExportMetronome(new LearnsetMetronomeExportRequest(
+            _workspace.RomFs, _workspace.OutputDirectory, SyntheticWorkspace.TitleId));
+
+        var exportedArchive = new GARC.MemGARC(ExportAssertions.ReadGarcArchive(result, levelupPath));
+        Assert.Equal(placeholder, exportedArchive.GetFile(0));
+
+        var species = new Learnset6(exportedArchive.GetFile(1));
+        Assert.Equal([LearnsetEditor.MetronomeMoveId], species.Moves);
+        Assert.Equal([1], species.Levels);
     }
 
     [Fact]
@@ -595,6 +652,25 @@ public class EditorEndToEndTests : IDisposable
 
         Assert.True(File.Exists(result.ZipPath));
         Assert.NotEmpty(result.ChangedFiles);
+    }
+
+    [Fact]
+    public void MoveStatsMetronomeModeUsesTheWindowsVisibleMoveIndexes()
+    {
+        using var workspace = new SyntheticXyWorkspace(speciesCount: 18, moveCount: 119);
+
+        var result = RandomizerService.Randomize(new RandomizeRequest(
+            workspace.RomFs, workspace.OutputDirectory, SyntheticWorkspace.TitleId, Language: null,
+            RandomizeAbilities: false, RandomizeHeldItems: false, RandomizeLearnsets: false,
+            Moves: new MoveOptions(MetronomeMode: true)));
+
+        var moves = new GARC.MemGARC(ExportAssertions.ReadGarcArchive(result, "a/2/1/2")).Files;
+        // MoveEditor6 removes the empty entry before looping, so visible indexes 117/32 map to
+        // raw IDs 118/33: Metronome keeps 40 PP and Tackle keeps 1 PP.
+        Assert.Equal((byte)0, moves[32][5]);
+        Assert.Equal((byte)1, moves[33][5]);
+        Assert.Equal((byte)0, moves[117][5]);
+        Assert.Equal((byte)40, moves[118][5]);
     }
 
     [Fact]

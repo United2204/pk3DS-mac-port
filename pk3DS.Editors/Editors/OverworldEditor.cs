@@ -364,21 +364,13 @@ public static class OverworldEditor
                     ed[epIndex] = PackMiniPreservingEnvelope(sourceEp, entries, "EP");
                 }
 
-                var emIndex = FindMiniBlock(ed, "EM");
                 if (request.EmPositions is null)
                 {
                     // Older clients can export EP without sending the newer EM field.
                 }
-                else if (emIndex < 0)
-                {
-                    throw new WorkspaceException("La zona Gen. VII no contiene un bloque EM editable.");
-                }
                 else
                 {
-                    var sourceEm = ed[emIndex];
-                    var emEntries = ReadMini(sourceEm, "EM");
-                    ApplyGen7EmPositions(emEntries, request.EmPositions);
-                    ed[emIndex] = PackMiniPreservingEnvelope(sourceEm, emEntries, "EM");
+                    ApplyGen7EmPositions(ed, request.EmPositions);
                 }
 
                 if (request.EiPositions is not null)
@@ -2743,89 +2735,124 @@ public static class OverworldEditor
             return [];
         }
 
-        var emIndex = FindMiniBlock(blocks, "EM");
-        if (emIndex < 0)
-            return [];
-
-        byte[][] entries;
-        try
-        {
-            entries = ReadMini(blocks[emIndex], "EM");
-        }
-        catch (WorkspaceException exception)
-        {
-            diagnostics = AppendError(diagnostics, $"El bloque EM no se pudo leer: {exception.Message}");
-            return [];
-        }
-
         var positions = new List<OverworldGen7EmPositionEntry>();
-        for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
+        for (var blockEntry = 0; blockEntry < blocks.Length; blockEntry++)
         {
-            var entry = entries[containerEntry];
-            if (entry.Length < Gen7EmPositionOffset + sizeof(int))
+            var sourceEm = blocks[blockEntry];
+            if (!HasIdentifier(sourceEm, "EM"))
                 continue;
 
-            var recordCount = BitConverter.ToInt32(entry, 0);
-            var recordKind = BitConverter.ToInt32(entry, sizeof(int));
-            if (recordCount <= 0)
-                continue;
-
-            int recordSize;
-            int positionOffset;
-            var validRange = recordKind switch
+            byte[][] entries;
+            try
             {
-                Gen7EmRecordKind => HasRecordRange(entry, recordCount, Gen7EmPositionOffset, Gen7EmRecordSize),
-                Gen7EmType3RecordKind => HasGen7EmType3RecordRange(entry, recordCount),
-                _ => false,
-            };
-            if (!validRange)
+                entries = ReadMini(sourceEm, "EM");
+            }
+            catch (WorkspaceException exception)
             {
                 diagnostics = AppendError(diagnostics,
-                    $"El contenedor EM {containerEntry} tiene un tipo o rango de registros no confirmado.");
+                    $"El bloque EM {blockEntry} no se pudo leer: {exception.Message}");
                 continue;
             }
 
-            if (recordKind == Gen7EmType3RecordKind)
+            for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
             {
-                recordSize = Gen7EmType3RecordSize;
-                positionOffset = Gen7EmType3PositionOffset;
-            }
-            else
-            {
-                recordSize = Gen7EmRecordSize;
-                positionOffset = Gen7EmPositionOffset;
-            }
+                var entry = entries[containerEntry];
+                if (entry.Length < Gen7EmPositionOffset + sizeof(int))
+                    continue;
 
-            for (var recordIndex = 0; recordIndex < recordCount; recordIndex++)
-            {
-                var offset = positionOffset + (recordIndex * recordSize);
-                positions.Add(new OverworldGen7EmPositionEntry(
-                    containerEntry, recordIndex,
-                    BitConverter.ToSingle(entry, offset),
-                    BitConverter.ToSingle(entry, offset + 4),
-                    BitConverter.ToSingle(entry, offset + 8)));
+                var recordCount = BitConverter.ToInt32(entry, 0);
+                var recordKind = BitConverter.ToInt32(entry, sizeof(int));
+                if (recordCount <= 0)
+                    continue;
+
+                int recordSize;
+                int positionOffset;
+                var validRange = recordKind switch
+                {
+                    Gen7EmRecordKind => HasRecordRange(entry, recordCount, Gen7EmPositionOffset, Gen7EmRecordSize),
+                    Gen7EmType3RecordKind => HasGen7EmType3RecordRange(entry, recordCount),
+                    _ => false,
+                };
+                if (!validRange)
+                {
+                    diagnostics = AppendError(diagnostics,
+                        $"El bloque EM {blockEntry}, contenedor {containerEntry} tiene un tipo o rango de registros no confirmado.");
+                    continue;
+                }
+
+                if (recordKind == Gen7EmType3RecordKind)
+                {
+                    recordSize = Gen7EmType3RecordSize;
+                    positionOffset = Gen7EmType3PositionOffset;
+                }
+                else
+                {
+                    recordSize = Gen7EmRecordSize;
+                    positionOffset = Gen7EmPositionOffset;
+                }
+
+                for (var recordIndex = 0; recordIndex < recordCount; recordIndex++)
+                {
+                    var offset = positionOffset + (recordIndex * recordSize);
+                    positions.Add(new OverworldGen7EmPositionEntry(
+                        containerEntry, recordIndex,
+                        BitConverter.ToSingle(entry, offset),
+                        BitConverter.ToSingle(entry, offset + 4),
+                        BitConverter.ToSingle(entry, offset + 8),
+                        blockEntry));
+                }
             }
         }
         return positions.ToArray();
     }
 
-    private static void ApplyGen7EmPositions(byte[][] entries, OverworldGen7EmPositionEntry[] positions)
+    private static void ApplyGen7EmPositions(byte[][] blocks, OverworldGen7EmPositionEntry[] positions)
     {
-        var expected = ReadGen7EmPositionsFromEntries(entries);
+        var emBlockIndices = Enumerable.Range(0, blocks.Length)
+            .Where(index => HasIdentifier(blocks[index], "EM"))
+            .ToArray();
+        if (emBlockIndices.Length == 0)
+        {
+            if (positions.Length == 0)
+                return;
+            throw new WorkspaceException("La zona Gen. VII no contiene un bloque EM editable.");
+        }
+
+        // Requests from older web clients don't carry BlockEntry. Keep those exports working
+        // against the first EM block while new clients round-trip every matching ED block.
+        var legacyPositions = positions.All(position => position.BlockEntry < 0);
+        int[] selectedBlockIndices = legacyPositions ? [emBlockIndices[0]] : emBlockIndices;
+        var entriesByBlock = new Dictionary<int, byte[][]>();
+        var expected = new List<OverworldGen7EmPositionEntry>();
+        foreach (var blockIndex in selectedBlockIndices)
+        {
+            var entries = ReadMini(blocks[blockIndex], "EM");
+            entriesByBlock.Add(blockIndex, entries);
+            expected.AddRange(ReadGen7EmPositionsFromEntries(entries, blockIndex));
+        }
+
         if (positions.Length != expected.Count)
             throw new WorkspaceException($"La cantidad de posiciones EM debe conservarse en {expected.Count} registros.");
 
-        var expectedKeys = expected.Select(position => (position.ContainerEntry, position.RecordIndex)).ToHashSet();
-        var requestedKeys = new HashSet<(int ContainerEntry, int RecordIndex)>();
+        var expectedKeys = expected
+            .Select(position => (position.BlockEntry, position.ContainerEntry, position.RecordIndex))
+            .ToHashSet();
+        var requestedKeys = new HashSet<(int BlockEntry, int ContainerEntry, int RecordIndex)>();
         foreach (var position in positions)
         {
-            if (!expectedKeys.Contains((position.ContainerEntry, position.RecordIndex)) ||
-                !requestedKeys.Add((position.ContainerEntry, position.RecordIndex)))
+            var blockEntry = legacyPositions ? emBlockIndices[0] : position.BlockEntry;
+            var key = (blockEntry, position.ContainerEntry, position.RecordIndex);
+            if (!expectedKeys.Contains(key) || !requestedKeys.Add(key))
                 throw new WorkspaceException("La lista de posiciones EM no coincide con los registros originales.");
             if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(position.Z) ||
                 Math.Abs(position.X) > 1_000_000 || Math.Abs(position.Y) > 1_000_000 || Math.Abs(position.Z) > 1_000_000)
                 throw new WorkspaceException("Las coordenadas EM deben ser números finitos entre -1000000 y 1000000.");
+        }
 
+        foreach (var position in positions)
+        {
+            var blockEntry = legacyPositions ? emBlockIndices[0] : position.BlockEntry;
+            var entries = entriesByBlock[blockEntry];
             var entry = entries[position.ContainerEntry];
             var recordKind = BitConverter.ToInt32(entry, sizeof(int));
             var offset = recordKind == Gen7EmType3RecordKind
@@ -2835,9 +2862,13 @@ public static class OverworldEditor
             BitConverter.GetBytes(position.Y).CopyTo(entry, offset + 4);
             BitConverter.GetBytes(position.Z).CopyTo(entry, offset + 8);
         }
+
+        foreach (var (blockEntry, entries) in entriesByBlock)
+            if (positions.Any(position => (legacyPositions ? emBlockIndices[0] : position.BlockEntry) == blockEntry))
+                blocks[blockEntry] = PackMiniPreservingEnvelope(blocks[blockEntry], entries, "EM");
     }
 
-    private static List<OverworldGen7EmPositionEntry> ReadGen7EmPositionsFromEntries(byte[][] entries)
+    private static List<OverworldGen7EmPositionEntry> ReadGen7EmPositionsFromEntries(byte[][] entries, int blockEntry)
     {
         var positions = new List<OverworldGen7EmPositionEntry>();
         for (var containerEntry = 0; containerEntry < entries.Length; containerEntry++)
@@ -2861,7 +2892,7 @@ public static class OverworldEditor
                 continue;
 
             for (var recordIndex = 0; recordIndex < recordCount; recordIndex++)
-                positions.Add(new OverworldGen7EmPositionEntry(containerEntry, recordIndex, 0, 0, 0));
+                positions.Add(new OverworldGen7EmPositionEntry(containerEntry, recordIndex, 0, 0, 0, blockEntry));
         }
         return positions;
     }

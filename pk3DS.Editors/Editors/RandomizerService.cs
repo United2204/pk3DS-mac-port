@@ -38,6 +38,10 @@ public static class RandomizerService
     // does not affect the effective ban list.
     private static readonly int[] Gen6HmMoves = [15, 19, 57, 70, 127, 249, 291];
     private static readonly int[] OrasTutorBitCounts = [15, 17, 16, 15];
+    // MoveEditor6 removes the empty move-name slot before iterating its ComboBox. Its visible
+    // indexes 117 and 32 therefore address raw move records 118 (Metronome) and 33 (Tackle).
+    private const int MoveEditorMetronomeId = LearnsetEditor.MetronomeMoveId;
+    private const int MoveEditorTackleId = 33;
 
     private static readonly (int Species, ushort[] Items)[] MegaOptionsXY =
     [
@@ -85,7 +89,7 @@ public static class RandomizerService
             : Array.Empty<string>();
         if (trainers.ForceHighPower || trainers.UseCurrentLearnsetMoves)
             trainerGarcs = trainerGarcs.Append("levelup");
-        var hmMoves = workspace.Version is GameVersion.XY or GameVersion.ORAS or GameVersion.ORASDEMO ? Gen6HmMoves : Array.Empty<int>();
+        var hmMoves = IsGen6Version(workspace.Version) ? Gen6HmMoves : Array.Empty<int>();
 
         return EditorSession.Export(request.WorkspacePath, request.OutputDirectory, request.TitleId, request.Language,
             "randomizer", wildGarcs.Concat(trainerGarcs), config => RandomizeData(config, request.Seed,
@@ -247,6 +251,9 @@ public static class RandomizerService
     private static int VisibleTypeTutorCount(GameConfig config) =>
         config.Generation == 6 && !config.ORAS ? 7 : 8;
 
+    private static bool IsGen6Version(GameVersion version) =>
+        version is GameVersion.XY or GameVersion.ORAS or GameVersion.ORASDEMO;
+
     private static void SetVisibleBits(bool[] bits, bool value, int count)
     {
         for (var i = 0; i < Math.Min(count, bits.Length); i++)
@@ -332,7 +339,7 @@ public static class RandomizerService
 
         // Same values used by the Windows "Metronome Mode" button.
         for (var moveId = 1; moveId < config.Moves.Length; moveId++)
-            config.Moves[moveId].PP = moveId switch { 118 => 40, 33 => 1, _ => 0 };
+            config.Moves[moveId].PP = moveId switch { MoveEditorMetronomeId => 40, MoveEditorTackleId => 1, _ => 0 };
     }
 
     private static void RandomizeEvolutions(GameConfig config, EvolutionOptions options)

@@ -64,6 +64,7 @@ function updateGameSpecificOptions() {
   const version = inspectedGame?.gameVersion;
   const generation6 = ['XY', 'ORAS', 'ORASDEMO'].includes(version);
   const generation7 = ['SM', 'USUM'].includes(version);
+  const oras = ['ORAS', 'ORASDEMO'].includes(version);
   setGameSpecificState('abilities', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('held-items', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('catch-rate', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
@@ -72,7 +73,7 @@ function updateGameSpecificOptions() {
   setGameSpecificState('stats', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('tm', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('type-tutors', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
-  setGameSpecificState('move-tutors', (version === 'ORAS' || version === 'USUM') && moduleAvailable('personal'), 'OR/AS y US/UM contienen estos tutores y requieren el GARC personal.');
+  setGameSpecificState('move-tutors', (oras || version === 'USUM') && moduleAvailable('personal'), 'OR/AS (incluida la demo) y US/UM contienen estos tutores y requieren el GARC personal.');
   setGameSpecificState('wonder-guard', moduleAvailable('personal'), 'Este workspace no contiene el GARC personal.');
   setGameSpecificState('learnsets', moduleAvailable('levelup'), 'Este workspace no contiene el GARC levelup.');
   setGameSpecificState('learn-metronome', (generation6 || generation7) && moduleAvailable('levelup'), 'Los movimientos por nivel requieren un juego de Gen. VI o Gen. VII y el GARC levelup.');

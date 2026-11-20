@@ -229,7 +229,8 @@ public sealed record OverworldGen7ZoneExportRequest(
     string WorkspacePath, string? OutputDirectory, string? TitleId, int ZoneIndex, int ParentMap,
     int? AreaIndex = null, int? Language = null);
 public sealed record OverworldGen7PositionEntry(int ContainerEntry, int RecordIndex, float X, float Y, float Z);
-public sealed record OverworldGen7EmPositionEntry(int ContainerEntry, int RecordIndex, float X, float Y, float Z);
+public sealed record OverworldGen7EmPositionEntry(
+    int ContainerEntry, int RecordIndex, float X, float Y, float Z, int BlockEntry = -1);
 public sealed record OverworldGen7EiPositionEntry(int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z);
 public sealed record OverworldGen7EbPositionEntry(
     int BlockEntry, int ContainerEntry, int RecordIndex, float X, float Y, float Z, int RecordKind = 2);
